@@ -1,0 +1,10 @@
+# osobní zdravotní data do repozitáře nepatří
+*.json
+!package.json
+!apps-script/appsscript.json
+*.db
+*.fit
+*.csv
+__pycache__/
+node_modules/
+tests/out/

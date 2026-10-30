@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Garmin Live Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080b10;--bg2:#0e1219;--bg3:#141820;--bg4:#1c2230;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--text:#e8edf5;--text2:#9aaabb;--text3:#5a6e82;--accent:#00d4aa;--accent-dim:rgba(0,212,170,0.1);--accent2:#5b8fff;--accent2-dim:rgba(91,143,255,0.1);--warn:#ffb547;--warn-dim:rgba(255,181,71,0.1);--danger:#ff5f6d;--danger-dim:rgba(255,95,109,0.1);--purple:#b18fff;--r:10px;--r-sm:6px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,170,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,170,0.025) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0;}
+header{position:sticky;top:0;z-index:50;background:rgba(8,11,16,0.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;color:var(--accent);letter-spacing:0.05em;display:flex;align-items:center;gap:10px;}
+.logo-dot{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:pulse 2.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,212,170,0.4);}50%{opacity:0.4;box-shadow:0 0 0 6px rgba(0,212,170,0);}}
+.logo-sub{color:#6a7f92;font-size:11px;}
+.header-right{display:flex;align-items:center;gap:10px;}
+#lastUpdated{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;}
+.btn{border:1px solid;font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 16px;border-radius:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
+.btn:disabled{opacity:0.35;cursor:not-allowed;}
+.btn-sync{background:var(--accent2-dim);border-color:rgba(91,143,255,0.3);color:var(--accent2);}
+.btn-sync:hover:not(:disabled){background:rgba(91,143,255,0.18);border-color:var(--accent2);}
+.btn-refresh{background:var(--accent-dim);border-color:rgba(0,212,170,0.25);color:var(--accent);}
+.btn-refresh:hover:not(:disabled){background:rgba(0,212,170,0.18);border-color:var(--accent);}
+.spin{display:none;animation:spin 0.9s linear infinite;}
+.loading .spin{display:inline;}.loading .icon{display:none;}
+@keyframes spin{to{transform:rotate(360deg);}}
+main{position:relative;z-index:1;width:100%;overflow-x:hidden;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.date-bar{display:flex;align-items:baseline;gap:14px;margin-bottom:22px;}
+.date-big{font-size:30px;font-weight:700;color:var(--text);letter-spacing:-0.02em;}
+.date-small{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;}
+#serverError{display:none;background:var(--bg2);border:1px solid rgba(255,95,109,0.25);border-radius:var(--r);padding:20px 24px;margin-bottom:18px;}
+#serverError h3{color:var(--danger);font-size:14px;margin-bottom:8px;}
+#serverError p{font-size:13px;color:var(--text2);line-height:1.8;}
+code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7px;border-radius:4px;font-size:11px;color:var(--accent);}
+#syncOverlay{display:none;position:fixed;inset:0;background:rgba(8,11,16,0.88);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+#syncOverlay.show{display:flex;}
+.sync-spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.8s linear infinite;}
+.sync-title{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent2);}
+.sync-sub{font-size:12px;color:#6a7f92;}
+#readinessBanner{border-radius:var(--r);padding:20px 24px;margin-bottom:18px;display:none;align-items:center;gap:20px;border:1px solid;animation:fadeIn 0.4s ease;}
+.readiness-score{font-family:'JetBrains Mono',monospace;font-size:46px;font-weight:500;line-height:1;flex-shrink:0;}
+.readiness-score sup{font-size:18px;opacity:0.5;}
+.readiness-label{font-size:13px;font-weight:700;letter-spacing:0.06em;margin-bottom:4px;}
+.readiness-desc{font-size:12px;opacity:0.65;line-height:1.6;}
+#alertsContainer{margin-bottom:18px;}
+.alert-item{display:flex;align-items:flex-start;gap:12px;padding:11px 15px;border-radius:var(--r-sm);margin-bottom:7px;border-left:3px solid;animation:fadeIn 0.3s ease;}
+.alert-danger{background:var(--danger-dim);border-color:var(--danger);}
+.alert-warn{background:var(--warn-dim);border-color:var(--warn);}
+.alert-ok{background:var(--accent-dim);border-color:var(--accent);}
+.alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
+.alert-danger .alert-dot{background:var(--danger);}.alert-warn .alert-dot{background:var(--warn);}.alert-ok .alert-dot{background:var(--accent);}
+.alert-text strong{display:block;font-size:13px;font-weight:600;}
+.alert-danger .alert-text strong{color:var(--danger);}.alert-warn .alert-text strong{color:var(--warn);}.alert-ok .alert-text strong{color:var(--accent);}
+.alert-text span{font-size:12px;color:var(--text2);}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 11px;}
+.section-title{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.12em;}
+.range-tabs{display:flex;gap:4px;}
+.rtab{background:transparent;border:1px solid var(--border);color:#6a7f92;font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 12px;border-radius:20px;cursor:pointer;transition:all 0.15s;}
+.rtab:hover{color:var(--text2);border-color:var(--border2);}.rtab.active{background:var(--accent-dim);border-color:rgba(0,212,170,0.3);color:var(--accent);}
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
+.gcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 12px 14px;text-align:center;animation:fadeIn 0.4s ease both;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.gcard:hover{border-color:var(--border2);transform:translateY(-2px);}
+.gcard-label{font-size:12px;font-family:'JetBrains Mono',monospace;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.09em;font-weight:600;display:block;width:100%;background:rgba(20,50,90,0.75);border-radius:6px;padding:5px 12px;}
+.gcard-status{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:0.07em;}
+.mcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px 15px;position:relative;overflow:hidden;transition:border-color 0.2s,transform 0.15s;animation:fadeIn 0.4s ease both;}
+.mcard:hover{transform:translateY(-2px);border-color:var(--border2);}
+.mcard::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--r) var(--r) 0 0;}
+.mcard.c-green::after{background:var(--accent);}.mcard.c-blue::after{background:var(--accent2);}.mcard.c-warn::after{background:var(--warn);}.mcard.c-danger::after{background:var(--danger);}.mcard.c-purple::after{background:var(--purple);}
+.mc-icon{font-size:11px;color:#8899aa;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
+.mc-val{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:500;line-height:1;margin-bottom:3px;}
+.mc-unit{font-size:12px;color:var(--text3);margin-left:2px;}
+.mc-status{font-size:10px;margin-top:8px;font-weight:700;letter-spacing:0.06em;}
+.mcard.c-green .mc-val,.mcard.c-green .mc-status{color:var(--accent);}
+.mcard.c-blue .mc-val,.mcard.c-blue .mc-status{color:var(--accent2);}
+.mcard.c-warn .mc-val,.mcard.c-warn .mc-status{color:var(--warn);}
+.mcard.c-danger .mc-val,.mcard.c-danger .mc-status{color:var(--danger);}
+.mcard.c-purple .mc-val,.mcard.c-purple .mc-status{color:var(--purple);}
+.mc-bar{height:3px;background:var(--bg4);border-radius:2px;margin-top:10px;overflow:hidden;}
+.mc-bar-fill{height:100%;border-radius:2px;transition:width 0.8s ease;}
+.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;animation:fadeIn 0.5s ease both;}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:3px;color:#dce8f0;}
+.chart-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:#e8f4ff;margin-bottom:11px;display:inline-block;background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 8px;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:11px;}
+.legend-item{display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#e8f4ff;background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 8px;}
+.legend-sq{width:8px;height:8px;border-radius:2px;}.legend-ln{width:14px;height:2px;}
+.thresh-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:40px;}
+.thresh-table{width:100%;border-collapse:collapse;}
+.thresh-table th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8899aa;text-transform:uppercase;letter-spacing:0.08em;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3);}
+.thresh-table td{padding:11px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.thresh-table tr:last-child td{border-bottom:none;}.thresh-table tr:hover td{background:var(--bg3);}
+.td-metric{font-weight:600;color:var(--text);}.td-val{font-family:'JetBrains Mono',monospace;color:#9aaabb;font-size:11px;}
+.badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:0.04em;}
+.badge-ok{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,212,170,0.2);}
+.badge-warn{background:var(--warn-dim);color:var(--warn);border:1px solid rgba(255,181,71,0.2);}
+.badge-danger{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(255,95,109,0.2);}
+@media(max-width:768px){.chart-grid{grid-template-columns:1fr;}main{padding:14px;}header{padding:0 14px;}}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px;}
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.tab-bar{display:flex;gap:2px;padding:0 28px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:40;}
+.tab-btn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:var(--text3);padding:12px 20px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.18s;letter-spacing:0.04em;white-space:nowrap;}
+.tab-btn:hover{color:var(--text2);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── VST CHART ───────────────────────────────────────────── */
+.vst-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
+.vst-range-btn{font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 18px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;}
+.vst-range-btn:hover{border-color:var(--accent);color:var(--accent);}
+.vst-range-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+.vst-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;position:relative;}
+.vst-chart-inner{position:relative;height:360px;cursor:grab;}
+.vst-chart-inner:active{cursor:grabbing;}
+.vst-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:8px;text-align:center;}
+.vst-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;}
+.vst-leg-item{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#c8dff0;}
+.vst-leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.vst-leg-tri{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:10px solid;flex-shrink:0;}
+.vst-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
+.vst-stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:14px 16px;}
+.vst-stat-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
+.vst-stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;}
+.vst-stat-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+
+.tab-bar{display:flex;gap:2px;padding:0 28px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:40;}
+.tab-btn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:#6a7f92;padding:12px 20px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.18s;letter-spacing:0.04em;}
+.tab-btn:hover{color:var(--text2);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}.tab-panel.active{display:block;}
+.vst-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.vst-range-btn{font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 18px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;}
+.vst-range-btn:hover{border-color:var(--accent);color:var(--accent);}
+.vst-range-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+.vst-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 14px;width:calc(100% - 3cm);margin:0 1.5cm;box-sizing:border-box;}
+.vst-chart-inner{position:relative;height:665px;cursor:grab;user-select:none;}
+.vst-chart-inner:active{cursor:grabbing;}
+.vst-hint{font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;margin-top:12px;text-align:center;}
+.vst-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;}
+.vst-leg-item{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#c8dff0;}
+.vst-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;}
+.vst-stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:14px 16px;}
+.vst-stat-lbl{font-family:'JetBrains Mono',monospace;font-size:12px;color:#aac4d8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
+.vst-stat-val{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;}
+.vst-stat-sub{font-size:13px;color:#8faabb;margin-top:4px;}
+</style>
+</head>
+<body>
+
+<div id="syncOverlay">
+  <div class="sync-spinner"></div>
+  <div class="sync-title">Stahuji nová data z Garmin...</div>
+  <div class="sync-sub">Trvá 15–30 sekund · okno nezavírej</div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <span>GARMIN HEALTH</span>
+    <span class="logo-sub">/ live dashboard</span>
+  </div>
+  <div class="header-right">
+    <span id="lastUpdated">—</span>
+    <button class="btn btn-sync" id="syncBtn" onclick="syncGarmin()">
+      <span class="icon">⬇</span><span class="spin">◌</span>&nbsp;Sync Garmin
+    </button>
+    <button class="btn btn-refresh" id="refreshBtn" onclick="refreshData()">
+      <span class="icon">↻</span><span class="spin">◌</span>&nbsp;Aktualizovat
+    </button>
+  </div>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('overview',this)">◎ Přehled</button>
+  <button class="tab-btn" onclick="switchTab('vst',this)">⌁ VST / HRV</button>
+  <button class="tab-btn" onclick="switchTab('hr',this)">♥ Klidový TF</button>
+  <button class="tab-btn" onclick="switchTab('bb',this)">⚡ Body Battery</button>
+  <button class="tab-btn" onclick="switchTab('resp',this)">≈ Dýchání</button>
+  <button class="tab-btn" onclick="switchTab('sleep',this)">☽ Spánek</button>
+</div>
+
+<main>
+<div id="tab-overview" class="tab-panel active">
+  <div style="padding:24px 28px;max-width:1400px;margin:0 auto;">
+  <div class="date-bar">
+    <div class="date-big" id="dateDisplay">—</div>
+    <div class="date-small" id="dateSmall">—</div>
+  </div>
+
+  <div id="serverError">
+    <h3>⚠ Lokální server není spuštěn</h3>
+    <p>
+      Dvojklikni na <strong>Start Garmin Dashboard.bat</strong> na ploše.<br>
+      Nebo spusť v CMD:<br>
+      <code>C:\Python314\python.exe garmin_server.py</code><br><br>
+      Pak klikni na <strong>↻ Aktualizovat</strong> výše.
+    </p>
+  </div>
+
+  <div id="readinessBanner"></div>
+  <div id="alertsContainer"></div>
+
+  <div class="section-head">
+    <div class="section-title">Aktuální stav</div>
+    <div id="dataDate" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;"></div>
+  </div>
+  <div class="cards-grid" id="cardsGrid"></div>
+
+  <div class="section-head">
+    <div class="section-title">Trendy</div>
+    <div class="range-tabs">
+      <button class="rtab" onclick="setRange(7,this)">7d</button>
+      <button class="rtab active" onclick="setRange(14,this)">14d</button>
+      <button class="rtab" onclick="setRange(30,this)">30d</button>
+    </div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-title">HRV / VST</div>
+      <div class="chart-sub">noční průměr · ms</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-ln" style="background:var(--accent)"></div>HRV noc</div>
+        <div class="legend-item"><div class="legend-ln" style="background:rgba(0,212,170,0.3);border-top:2px dashed rgba(0,212,170,0.3);height:0"></div>Práh 25ms</div>
+      </div>
+      <div style="position:relative;height:185px"><canvas id="cHRV"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Klidový TF · Body Battery</div>
+      <div class="chart-sub">bpm · nabití %</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-sq" style="background:var(--danger)"></div>TF</div>
+        <div class="legend-item"><div class="legend-sq" style="background:var(--warn)"></div>Body Battery</div>
+      </div>
+      <div style="position:relative;height:185px"><canvas id="cTF"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Spánek</div>
+      <div class="chart-sub">skóre · trvání hodin</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-sq" style="background:var(--accent2)"></div>Skóre</div>
+        <div class="legend-item"><div class="legend-ln" style="background:var(--accent)"></div>Hodiny</div>
+      </div>
+      <div style="position:relative;height:185px"><canvas id="cSleep"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Stres · Dýchání</div>
+      <div class="chart-sub">stress score · brpm</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-sq" style="background:var(--purple)"></div>Stres</div>
+        <div class="legend-item"><div class="legend-sq" style="background:var(--accent2)"></div>Dýchání</div>
+      </div>
+      <div style="position:relative;height:185px"><canvas id="cStress"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section-head" style="margin-top:26px;">
+    <div class="section-title">Prahové hodnoty</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="threshSaved" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity 0.5s;">✓ Uloženo</span>
+      <button class="btn btn-refresh" onclick="resetThresholds()" style="padding:5px 12px;font-size:10px;">Obnovit výchozí</button>
+    </div>
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;margin-bottom:10px;">
+    Klikni na číslo → uprav → Enter nebo klikni jinam → uloží se a přepočítá karty automaticky
+  </div>
+  <div class="thresh-card" style="margin-bottom:40px;">
+    <table class="thresh-table">
+      <thead><tr><th>Metrika</th><th>Práh</th><th>Stav</th><th>Akce</th></tr></thead>
+      <tbody id="threshBody"></tbody>
+    </table>
+  </div>
+
+  </div></div><!-- /overview -->
+
+  <div id="tab-vst" class="tab-panel" style="width:100%;overflow-x:hidden;">
+    <div style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">VST / HRV — historický přehled</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="vstDateRange">—</div>
+      </div>
+      <div class="vst-stats" id="vstStats"></div>
+      <div style="padding:12px 20px 0;">
+      <!-- VST Zone Thresholds -->
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8faabb;font-weight:600;">Zóny:</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;flex-shrink:0;"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Červená &lt;</span>
+          <span id="vstZ1Edit" contenteditable="true" spellcheck="false"
+            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;
+              background:var(--bg4);border:1px solid rgba(255,95,109,0.3);border-radius:4px;
+              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+            onfocus="this.style.borderColor='#ff5f6d'"
+            onblur="this.style.borderColor='rgba(255,95,109,0.3)';vstZoneSave()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">26</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">ms</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;flex-shrink:0;"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Oranžová &lt;</span>
+          <span id="vstZ2Edit" contenteditable="true" spellcheck="false"
+            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;
+              background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;
+              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+            onfocus="this.style.borderColor='#ffb547'"
+            onblur="this.style.borderColor='rgba(255,181,71,0.3)';vstZoneSave()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">30</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9aaabb;">ms</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;flex-shrink:0;"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Zelená ≥</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;
+              background:var(--bg4);border:1px solid rgba(0,212,170,0.2);border-radius:4px;
+              padding:3px 10px;" id="vstZ2Label">30</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9aaabb;">ms</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
+          <span id="vstAvgDaysEdit" contenteditable="true" spellcheck="false"
+            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;
+              background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;
+              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+            onfocus="this.style.borderColor='#a78bfa'"
+            onblur="this.style.borderColor='rgba(167,139,250,0.3)';vstZoneSave()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">7</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
+        </div>
+      </div>
+
+      <div class="vst-toolbar">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
+        <button class="vst-range-btn" onclick="vstSetRange(30,this)">1M</button>
+        <button class="vst-range-btn" onclick="vstSetRange(90,this)">3M</button>
+        <button class="vst-range-btn active" onclick="vstSetRange(180,this)">6M</button>
+        <button class="vst-range-btn" onclick="vstSetRange(0,this)">Vše</button>
+        <button class="vst-range-btn" onclick="if(vstChart)vstChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
+      </div>
+      </div><!-- /padded -->
+      <div class="vst-chart-wrap">
+        <div class="vst-chart-inner"><canvas id="cVST"></canvas></div>
+        <div style="padding:0 12px;"><div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
+        </div><div style="padding:0 12px;"><div class="vst-legend">
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Zelená (≥ Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Oranžová (Z1–Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Červená (&lt; Z1)</div>
+          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#ff5f6d,#ffb547,#00d4aa);display:inline-block;border-radius:2px;"></span>7d klouzavý průměr</div>
+          <div class="vst-leg-item"><span style="width:16px;height:2px;background:rgba(255,95,109,0.65);display:inline-block;border-top:2px dashed rgba(255,95,109,0.65);"></span>Limit Z2</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /vst-chart-wrap -->
+  </div><!-- /tab-vst -->
+
+  <div id="tab-hr" class="tab-panel" style="width:100%;overflow-x:hidden;">
+    <div style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Klidový TF — historický přehled</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="hrDateRange">—</div>
+      </div>
+      <div class="vst-stats" id="hrStats" style="padding:0 20px;"></div>
+      <div style="padding:0 20px 12px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Normál ≤</span>
+            <span id="hrZ1Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#00d4aa'" onblur="this.style.borderColor='rgba(0,212,170,0.3)';hrZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">54</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Pozor ≤</span>
+            <span id="hrZ2Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';hrZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">57</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Alarm &gt;</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.2);border-radius:4px;padding:3px 10px;" id="hrZ2Label">57</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
+            <span id="hrAvgDaysEdit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';hrZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
+          </div>
+        </div>
+        <div class="vst-toolbar">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
+          <button class="vst-range-btn" onclick="hrSetRange(30,this)">1M</button>
+          <button class="vst-range-btn" onclick="hrSetRange(90,this)">3M</button>
+          <button class="vst-range-btn active" onclick="hrSetRange(180,this)">6M</button>
+          <button class="vst-range-btn" onclick="hrSetRange(0,this)">Vše</button>
+          <button class="vst-range-btn" onclick="if(hrChart)hrChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
+        </div>
+      </div>
+      <div class="vst-chart-wrap">
+        <div class="vst-chart-inner"><canvas id="cHR"></canvas></div>
+        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
+        <div class="vst-legend">
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Normál (≤ Z1)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Pozor (Z1–Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Alarm (&gt; Z2)</div>
+          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#00d4aa,#ffb547,#ff5f6d);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-hr -->
+
+  <div id="tab-bb" class="tab-panel" style="width:100%;overflow-x:hidden;">
+    <div style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Body Battery — historický přehled</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="bbDateRange">—</div>
+      </div>
+      <div class="vst-stats" id="bbStats" style="padding:0 20px;"></div>
+      <div style="padding:0 20px 12px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Kritický &lt;</span>
+            <span id="bbZ1Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#ff5f6d'" onblur="this.style.borderColor='rgba(255,95,109,0.3)';bbZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">35</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Nízký &lt;</span>
+            <span id="bbZ2Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';bbZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">50</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Dobrý ≥</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.2);border-radius:4px;padding:3px 10px;" id="bbZ2Label">50</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
+            <span id="bbAvgDaysEdit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';bbZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
+          </div>
+        </div>
+        <div class="vst-toolbar">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
+          <button class="vst-range-btn" onclick="bbSetRange(30,this)">1M</button>
+          <button class="vst-range-btn" onclick="bbSetRange(90,this)">3M</button>
+          <button class="vst-range-btn active" onclick="bbSetRange(180,this)">6M</button>
+          <button class="vst-range-btn" onclick="bbSetRange(0,this)">Vše</button>
+          <button class="vst-range-btn" onclick="if(bbChart)bbChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
+        </div>
+      </div>
+      <div class="vst-chart-wrap">
+        <div class="vst-chart-inner"><canvas id="cBB"></canvas></div>
+        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
+        <div class="vst-legend">
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Dobrý (≥ Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Nízký (Z1–Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Kritický (&lt; Z1)</div>
+          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#ff5f6d,#ffb547,#00d4aa);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-bb -->
+
+  <div id="tab-resp" class="tab-panel" style="width:100%;overflow-x:hidden;">
+    <div style="padding:0;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Dýchání — historický přehled</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="respDateRange">—</div>
+      </div>
+      <div class="vst-stats" id="respStats" style="padding:0 20px;"></div>
+      <div style="padding:0 20px 12px;">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Normál ≤</span>
+            <span id="respZ1Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#00d4aa'" onblur="this.style.borderColor='rgba(0,212,170,0.3)';respZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">16</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Zvýšené ≤</span>
+            <span id="respZ2Edit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';respZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">19</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Alarm &gt;</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.2);border-radius:4px;padding:3px 10px;" id="respZ2Label">19</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
+            <span id="respAvgDaysEdit" contenteditable="true" spellcheck="false"
+              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
+              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';respZoneSave()"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
+          </div>
+        </div>
+        <div class="vst-toolbar">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
+          <button class="vst-range-btn" onclick="respSetRange(30,this)">1M</button>
+          <button class="vst-range-btn" onclick="respSetRange(90,this)">3M</button>
+          <button class="vst-range-btn active" onclick="respSetRange(180,this)">6M</button>
+          <button class="vst-range-btn" onclick="respSetRange(0,this)">Vše</button>
+          <button class="vst-range-btn" onclick="if(respChart)respChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
+        </div>
+      </div>
+      <div class="vst-chart-wrap">
+        <div class="vst-chart-inner"><canvas id="cResp"></canvas></div>
+        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
+        <div class="vst-legend">
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Normál (≤ Z1)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Zvýšené (Z1–Z2)</div>
+          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Alarm (&gt; Z2)</div>
+          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#00d4aa,#ffb547,#ff5f6d);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /tab-resp -->
+
+
+  <div id="tab-sleep" class="tab-panel" style="width:100%;overflow-x:hidden;">
+    <div style="padding:12px 20px 40px;max-width:1400px;margin:0 auto;">
+
+      <!-- HEADER -->
+      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;padding-top:8px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Spánek — analýza</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6a7f92;" id="sleepDateRange">—</div>
+      </div>
+      <div style="font-size:12px;color:#5a6e82;font-family:'JetBrains Mono',monospace;margin-bottom:20px;">Zdroj: Garmin Connect · vědecké normy: CDC, Sleep Foundation, Healthline</div>
+
+      <!-- KPI STATS ROW -->
+      <div id="sleepKPI" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:24px;"></div>
+
+      <!-- REFERENCE CARD -->
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:18px 20px;margin-bottom:24px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">📊 Vědecké normy pro dospělé (CDC / Sleep Foundation / Healthline)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">CELKOVÁ DÉLKA</div>
+            <div style="font-size:16px;font-weight:600;color:#e8f4ff;">7 – 9 hodin</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">méně než 6h = riziko zdravotních problémů</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">HLUBOKÝ SPÁNEK (N3)</div>
+            <div style="font-size:16px;font-weight:600;color:#60a5fa;">13 – 23% celkové délky</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">~1 – 1.5h · obnova tkání, imunita, HGH</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">REM SPÁNEK</div>
+            <div style="font-size:16px;font-weight:600;color:#a78bfa;">20 – 25% celkové délky</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">~1.5 – 2h · paměť, emoce, kognitivní funkce</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">LEHKÝ SPÁNEK (N1+N2)</div>
+            <div style="font-size:16px;font-weight:600;color:#34d399;">50 – 60% celkové délky</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">přechod mezi fázemi, motorické učení</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">EFEKTIVITA SPÁNKU</div>
+            <div style="font-size:16px;font-weight:600;color:#fbbf24;">≥ 85%</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">čas spánku / čas v posteli × 100</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
+            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">PROBUZENÍ V NOCI</div>
+            <div style="font-size:16px;font-weight:600;color:#fb923c;">< 20 min celkem</div>
+            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">fragmentace spánku snižuje kvalitu regenerace</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RANGE + TOOLBAR -->
+      <div class="vst-toolbar" style="margin-bottom:14px;">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
+        <button class="vst-range-btn" onclick="sleepSetRange(30,this)">1M</button>
+        <button class="vst-range-btn" onclick="sleepSetRange(90,this)">3M</button>
+        <button class="vst-range-btn active" onclick="sleepSetRange(180,this)">6M</button>
+        <button class="vst-range-btn" onclick="sleepSetRange(0,this)">Vše</button>
+        <button class="vst-range-btn" onclick="sleepResetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
+      </div>
+
+      <!-- CHART 1: Sleep Duration + Score -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Délka spánku a celkové skóre</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">hodiny · skóre 0–100 · reference: 7–9h</div>
+        <div class="vst-legend" style="margin-bottom:12px;">
+          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:rgba(96,165,250,0.5);display:inline-block;"></span>Délka (h)</div>
+          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#34d399;display:inline-block;border-radius:2px;"></span>Skóre</div>
+          <div class="vst-leg-item"><span style="width:14px;height:2px;background:rgba(251,191,36,0.6);display:inline-block;border-top:2px dashed rgba(251,191,36,0.6);"></span>Min. 7h</div>
+        </div>
+        <div style="position:relative;height:220px;"><canvas id="cSleepDuration"></canvas></div>
+      </div>
+
+      <!-- CHART 2: Sleep Stages stacked area -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Fáze spánku — absolutní čas</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">minuty v každé fázi za noc</div>
+        <div class="vst-legend" style="margin-bottom:12px;">
+          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#1e3a5f;display:inline-block;border:1px solid #60a5fa;"></span>Hluboký (N3)</div>
+          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#3b1f6b;display:inline-block;border:1px solid #a78bfa;"></span>REM</div>
+          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#1a3d2b;display:inline-block;border:1px solid #34d399;"></span>Lehký</div>
+          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#3d2210;display:inline-block;border:1px solid #fb923c;"></span>Bdění</div>
+        </div>
+        <div style="position:relative;height:240px;"><canvas id="cSleepStages"></canvas></div>
+      </div>
+
+      <!-- CHART 3: Deep % and REM % with reference bands -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Podíl fází — procenta</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">% z celkového spánku · barevné pásmo = vědecká norma</div>
+        <div class="vst-legend" style="margin-bottom:12px;">
+          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#60a5fa;display:inline-block;border-radius:2px;"></span>Hluboký %</div>
+          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#a78bfa;display:inline-block;border-radius:2px;"></span>REM %</div>
+          <div class="vst-leg-item"><span style="width:12px;height:8px;background:rgba(96,165,250,0.12);border-radius:2px;display:inline-block;border:1px solid rgba(96,165,250,0.3);"></span>Norma hluboký 13–23%</div>
+          <div class="vst-leg-item"><span style="width:12px;height:8px;background:rgba(167,139,250,0.12);border-radius:2px;display:inline-block;border:1px solid rgba(167,139,250,0.3);"></span>Norma REM 20–25%</div>
+        </div>
+        <div style="position:relative;height:240px;"><canvas id="cSleepPct"></canvas></div>
+      </div>
+
+      <!-- CHART 4: Stress + Respiration during sleep -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Stres a dýchání ve spánku</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">průměrný stres · dechová frekvence brpm · alarm dýchání &gt;19 brpm</div>
+        <div class="vst-legend" style="margin-bottom:12px;">
+          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#f97316;display:inline-block;border-radius:2px;"></span>Stres ve spánku</div>
+          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#818cf8;display:inline-block;border-radius:2px;"></span>Dýchání (brpm)</div>
+          <div class="vst-leg-item"><span style="width:14px;height:2px;background:rgba(248,113,113,0.6);display:inline-block;border-top:2px dashed rgba(248,113,113,0.6);"></span>Alarm &gt;19 brpm</div>
+        </div>
+        <div style="position:relative;height:200px;"><canvas id="cSleepStress"></canvas></div>
+      </div>
+
+      <!-- DOPORUČENÍ PANEL -->
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#00d4aa;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">💡 Doporučení pro zlepšení kvality spánku</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #60a5fa;">
+            <div style="font-size:13px;font-weight:600;color:#93c5fd;margin-bottom:6px;">Hluboký spánek ↑</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Pravidelný čas usínání · cvičení ráno (ne pozdě večer) · chladná ložnice 16–18°C · vyhýbat se alkoholu · hořčík glycinát večer</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #a78bfa;">
+            <div style="font-size:13px;font-weight:600;color:#c4b5fd;margin-bottom:6px;">REM spánek ↑</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Delší spánek (REM roste ve druhé polovině noci) · stres management · vyhýbat se alkoholu a THC · pravidelný spánkový rytmus</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #34d399;">
+            <div style="font-size:13px;font-weight:600;color:#6ee7b7;margin-bottom:6px;">Efektivita spánku ↑</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Jdi spát pouze při ospalosti · vstávej v stejnou hodinu · omezte čas v posteli bez spánku · tichá tmavá ložnice</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #fbbf24;">
+            <div style="font-size:13px;font-weight:600;color:#fcd34d;margin-bottom:6px;">Stres ve spánku ↓</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">10min relaxace před spaním · box breathing (4-4-4-4) · meditace · vyhýbat se obrazovkám 1h před spaním · při CLL: zvýšený stres ve spánku = varovný signál zánětu</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #fb923c;">
+            <div style="font-size:13px;font-weight:600;color:#fdba74;margin-bottom:6px;">Dýchání ve spánku</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Zvýšená dechová frekvence (&gt;19 brpm) = alarm zánětu nebo infekce. Spánek na boku zlepšuje průchodnost dýchacích cest. Při opakovaném poklesu SpO2 konzultovat lékaře.</div>
+          </div>
+          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #f472b6;">
+            <div style="font-size:13px;font-weight:600;color:#f9a8d4;margin-bottom:6px;">CLL specifika</div>
+            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Spánek pod 6h zvyšuje prozánětlivé cytokiny · náhlý pokles hlubokého spánku + zvýšený noční stres může signalizovat infekci dříve než příznaky · pravidelný monitoring je klíčový</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /tab-sleep -->
+
+</main>
+<script>
+const API='http://localhost:8765';
+let DATA=null,charts={},currentRange=14;
+
+// ── PRAHY ───────────────────────────────────────────────────────
+const THRESH_DEF={
+  hrv_ok:     {val:28, label:'HRV normál ≥',        unit:'ms',  stav:'ok',     badge:'normál', akce:'trénink OK'},
+  hrv_warn:   {val:20, label:'HRV pozor ≥',          unit:'ms',  stav:'warn',   badge:'pozor',  akce:'lehčí trénink nebo chůze'},
+  hrv_danger: {val:0,  label:'HRV alarm < (min)',    unit:'ms',  stav:'danger', badge:'alarm',  akce:'žádný trénink · zvážit lékaře'},
+  hr_ok:      {val:54, label:'Klidový TF normál ≤',  unit:'bpm', stav:'ok',     badge:'normál', akce:'trénink OK'},
+  hr_warn:    {val:57, label:'Klidový TF pozor >',   unit:'bpm', stav:'warn',   badge:'pozor',  akce:'sledovat příznaky'},
+  hr_danger:  {val:62, label:'Klidový TF alarm >',   unit:'bpm', stav:'danger', badge:'alarm',  akce:'lékař / hematolog'},
+  bb_ok:      {val:45, label:'Body Battery dobrý ≥', unit:'',    stav:'ok',     badge:'normál', akce:'trénink OK'},
+  bb_warn:    {val:35, label:'Body Battery pozor ≥', unit:'',    stav:'warn',   badge:'pozor',  akce:'nahradit chůzí'},
+  sleep_warn: {val:50, label:'Skóre spánku pozor <', unit:'',    stav:'warn',   badge:'pozor',  akce:'snížit intenzitu tréninku'},
+  ready_ok:   {val:80, label:'Readiness normál ≥',   unit:'%',   stav:'ok',     badge:'normál', akce:'trénink OK'},
+  ready_warn: {val:60, label:'Readiness pozor ≥',    unit:'%',   stav:'warn',   badge:'pozor',  akce:'lehčí pohyb'},
+};
+
+function loadT(){
+  try{
+    const s=localStorage.getItem('garmin_thresholds');
+    if(s){const p=JSON.parse(s);const m={};for(const k in THRESH_DEF)m[k]={...THRESH_DEF[k],...(p[k]||{})};return m;}
+  }catch(e){}
+  return JSON.parse(JSON.stringify(THRESH_DEF));
+}
+
+function saveT(T){
+  const out={};for(const k in T)out[k]={val:T[k].val};
+  localStorage.setItem('garmin_thresholds',JSON.stringify(out));
+  const el=document.getElementById('threshSaved');
+  el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2000);
+}
+
+function resetThresholds(){
+  if(!confirm('Obnovit výchozí prahové hodnoty?'))return;
+  localStorage.removeItem('garmin_thresholds');
+  T=loadT();renderThresholds();if(DATA)renderAll();
+}
+
+let T=loadT();
+
+function renderThresholds(){
+  document.getElementById('threshBody').innerHTML=Object.entries(T).map(([key,row])=>`
+    <tr>
+      <td class="td-metric">${row.label}</td>
+      <td style="white-space:nowrap;">
+        <span class="thresh-editable" data-key="${key}"
+          contenteditable="true" spellcheck="false"
+          style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;
+            color:${row.stav==='ok'?'var(--accent)':row.stav==='warn'?'var(--warn)':'var(--danger)'};
+            background:var(--bg3);border:1px solid var(--border2);border-radius:5px;
+            padding:3px 12px;display:inline-block;min-width:44px;text-align:center;
+            cursor:text;outline:none;transition:border-color 0.15s,box-shadow 0.15s;"
+          onfocus="this.style.borderColor='var(--accent)';this.style.boxShadow='0 0 0 2px rgba(0,212,170,0.15)'"
+          onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none';threshSave(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+        >${row.val}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-left:5px;">${row.unit}</span>
+      </td>
+      <td><span class="badge badge-${row.stav}">${row.badge}</span></td>
+      <td style="font-size:12px;color:var(--text2);">${row.akce}</td>
+    </tr>`).join('');
+}
+
+function threshSave(el){
+  const key=el.dataset.key;
+  const newVal=parseFloat(el.textContent.trim());
+  if(isNaN(newVal)){el.textContent=T[key].val;return;}
+  T[key].val=newVal;el.textContent=newVal;
+  saveT(T);if(DATA)renderAll();
+}
+
+async function fetchData(){
+  const r=await fetch(`${API}/data`,{cache:'no-store'});
+  if(!r.ok)throw new Error(r.status);
+  return r.json();
+}
+
+async function refreshData(){
+  const btn=document.getElementById('refreshBtn');
+  btn.disabled=true;btn.classList.add('loading');
+  try{
+    DATA=await fetchData();
+    document.getElementById('serverError').style.display='none';
+    renderAll();
+  }catch(e){document.getElementById('serverError').style.display='block';}
+  finally{btn.disabled=false;btn.classList.remove('loading');}
+}
+
+async function syncGarmin(){
+  const btn=document.getElementById('syncBtn');
+  const ov=document.getElementById('syncOverlay');
+  btn.disabled=true;btn.classList.add('loading');ov.classList.add('show');
+  try{
+    await fetch(`${API}/sync`,{cache:'no-store'});
+    await new Promise(r=>setTimeout(r,28000));
+    DATA=await fetchData();
+    document.getElementById('serverError').style.display='none';
+    renderAll();
+  }catch(e){document.getElementById('serverError').style.display='block';}
+  finally{btn.disabled=false;btn.classList.remove('loading');ov.classList.remove('show');}
+}
+
+const CD={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+  plugins:{legend:{display:false},tooltip:{backgroundColor:'#0e1219',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,titleColor:'#aabbcc',bodyColor:'#dce4f0',padding:10,titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'Syne',size:12}}},
+  scales:{x:{ticks:{color:'#6a7f92',font:{size:9,family:'JetBrains Mono'},maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.03)'}}}};
+function yAx(label,color,min,max,pos='left'){return{position:pos,min,max,title:{display:true,text:label,color,font:{size:10,family:'JetBrains Mono'}},ticks:{color,font:{size:10}},grid:{color:'rgba(255,255,255,0.03)'}};}
+function dc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+function getSlice(days){const n=DATA.nights||[];return days===0?n:n.slice(-days);}
+
+function renderCharts(){
+  const ns=getSlice(currentRange);
+  const lbl=ns.map(n=>n.label||(n.calendar_date||'').substring(5).replace('-','.')+'.');
+  const hrv=ns.map(n=>n.hrv??null);
+  const hr=ns.map(n=>n.hr??n.resting_heart_rate??null);
+  const bb=ns.map(n=>n.bb??n.body_battery_sleep_result??null);
+  const sc=ns.map(n=>n.score??n.sleep_score_overall??null);
+  const ho=ns.map(n=>n.hours??(n.total_duration?n.total_duration/3600:null));
+  const st=ns.map(n=>n.stress??n.average_sleep_stress??null);
+  const re=ns.map(n=>n.resp??n.average_respiration_value??null);
+  function hc(v){if(!v)return'transparent';if(v<20)return'#ff5f6d';if(v<28)return'#ffb547';return'#00d4aa';}
+  dc('HRV');charts['HRV']=new Chart(document.getElementById('cHRV'),{type:'line',data:{labels:lbl,datasets:[
+    {data:hrv,borderColor:'#00d4aa',backgroundColor:'rgba(0,212,170,0.06)',pointBackgroundColor:hrv.map(hc),pointRadius:hrv.map((_,i)=>i>=ns.length-5?5:3),tension:0.3,fill:true,spanGaps:true,borderWidth:2,yAxisID:'y'},
+    {data:lbl.map(()=>25),borderColor:'rgba(0,212,170,0.22)',borderDash:[3,4],pointRadius:0,yAxisID:'y'}
+  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('HRV ms','#00d4aa',0,55)}}});
+  dc('TF');charts['TF']=new Chart(document.getElementById('cTF'),{type:'line',data:{labels:lbl,datasets:[
+    {data:hr,borderColor:'#ff5f6d',pointRadius:hr.map(v=>v>57?6:3),pointBackgroundColor:hr.map(v=>v>57?'#ff5f6d':'rgba(255,95,109,0.5)'),tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y'},
+    {data:bb,borderColor:'#ffb547',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:1.5,yAxisID:'y2'},
+    {data:lbl.map(()=>57),borderColor:'rgba(255,95,109,0.25)',borderDash:[2,4],pointRadius:0,yAxisID:'y'}
+  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('TF bpm','#ff5f6d',35,75),y2:{...yAx('Battery','#ffb547',0,100,'right'),grid:{display:false}}}}});
+  dc('Sleep');charts['Sleep']=new Chart(document.getElementById('cSleep'),{type:'bar',data:{labels:lbl,datasets:[
+    {type:'bar',data:sc,backgroundColor:sc.map(v=>v==null?'transparent':v<50?'rgba(255,95,109,0.5)':v<70?'rgba(255,181,71,0.4)':'rgba(91,143,255,0.45)'),borderRadius:3,yAxisID:'y',barPercentage:0.6},
+    {type:'line',data:ho,borderColor:'#00d4aa',pointRadius:3,tension:0.3,spanGaps:true,yAxisID:'y2'}
+  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('Skóre','#5b8fff',0,100),y2:{...yAx('Hodiny','#00d4aa',0,12,'right'),grid:{display:false}}}}});
+  dc('Stress');charts['Stress']=new Chart(document.getElementById('cStress'),{type:'line',data:{labels:lbl,datasets:[
+    {data:st,borderColor:'#b18fff',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y'},
+    {data:re,borderColor:'#5b8fff',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y2'}
+  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('Stres','#b18fff',0,100),y2:{...yAx('Dýchání','#5b8fff',10,30,'right'),grid:{display:false}}}}});
+}
+
+function setRange(days,el){currentRange=days;document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');if(DATA)renderCharts();}
+
+function buildGauge(value,min,max,zones,unit,needle_color,avg7,avg14){
+  const cx=70,cy=72,r=54,sw=13;
+  function pt(v,rad){
+    const pct=Math.max(0,Math.min(1,(v-min)/(max-min)));
+    const a=Math.PI*(1-pct);
+    return [cx+(rad||r)*Math.cos(a), cy-(rad||r)*Math.sin(a)];
+  }
+  function arc(v1,v2,color,width,cap){
+    if(v2<=v1)return'';
+    const [x1,y1]=pt(v1),[x2,y2]=pt(v2);
+    const span=(v2-v1)/(max-min);
+    const large=span>0.999?1:0;
+    return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="${width||sw}" stroke-linecap="${cap||'butt'}"/>`;
+  }
+  function tick(v,color,rOut,rIn,sw2){
+    if(v===null||v===undefined)return'';
+    const pct=Math.max(0,Math.min(1,(v-min)/(max-min)));
+    const a=Math.PI*(1-pct);
+    const x1=cx+rOut*Math.cos(a),y1=cy-rOut*Math.sin(a);
+    const x2=cx+rIn*Math.cos(a),y2=cy-rIn*Math.sin(a);
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="${sw2||3}" stroke-linecap="round"/>`;
+  }
+  const pct=Math.max(0,Math.min(1,(value-min)/(max-min)));
+  const na=Math.PI*(1-pct);
+  const nx=cx+(r-5)*Math.cos(na),ny=cy-(r-5)*Math.sin(na);
+  const noData=(!value&&value!==0)||isNaN(value);
+  let s='';
+  s+=arc(min,max,'#141820',sw+4);
+  s+=arc(min,max,'#1c2230',sw);
+  for(const z of zones) s+=arc(z.from,z.to,z.color);
+  // Zone dividers
+  for(const z of zones){
+    const a2=Math.PI*(1-(z.from-min)/(max-min));
+    const i=r-sw/2-1,o=r+sw/2+1;
+    s+=`<line x1="${(cx+i*Math.cos(a2)).toFixed(1)}" y1="${(cy-i*Math.sin(a2)).toFixed(1)}" x2="${(cx+o*Math.cos(a2)).toFixed(1)}" y2="${(cy-o*Math.sin(a2)).toFixed(1)}" stroke="#080b10" stroke-width="2"/>`;
+  }
+  // 14d avg tick — purple, outside arc only
+  s+=tick(avg14,'#c084fc',r+sw/2+10,r+sw/2+2,3.5);
+  // 7d avg tick — light blue, outside arc only (slightly shorter)
+  s+=tick(avg7,'#60a5fa',r+sw/2+8,r+sw/2+1,3);
+  // Needle
+  if(!noData){
+    s+=`<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="rgba(0,0,0,0.5)" stroke-width="4" stroke-linecap="round"/>`;
+    s+=`<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>`;
+  }
+  s+=`<circle cx="${cx}" cy="${cy}" r="5.5" fill="${noData?'#1c2230':needle_color}" stroke="#080b10" stroke-width="2.5"/>`;
+  const disp=noData?'—':value;
+  s+=`<text x="${cx}" y="${cy-18}" text-anchor="middle" font-size="22" font-weight="600" fill="#e8edf5" font-family="JetBrains Mono,monospace">${disp}</text>`;
+  if(unit) s+=`<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="9" fill="#8899aa" font-family="JetBrains Mono,monospace">${unit}</text>`;
+  return `<svg viewBox="0 0 140 82" style="width:100%;height:auto;" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+}
+
+
+function calcAvg(field,days){
+  const nights=DATA.nights||[];
+  const sl=nights.slice(-days).filter(n=>n[field]!==null&&n[field]!==undefined&&n[field]>0);
+  if(!sl.length)return null;
+  return Math.round(sl.reduce((s,n)=>s+n[field],0)/sl.length);
+}
+
+function avgsRow(a7,a14,unit){
+  const C7='#60a5fa',C14='#c084fc';
+  const t7=a7!==null&&a7!==undefined?`<span style="color:${C7};background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 7px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;">${a7}${unit}</span>`:'';
+  const t14=a14!==null&&a14!==undefined?`<span style="color:${C14};background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 7px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;">${a14}${unit}</span>`:'';
+  if(!t7&&!t14)return'';
+  return `<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:2px;">
+    ${t7?`<span style="font-size:10px;color:${C7};font-family:'JetBrains Mono',monospace;">7d</span>${t7}`:''}
+    ${t14?`<span style="font-size:10px;color:${C14};font-family:'JetBrains Mono',monospace;">14d</span>${t14}`:''}
+  </div>`;
+}
+
+function renderCards(){
+  const d=DATA.daily||{},h=DATA.hrv||{},r=DATA.readiness||{},f=DATA.fitness||{},sl=DATA.sleep_latest||{};
+  const hrv=h.last_night_avg??0;
+  const hr=d.resting_heart_rate??sl.resting_heart_rate??0;
+  const bb=d.body_battery_at_wake??d.body_battery_most_recent??0;
+  const sc=r.score??0;
+  const fa=f.fitness_age?Math.round(f.fitness_age):null;
+  const ca=f.chronological_age??50;
+  const sleepScore=sl.sleep_score_overall??0;
+
+  const hrv7=calcAvg('hrv',7),hrv14=calcAvg('hrv',14);
+  const hr7=calcAvg('hr',7),hr14=calcAvg('hr',14);
+  const bb7=calcAvg('bb',7),bb14=calcAvg('bb',14);
+  const sleep7=calcAvg('score',7),sleep14=calcAvg('score',14);
+
+  const COK='#00d4aa',CW='#ffb547',CD='#ff5f6d';
+  const hrvOk=T.hrv_ok.val,hrvW=T.hrv_warn.val;
+  const hrOk=T.hr_ok.val,hrW=T.hr_warn.val;
+  const bbOk=T.bb_ok.val,bbW=T.bb_warn.val;
+  const rOk=T.ready_ok.val,rW=T.ready_warn.val;
+  const slW=T.sleep_warn.val;
+
+  const cHrv=hrv>=hrvOk?COK:hrv>=hrvW?CW:CD;
+  const cHr=hr<=hrOk?COK:hr<=hrW?CW:CD;
+  const cBb=bb>=bbOk?COK:bb>=bbW?CW:CD;
+  const cSc=sc>=rOk?COK:sc>=rW?CW:CD;
+  const cSl=sleepScore>=70?COK:sleepScore>=slW?CW:CD;
+  const cFa=fa!==null&&fa<=ca?COK:CW;
+
+  const gauges=[
+    {label:'HRV / VST',
+     zones:[{from:0,to:hrvW,color:CD},{from:hrvW,to:hrvOk,color:CW},{from:hrvOk,to:55,color:COK}],
+     val:hrv,min:0,max:55,unit:'ms',color:cHrv,avg7:hrv7,avg14:hrv14,avgUnit:'ms',
+     status:hrv>=hrvOk?'NORMÁL':hrv>=hrvW?'NÍZKÁ':'KRITICKÁ'},
+    {label:'Klidový TF',
+     zones:[{from:38,to:hrOk,color:COK},{from:hrOk,to:hrW,color:CW},{from:hrW,to:75,color:CD}],
+     val:hr,min:38,max:75,unit:'bpm',color:cHr,avg7:hr7,avg14:hr14,avgUnit:'',
+     status:hr<=hrOk?'NORMÁL':hr<=hrW?'ZVÝŠENÝ':'VYSOKÝ'},
+    {label:'Body Battery',
+     zones:[{from:0,to:bbW,color:CD},{from:bbW,to:bbOk,color:CW},{from:bbOk,to:100,color:COK}],
+     val:bb,min:0,max:100,unit:'',color:cBb,avg7:bb7,avg14:bb14,avgUnit:'',
+     status:bb>=bbOk?'DOBRÝ':bb>=bbW?'NÍZKÝ':'KRITICKÝ'},
+    {label:'Training Readiness',
+     zones:[{from:0,to:rW,color:CD},{from:rW,to:rOk,color:CW},{from:rOk,to:100,color:COK}],
+     val:Math.round(sc),min:0,max:100,unit:'%',color:cSc,avg7:null,avg14:null,avgUnit:'',
+     status:sc>=rOk?'PŘIPRAVEN':sc>=rW?'OPATRNĚ':'ODPOČÍVAT'},
+    {label:'Spánek — skóre',
+     zones:[{from:0,to:slW,color:CD},{from:slW,to:70,color:CW},{from:70,to:100,color:COK}],
+     val:sleepScore,min:0,max:100,unit:'',color:cSl,avg7:sleep7,avg14:sleep14,avgUnit:'',
+     status:sleepScore>=70?'DOBRÝ':sleepScore>=slW?'USPOKOJIVÝ':'ŠPATNÝ'},
+    {label:'Fitness věk',
+     zones:[{from:30,to:ca,color:COK},{from:ca,to:ca+5,color:CW},{from:ca+5,to:65,color:CD}],
+     val:fa??0,min:30,max:65,unit:'let',color:cFa,avg7:null,avg14:null,avgUnit:'',
+     status:fa!==null?`CHRON. ${ca}`:'—'},
+  ];
+
+  document.getElementById('cardsGrid').innerHTML=gauges.map((g,i)=>`
+    <div class="gcard" style="animation-delay:${i*0.06}s">
+      <div class="gcard-label">${g.label}</div>
+      ${buildGauge(g.val,g.min,g.max,g.zones.filter(z=>z.from<z.to),g.unit,g.color,g.avg7,g.avg14)}
+      ${avgsRow(g.avg7,g.avg14,g.avgUnit)}
+      <div class="gcard-status" style="color:${g.color}">${g.status}</div>
+    </div>`).join('');
+}
+
+
+function renderBanner(){
+  const r=DATA.readiness||{},ts=DATA.training_status||{};
+  const sc=Math.round(r.score||0);
+  let bg,border,color,label,desc;
+  if(sc>=80){bg='var(--accent-dim)';border='rgba(0,212,170,0.22)';color='var(--accent)';label='TRÉNINK OK';desc='Všechny metriky zelené.';}
+  else if(sc>=60){bg='var(--warn-dim)';border='rgba(255,181,71,0.22)';color='var(--warn)';label='POSLECHNI TĚLO';desc='Lehčí pohyb — žádný náročný trénink.';}
+  else{bg='var(--danger-dim)';border='rgba(255,95,109,0.22)';color='var(--danger)';label='ODPOČÍVAT';desc='Tělo potřebuje regeneraci.';}
+  const el=document.getElementById('readinessBanner');
+  el.style.cssText=`background:${bg};border-color:${border};display:flex`;
+  el.innerHTML=`<div class="readiness-score" style="color:${color}">${sc}<sup>/100</sup></div>
+    <div class="readiness-info">
+      <div class="readiness-label" style="color:${color}">${label}</div>
+      <div class="readiness-desc">${desc} · Acute ${ts.training_load_acute??'—'} · Chronic ${ts.training_load_chronic??'—'}</div>
+    </div>`;
+}
+
+function renderAlerts(){
+  const h=DATA.hrv||{},d=DATA.daily||{},sl=DATA.sleep_latest||{};
+  const hrv=h.last_night_avg??sl.avg_overnight_hrv??0;
+  const hr=d.resting_heart_rate??sl.resting_heart_rate??0;
+  const bb=d.body_battery_at_wake??d.body_battery_most_recent??0;
+  const sl2=DATA.sleep_latest||{};
+  const sleepScore=sl2.sleep_score_overall??0;
+  // Použij prahy z T
+  const al=[];
+  if(hrv>0&&hrv<T.hrv_warn.val)
+    al.push({t:'danger',title:`HRV kritická: ${hrv} ms`,body:'Žádný trénink. Při příznacích kontaktovat lékaře.'});
+  else if(hrv>0&&hrv<T.hrv_ok.val)
+    al.push({t:'warn',title:`HRV nízká: ${hrv} ms`,body:`Pod baselineem (${h.baseline_low??T.hrv_ok.val}–${h.baseline_upper??39} ms). Lehčí pohyb.`});
+  else if(hrv>0)
+    al.push({t:'ok',title:`HRV v normálu: ${hrv} ms`,body:'Nervový systém se dobře regeneruje.'});
+  if(hr>T.hr_danger.val)
+    al.push({t:'danger',title:`TF kritický: ${hr} bpm`,body:'Lékař nebo hematolog ihned.'});
+  else if(hr>T.hr_warn.val)
+    al.push({t:'warn',title:`TF zvýšený: ${hr} bpm`,body:'Sledovat 2–3 dny.'});
+  if(bb>0&&bb<T.bb_warn.val)
+    al.push({t:'warn',title:`Body Battery nízká: ${bb}`,body:'Náročný trénink dnes nevhodný.'});
+  if(sleepScore>0&&sleepScore<T.sleep_warn.val)
+    al.push({t:'warn',title:`Skóre spánku nízké: ${sleepScore}`,body:'Intenzitu tréninku snížit. Priorita: spánek a regenerace.'});
+  document.getElementById('alertsContainer').innerHTML=al.map(a=>`
+    <div class="alert-item alert-${a.t}"><div class="alert-dot"></div>
+    <div class="alert-text"><strong>${a.title}</strong><span>${a.body}</span></div></div>`).join('');
+}
+
+function renderDate(){
+  const now=new Date();
+  const days=['Neděle','Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota'];
+  const months=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
+  document.getElementById('dateDisplay').textContent=`${days[now.getDay()]} ${now.getDate()}. ${months[now.getMonth()]}`;
+  document.getElementById('dateSmall').textContent=`${now.getFullYear()} · data z Garmin Connect`;
+  document.getElementById('lastUpdated').textContent=now.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
+  if(DATA?.date)document.getElementById('dataDate').textContent=`data: ${DATA.date}`;
+}
+
+function renderAll(){
+  renderDate();renderBanner();renderAlerts();renderCards();renderCharts();renderThresholds();
+  // Re-render VST if that tab is active
+  if(document.getElementById('tab-vst').classList.contains('active')) renderVST();
+}
+
+(async()=>{
+  renderDate();
+  renderThresholds();
+  try{DATA=await fetchData();document.getElementById('serverError').style.display='none';renderAll();}
+  catch(e){document.getElementById('serverError').style.display='block';}
+})();
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+  if (!DATA) return;
+  if (name === 'vst') renderVST();
+  if (name === 'hr') renderHR();
+  if (name === 'bb') renderBB();
+  if (name === 'resp') renderResp();
+  if (name === 'sleep') renderSleep();
+}
+
+// ── VST DATA & CHART ────────────────────────────────────────────
+let vstChart = null;
+let vstCurrentDays = 180;
+let vstZ1 = 26;  // red below
+let vstZ2 = 30;  // orange below, green above
+let vstAvgDays = 7; // rolling average window
+
+function vstLoadZones(){
+  try{
+    const s=localStorage.getItem('garmin_vst_zones');
+    if(s){const p=JSON.parse(s);vstZ1=p.z1||26;vstZ2=p.z2||30;vstAvgDays=p.avgDays||7;}
+  }catch(e){}
+  const el1=document.getElementById('vstZ1Edit');
+  const el2=document.getElementById('vstZ2Edit');
+  const el2l=document.getElementById('vstZ2Label');
+  const elAvg=document.getElementById('vstAvgDaysEdit');
+  if(el1)el1.textContent=vstZ1;
+  if(el2)el2.textContent=vstZ2;
+  if(el2l)el2l.textContent=vstZ2;
+  if(elAvg)elAvg.textContent=vstAvgDays;
+}
+
+function vstZoneSave(){
+  const v1=parseFloat(document.getElementById('vstZ1Edit')?.textContent||vstZ1);
+  const v2=parseFloat(document.getElementById('vstZ2Edit')?.textContent||vstZ2);
+  const va=parseInt(document.getElementById('vstAvgDaysEdit')?.textContent||vstAvgDays);
+  if(!isNaN(v1))vstZ1=v1;
+  if(!isNaN(v2))vstZ2=v2;
+  if(!isNaN(va)&&va>=2&&va<=30)vstAvgDays=va;
+  const el2l=document.getElementById('vstZ2Label');
+  if(el2l)el2l.textContent=vstZ2;
+  localStorage.setItem('garmin_vst_zones',JSON.stringify({z1:vstZ1,z2:vstZ2,avgDays:vstAvgDays}));
+  if(DATA)renderVST();
+}
+
+function vstGetColor(hrv){
+  if(hrv===null||hrv===undefined||hrv<=0)return'#5a6e82';
+  if(hrv<vstZ1)return'#ff5f6d';
+  if(hrv<vstZ2)return'#ffb547';
+  return'#00d4aa';
+}
+
+function vstSetRange(days,el){
+  vstCurrentDays=days;
+  document.querySelectorAll('.vst-range-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  renderVST();
+}
+
+function renderVSTStats(slice){
+  if(!slice.length)return;
+  const vals=slice.map(d=>d.hrv).filter(v=>v>0);
+  if(!vals.length)return;
+  const avg=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
+  const mx=Math.max(...vals),mn=Math.min(...vals);
+  const low=slice.filter(d=>d.hrv>0&&d.hrv<vstZ2).length;
+  const green=slice.filter(d=>d.hrv>=vstZ2).length;
+  const latest=slice[slice.length-1];
+  const baseline=latest.baseline_low?`${latest.baseline_low}–${latest.baseline_upper} ms`:'—';
+  const stats=[
+    {lbl:'Průměr HRV',val:avg,unit:'ms',sub:`za ${slice.length} dní`,color:'#e8edf5'},
+    {lbl:'Maximum',val:mx,unit:'ms',sub:'v období',color:'#00d4aa'},
+    {lbl:'Minimum',val:mn,unit:'ms',sub:'v období',color:mn<vstZ1?'#ff5f6d':mn<vstZ2?'#ffb547':'#00d4aa'},
+    {lbl:'Základní pásmo',val:baseline,unit:'',sub:'aktuální baseline',color:'#60a5fa'},
+    {lbl:'Dny pod limitem',val:low,unit:'d',sub:`z ${slice.length}`,color:low>10?'#ff5f6d':'#7a8899'},
+    {lbl:'Dny zelená',val:green,unit:'d',sub:`${Math.round(green/slice.length*100)}% dnů`,color:'#00d4aa'},
+  ];
+  document.getElementById('vstStats').innerHTML=stats.map(s=>`
+    <div class="vst-stat">
+      <div class="vst-stat-lbl">${s.lbl}</div>
+      <div class="vst-stat-val" style="color:${s.color}">${s.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${s.unit}</span></div>
+      <div class="vst-stat-sub">${s.sub}</div>
+    </div>`).join('');
+}
+
+function renderVST(){
+  vstLoadZones();
+  const all=DATA.hrv_history||[];
+  if(!all.length)return;
+  const slice=vstCurrentDays===0?all:all.slice(-vstCurrentDays);
+  renderVSTStats(slice);
+  if(slice.length){
+    document.getElementById('vstDateRange').textContent=`${slice[0].date} → ${slice[slice.length-1].date}`;
+  }
+  // Přidat 10 prázdných dní dopředu
+  const lastDate = slice.length ? new Date(slice[slice.length-1].date) : new Date();
+  const extraLabels = [];
+  for(let i=1;i<=10;i++){
+    const d=new Date(lastDate);d.setDate(d.getDate()+i);
+    extraLabels.push(`${d.getDate()}.${d.getMonth()+1}.`);
+  }
+  const labels=[...slice.map(d=>d.label),...extraLabels];
+  const nullPad = Array(10).fill(null);
+  const hrv=[...slice.map(d=>d.hrv),...nullPad];
+
+  // Rolling 7-day average computed from actual HRV values (not Garmin's weekly_avg)
+  // Use ALL history data for proper rolling window at start of slice
+  const allHrv = DATA.hrv_history || [];
+  const allHrvMap = {};
+  allHrv.forEach(d=>{ if(d.date && d.hrv) allHrvMap[d.date]=d.hrv; });
+
+  function rolling7(sliceArr, idx) {
+    // Collect up to 7 values ending at idx (inclusive) from full history
+    const targetDate = new Date(sliceArr[idx].date);
+    let vals = [];
+    for(let k=0; k<allHrv.length; k++){
+      const d = new Date(allHrv[k].date);
+      const diffDays = Math.round((targetDate - d) / 86400000);
+      if(diffDays >= 0 && diffDays < vstAvgDays && allHrv[k].hrv > 0) vals.push(allHrv[k].hrv);
+    }
+    if(!vals.length) return null;
+    return Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
+  }
+
+  const avg7Raw = slice.map((d,i) => rolling7(slice, i));
+  const avg7 = [...avg7Raw, ...nullPad];
+  // Point colors by zone
+  const ptColors=[...slice.map(d=>vstGetColor(d.hrv)),...nullPad];
+  const ptSize=3; // small dots, same size for all
+
+  if(vstChart){vstChart.destroy();vstChart=null;}
+  const ctx=document.getElementById('cVST');
+  vstChart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        // Red threshold line
+        {
+          label:`Limit ${vstZ2}ms`,
+          data:labels.map(()=>vstZ2),
+          borderColor:'rgba(255,95,109,0.65)',
+          borderWidth:1.5,
+          borderDash:[5,5],
+          pointRadius:0,
+          fill:false,
+          order:5
+        },
+        // 7d rolling average — solid line, color by zone
+        {
+          label:'7d průměr',
+          data:avg7,
+          borderColor: avg7.map(v => {
+            if(v===null) return 'transparent';
+            if(v < vstZ1) return '#ff5f6d';
+            if(v < vstZ2) return '#ffb547';
+            return '#00d4aa';
+          }),
+          borderWidth:2.5,
+          borderDash:[],
+          segment:{
+            borderColor: ctx => {
+              const v = avg7[ctx.p0DataIndex];
+              if(v===null) return 'transparent';
+              if(v < vstZ1) return '#ff5f6d';
+              if(v < vstZ2) return '#ffb547';
+              return '#00d4aa';
+            }
+          },
+          pointRadius:0,
+          tension:0.35,
+          spanGaps:true,
+          fill:false,
+          order:2
+        },
+        // Main HRV line — thin connector
+        {
+          label:'HRV noční průměr',
+          data:hrv,
+          borderColor:'rgba(148,163,184,0.2)',
+          borderWidth:1,
+          pointBackgroundColor:ptColors,
+          pointBorderColor:ptColors,
+          pointRadius:ptSize,
+          pointHoverRadius:ptSize+3,
+          pointStyle:'circle',
+          tension:0.15,
+          spanGaps:false,
+          fill:false,
+          order:1
+        },
+      ]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#0e1219',
+          borderColor:'rgba(255,255,255,0.08)',
+          borderWidth:1,
+          titleColor:'#9aaabb',
+          bodyColor:'#e8edf5',
+          padding:12,
+          titleFont:{family:'JetBrains Mono',size:13},
+          bodyFont:{family:'JetBrains Mono',size:14},
+          callbacks:{
+            label:(ctx)=>{
+              if(ctx.datasetIndex===2){
+                const d=slice[ctx.dataIndex];
+                const zone=d.hrv<vstZ1?'🔴':d.hrv<vstZ2?'🟠':'🟢';
+                return ` HRV: ${ctx.raw} ms ${zone}`;
+              }
+              if(ctx.datasetIndex===1&&ctx.raw)return ` 7d průměr: ${ctx.raw} ms`;
+              return null;
+            },
+            afterBody:(items)=>{
+              const d=slice[items[0].dataIndex];
+              if(d.baseline_low)return[`Baseline: ${d.baseline_low}–${d.baseline_upper} ms`];
+              return[];
+            }
+          },
+          filter:(item)=>item.datasetIndex>=1
+        },
+        zoom:{
+          pan:{enabled:true,mode:'x',threshold:5},
+          zoom:{
+            wheel:{enabled:true,speed:0.06},
+            pinch:{enabled:true},
+            mode:'x',
+          },
+          limits:{x:{minRange:7}}
+        }
+      },
+      scales:{
+        x:{
+          ticks:{
+            color:'#9ab4c8',
+            font:{size:13,family:'JetBrains Mono'},
+            maxRotation:40,
+            autoSkip:true,
+            maxTicksLimit:20
+          },
+          grid:{color:'rgba(255,255,255,0.04)'}
+        },
+        y:{
+          min:0,
+          max:(ctx)=>{
+            // Auto max: highest value in visible range + padding, rounded up to 5
+            const datasets=ctx.chart.data.datasets;
+            const hrvData=datasets[2]?.data||[];
+            const visibleVals=hrvData.filter(v=>v!==null&&v!==undefined&&v>0);
+            if(!visibleVals.length)return 60;
+            const maxVal=Math.max(...visibleVals);
+            return Math.ceil((maxVal+6)/5)*5;
+          },
+          title:{display:true,text:'HRV (ms)',color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'}},
+          ticks:{color:'#9ab4c8',font:{size:13},stepSize:5},
+          grid:{color:'rgba(255,255,255,0.05)'}
+        }
+      },
+      onHover:(e,el)=>{e.native.target.style.cursor=el.length?'crosshair':'grab';}
+    }
+  });
+}
+
+
+// ── GENERIC CHART BUILDER ────────────────────────────────────────
+function buildMetricChart(canvasId, slice, field, zones, yLabel, yMin, yMax, avgDays, allHistory, invertZones) {
+  // invertZones: true = lower is better (HR, Resp), false = higher is better (BB)
+  function getColor(v) {
+    if(v===null||v===undefined) return '#5a6e82';
+    if(invertZones) {
+      if(v <= zones.z1) return '#00d4aa';
+      if(v <= zones.z2) return '#ffb547';
+      return '#ff5f6d';
+    } else {
+      if(v >= zones.z2) return '#00d4aa';
+      if(v >= zones.z1) return '#ffb547';
+      return '#ff5f6d';
+    }
+  }
+
+  // Rolling average
+  function rollingAvg(idx) {
+    const targetDate = new Date(slice[idx].date||slice[idx].calendar_date);
+    let vals=[];
+    for(let k=0;k<allHistory.length;k++){
+      const d=new Date(allHistory[k].date||allHistory[k].calendar_date);
+      const diff=Math.round((targetDate-d)/86400000);
+      const v=allHistory[k][field];
+      if(diff>=0&&diff<avgDays&&v&&v>0) vals.push(v);
+    }
+    return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):null;
+  }
+
+  const nullPad=Array(10).fill(null);
+  const labels=[...slice.map(d=>{
+    const dt=new Date(d.date||d.calendar_date);
+    return `${dt.getDate()}.${dt.getMonth()+1}.`;
+  }),...Array(10).fill(null).map((_,i)=>{
+    if(!slice.length)return'';
+    const last=new Date(slice[slice.length-1].date||slice[slice.length-1].calendar_date);
+    last.setDate(last.getDate()+i+1);
+    return `${last.getDate()}.${last.getMonth()+1}.`;
+  })];
+  const vals=[...slice.map(d=>d[field]??null),...nullPad];
+  const avgs=[...slice.map((_,i)=>rollingAvg(i)),...nullPad];
+  const ptColors=[...slice.map(d=>getColor(d[field])),...nullPad];
+
+  const existingChart = Chart.getChart(canvasId);
+  if(existingChart) existingChart.destroy();
+
+  const maxVal = vals.filter(v=>v!==null).reduce((a,b)=>Math.max(a,b||0),0);
+  const autoMax = yMax || Math.ceil((maxVal+5)/5)*5;
+
+  return new Chart(document.getElementById(canvasId), {
+    type:'line',
+    data:{labels,datasets:[
+      {label:`Limit`,data:labels.map(()=>zones.z2),borderColor:'rgba(255,95,109,0.55)',borderWidth:1.5,borderDash:[5,5],pointRadius:0,fill:false,order:5},
+      {label:`${avgDays}d průměr`,data:avgs,borderColor:'#a78bfa',borderWidth:2.5,
+       segment:{borderColor:ctx=>{const v=avgs[ctx.p0DataIndex];if(!v)return'transparent';return getColor(v);}},
+       pointRadius:0,tension:0.35,spanGaps:true,fill:false,order:2},
+      {label:yLabel,data:vals,borderColor:'rgba(148,163,184,0.2)',borderWidth:1,
+       pointBackgroundColor:ptColors,pointBorderColor:ptColors,pointRadius:3,
+       pointHoverRadius:6,pointStyle:'circle',tension:0.15,spanGaps:false,fill:false,order:1},
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#0e1219',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,
+          titleColor:'#9aaabb',bodyColor:'#e8edf5',padding:12,
+          titleFont:{family:'JetBrains Mono',size:13},bodyFont:{family:'JetBrains Mono',size:14},
+          callbacks:{
+            label:(ctx)=>{
+              if(ctx.datasetIndex===2&&ctx.raw!==null) return ` ${yLabel}: ${ctx.raw}`;
+              if(ctx.datasetIndex===1&&ctx.raw!==null) return ` ${avgDays}d průměr: ${ctx.raw}`;
+              return null;
+            }
+          },
+          filter:(item)=>item.datasetIndex>=1&&item.raw!==null
+        },
+        zoom:{
+          pan:{enabled:true,mode:'x',threshold:5},
+          zoom:{wheel:{enabled:true,speed:0.06},pinch:{enabled:true},mode:'x'},
+          limits:{x:{minRange:7}}
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'},maxRotation:40,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.04)'}},
+        y:{min:yMin,
+           max:(ctx)=>{const d=ctx.chart.data.datasets[2]?.data?.filter(v=>v!==null&&v>0)||[];return d.length?Math.ceil((Math.max(...d)+5)/5)*5:autoMax;},
+           title:{display:true,text:yLabel,color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'}},
+           ticks:{color:'#9ab4c8',font:{size:13},stepSize:5},
+           grid:{color:'rgba(255,255,255,0.05)'}}
+      },
+      onHover:(e,el)=>{e.native.target.style.cursor=el.length?'crosshair':'grab';}
+    }
+  });
+}
+
+function buildStatsBox(elId, slice, field, unit, label, zones, invertZones) {
+  const vals=slice.map(d=>d[field]).filter(v=>v!==null&&v!==undefined&&v>0);
+  if(!vals.length)return;
+  const avg=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
+  const mx=Math.max(...vals), mn=Math.min(...vals);
+  function getColor(v){
+    if(invertZones){return v<=zones.z1?'#00d4aa':v<=zones.z2?'#ffb547':'#ff5f6d';}
+    return v>=zones.z2?'#00d4aa':v>=zones.z1?'#ffb547':'#ff5f6d';
+  }
+  const green=slice.filter(d=>d[field]&&(invertZones?d[field]<=zones.z1:d[field]>=zones.z2)).length;
+  const red=slice.filter(d=>d[field]&&(invertZones?d[field]>zones.z2:d[field]<zones.z1)).length;
+  const stats=[
+    {lbl:`Průměr`,val:avg,unit,sub:`za ${slice.length} dní`,color:'#e8edf5'},
+    {lbl:'Maximum',val:mx,unit,sub:'v období',color:invertZones?getColor(mx):'#00d4aa'},
+    {lbl:'Minimum',val:mn,unit,sub:'v období',color:invertZones?'#00d4aa':getColor(mn)},
+    {lbl:'Dny normál',val:green,unit:'d',sub:`${Math.round(green/slice.length*100)}% dnů`,color:'#00d4aa'},
+    {lbl:'Dny alarm',val:red,unit:'d',sub:`z ${slice.length}`,color:red>10?'#ff5f6d':'#7a8899'},
+    {lbl:'Posl. hodnota',val:slice[slice.length-1]?.[field]??'—',unit,sub:'dnes',color:slice[slice.length-1]?.[field]?getColor(slice[slice.length-1][field]):'#7a8899'},
+  ];
+  document.getElementById(elId).innerHTML=stats.map(s=>`
+    <div class="vst-stat"><div class="vst-stat-lbl">${s.lbl}</div>
+    <div class="vst-stat-val" style="color:${s.color}">${s.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${s.unit}</span></div>
+    <div class="vst-stat-sub">${s.sub}</div></div>`).join('');
+}
+
+// ── KLIDOVÝ TF ────────────────────────────────────────────────────
+let hrChart=null, hrCurrentDays=180;
+let hrZ1=54, hrZ2=57, hrAvgDays=7;
+
+function hrLoadZones(){
+  try{const s=localStorage.getItem('garmin_hr_zones');if(s){const p=JSON.parse(s);hrZ1=p.z1||54;hrZ2=p.z2||57;hrAvgDays=p.avgDays||7;}}catch(e){}
+  const e1=document.getElementById('hrZ1Edit'),e2=document.getElementById('hrZ2Edit'),ea=document.getElementById('hrAvgDaysEdit'),el=document.getElementById('hrZ2Label');
+  if(e1)e1.textContent=hrZ1;if(e2)e2.textContent=hrZ2;if(ea)ea.textContent=hrAvgDays;if(el)el.textContent=hrZ2;
+}
+function hrZoneSave(){
+  const v1=parseFloat(document.getElementById('hrZ1Edit')?.textContent||hrZ1);
+  const v2=parseFloat(document.getElementById('hrZ2Edit')?.textContent||hrZ2);
+  const va=parseInt(document.getElementById('hrAvgDaysEdit')?.textContent||hrAvgDays);
+  if(!isNaN(v1))hrZ1=v1;if(!isNaN(v2))hrZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)hrAvgDays=va;
+  const el=document.getElementById('hrZ2Label');if(el)el.textContent=hrZ2;
+  localStorage.setItem('garmin_hr_zones',JSON.stringify({z1:hrZ1,z2:hrZ2,avgDays:hrAvgDays}));
+  if(DATA)renderHR();
+}
+function hrSetRange(days,el){hrCurrentDays=days;document.querySelectorAll('#tab-hr .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderHR();}
+function renderHR(){
+  hrLoadZones();
+  const all=DATA.nights||[];
+  if(!all.length)return;
+  const slice=hrCurrentDays===0?all:all.slice(-hrCurrentDays);
+  if(slice.length){document.getElementById('hrDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
+  buildStatsBox('hrStats',slice,'hr','bpm','Klidový TF',{z1:hrZ1,z2:hrZ2},true);
+  hrChart=buildMetricChart('cHR',slice,'hr',{z1:hrZ1,z2:hrZ2},'bpm',35,80,hrAvgDays,all,true);
+}
+
+// ── BODY BATTERY ─────────────────────────────────────────────────
+let bbChart=null, bbCurrentDays=180;
+let bbZ1=35, bbZ2=50, bbAvgDays=7;
+
+function bbLoadZones(){
+  try{const s=localStorage.getItem('garmin_bb_zones');if(s){const p=JSON.parse(s);bbZ1=p.z1||35;bbZ2=p.z2||50;bbAvgDays=p.avgDays||7;}}catch(e){}
+  const e1=document.getElementById('bbZ1Edit'),e2=document.getElementById('bbZ2Edit'),ea=document.getElementById('bbAvgDaysEdit'),el=document.getElementById('bbZ2Label');
+  if(e1)e1.textContent=bbZ1;if(e2)e2.textContent=bbZ2;if(ea)ea.textContent=bbAvgDays;if(el)el.textContent=bbZ2;
+}
+function bbZoneSave(){
+  const v1=parseFloat(document.getElementById('bbZ1Edit')?.textContent||bbZ1);
+  const v2=parseFloat(document.getElementById('bbZ2Edit')?.textContent||bbZ2);
+  const va=parseInt(document.getElementById('bbAvgDaysEdit')?.textContent||bbAvgDays);
+  if(!isNaN(v1))bbZ1=v1;if(!isNaN(v2))bbZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)bbAvgDays=va;
+  const el=document.getElementById('bbZ2Label');if(el)el.textContent=bbZ2;
+  localStorage.setItem('garmin_bb_zones',JSON.stringify({z1:bbZ1,z2:bbZ2,avgDays:bbAvgDays}));
+  if(DATA)renderBB();
+}
+function bbSetRange(days,el){bbCurrentDays=days;document.querySelectorAll('#tab-bb .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderBB();}
+function renderBB(){
+  bbLoadZones();
+  const all=DATA.nights||[];
+  if(!all.length)return;
+  const slice=bbCurrentDays===0?all:all.slice(-bbCurrentDays);
+  if(slice.length){document.getElementById('bbDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
+  buildStatsBox('bbStats',slice,'bb','','Body Battery',{z1:bbZ1,z2:bbZ2},false);
+  bbChart=buildMetricChart('cBB',slice,'bb',{z1:bbZ1,z2:bbZ2},'Body Battery',0,100,bbAvgDays,all,false);
+}
+
+// ── DÝCHÁNÍ ───────────────────────────────────────────────────────
+let respChart=null, respCurrentDays=180;
+let respZ1=16, respZ2=19, respAvgDays=7;
+
+function respLoadZones(){
+  try{const s=localStorage.getItem('garmin_resp_zones');if(s){const p=JSON.parse(s);respZ1=p.z1||16;respZ2=p.z2||19;respAvgDays=p.avgDays||7;}}catch(e){}
+  const e1=document.getElementById('respZ1Edit'),e2=document.getElementById('respZ2Edit'),ea=document.getElementById('respAvgDaysEdit'),el=document.getElementById('respZ2Label');
+  if(e1)e1.textContent=respZ1;if(e2)e2.textContent=respZ2;if(ea)ea.textContent=respAvgDays;if(el)el.textContent=respZ2;
+}
+function respZoneSave(){
+  const v1=parseFloat(document.getElementById('respZ1Edit')?.textContent||respZ1);
+  const v2=parseFloat(document.getElementById('respZ2Edit')?.textContent||respZ2);
+  const va=parseInt(document.getElementById('respAvgDaysEdit')?.textContent||respAvgDays);
+  if(!isNaN(v1))respZ1=v1;if(!isNaN(v2))respZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)respAvgDays=va;
+  const el=document.getElementById('respZ2Label');if(el)el.textContent=respZ2;
+  localStorage.setItem('garmin_resp_zones',JSON.stringify({z1:respZ1,z2:respZ2,avgDays:respAvgDays}));
+  if(DATA)renderResp();
+}
+function respSetRange(days,el){respCurrentDays=days;document.querySelectorAll('#tab-resp .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderResp();}
+function renderResp(){
+  respLoadZones();
+  const all=DATA.nights||[];
+  if(!all.length)return;
+  const slice=respCurrentDays===0?all:all.slice(-respCurrentDays);
+  if(slice.length){document.getElementById('respDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
+  buildStatsBox('respStats',slice,'resp','brpm','Dýchání',{z1:respZ1,z2:respZ2},true);
+  respChart=buildMetricChart('cResp',slice,'resp',{z1:respZ1,z2:respZ2},'brpm',8,30,respAvgDays,all,true);
+}
+
+
+// ── SPÁNEK — ANALÝZA ─────────────────────────────────────────────
+let sleepCharts = {};
+let sleepCurrentDays = 180;
+
+function sleepSetRange(days, el) {
+  sleepCurrentDays = days;
+  document.querySelectorAll('#tab-sleep .vst-range-btn').forEach(b => b.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderSleep();
+}
+
+function sleepResetZoom() {
+  Object.values(sleepCharts).forEach(c => { try { c.resetZoom(); } catch(e) {} });
+}
+
+function sleepGetColor(score) {
+  if(!score) return '#5a6e82';
+  if(score >= 80) return '#00d4aa';
+  if(score >= 60) return '#fbbf24';
+  return '#ff5f6d';
+}
+
+function getChartDefaults() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0e1219', borderColor: 'rgba(255,255,255,0.08)',
+        borderWidth: 1, titleColor: '#9aaabb', bodyColor: '#e8edf5', padding: 11,
+        titleFont: { family: 'JetBrains Mono', size: 12 },
+        bodyFont: { family: 'JetBrains Mono', size: 13 }
+      },
+      zoom: {
+        pan: { enabled: true, mode: 'x', threshold: 5 },
+        zoom: { wheel: { enabled: true, speed: 0.06 }, pinch: { enabled: true }, mode: 'x' },
+        limits: { x: { minRange: 7 } }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#8faabb', font: { size: 12, family: 'JetBrains Mono' }, maxRotation: 40, autoSkip: true, maxTicksLimit: 18 }, grid: { color: 'rgba(255,255,255,0.04)' } }
+    }
+  };
+}
+
+function makeSleepLabels(slice) {
+  const labels = slice.map(d => {
+    const dt = new Date(d.date || d.calendar_date);
+    return `${dt.getDate()}.${dt.getMonth()+1}.`;
+  });
+  // Add 10 empty days
+  const last = slice.length ? new Date(slice[slice.length-1].date || slice[slice.length-1].calendar_date) : new Date();
+  for(let i = 1; i <= 10; i++) {
+    const d = new Date(last); d.setDate(d.getDate() + i);
+    labels.push(`${d.getDate()}.${d.getMonth()+1}.`);
+  }
+  return labels;
+}
+
+function renderSleep() {
+  const all = DATA.nights || [];
+  if(!all.length) return;
+  const slice = sleepCurrentDays === 0 ? all : all.slice(-sleepCurrentDays);
+  if(!slice.length) return;
+
+  const first = slice[0].date || slice[0].calendar_date || '';
+  const last2 = slice[slice.length-1].date || slice[slice.length-1].calendar_date || '';
+  document.getElementById('sleepDateRange').textContent = `${first} → ${last2}`;
+
+  const labels = makeSleepLabels(slice);
+  const pad = Array(10).fill(null);
+
+  // Data arrays
+  const hours    = [...slice.map(d => d.hours || null), ...pad];
+  const score    = [...slice.map(d => d.score || null), ...pad];
+  const deep     = [...slice.map(d => d.deep_min || null), ...pad];
+  const rem      = [...slice.map(d => d.rem_min || null), ...pad];
+  const light    = [...slice.map(d => d.light_min || null), ...pad];
+  const awake    = [...slice.map(d => d.awake_min || null), ...pad];
+  const stress   = [...slice.map(d => d.stress || null), ...pad];
+  const resp     = [...slice.map(d => d.resp || null), ...pad];
+
+  // Percentages
+  const totalMin = slice.map(d => (d.deep_min||0)+(d.rem_min||0)+(d.light_min||0));
+  const deepPct  = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.deep_min/totalMin[i]*100) : null), ...pad];
+  const remPct   = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.rem_min/totalMin[i]*100) : null), ...pad];
+  const lightPct = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.light_min/totalMin[i]*100) : null), ...pad];
+
+  // ── KPI CARDS ──
+  const validHours = slice.filter(d => d.hours > 0).map(d => d.hours);
+  const validDeep  = slice.filter(d => d.deep_min > 0).map(d => d.deep_min);
+  const validRem   = slice.filter(d => d.rem_min > 0).map(d => d.rem_min);
+  const validScore = slice.filter(d => d.score > 0).map(d => d.score);
+  const validTotal = slice.filter(d => totalMin[slice.indexOf(d)] > 0);
+
+  const avgHours = validHours.length ? (validHours.reduce((s,v)=>s+v,0)/validHours.length).toFixed(1) : '—';
+  const avgDeep  = validDeep.length  ? Math.round(validDeep.reduce((s,v)=>s+v,0)/validDeep.length) : '—';
+  const avgRem   = validRem.length   ? Math.round(validRem.reduce((s,v)=>s+v,0)/validRem.length) : '—';
+  const avgScore = validScore.length ? Math.round(validScore.reduce((s,v)=>s+v,0)/validScore.length) : '—';
+  const avgDeepPct = validTotal.length ? Math.round(validTotal.reduce((d,r) => {
+    const t = (r.deep_min||0)+(r.rem_min||0)+(r.light_min||0);
+    return d + (t > 0 ? r.deep_min/t*100 : 0);
+  }, 0)/validTotal.length) : '—';
+  const avgRemPct = validTotal.length ? Math.round(validTotal.reduce((d,r) => {
+    const t = (r.deep_min||0)+(r.rem_min||0)+(r.light_min||0);
+    return d + (t > 0 ? r.rem_min/t*100 : 0);
+  }, 0)/validTotal.length) : '—';
+  const daysOk7h = slice.filter(d => d.hours >= 7).length;
+  const deepOk   = slice.filter(d => {
+    const t = (d.deep_min||0)+(d.rem_min||0)+(d.light_min||0);
+    const pct = t > 0 ? d.deep_min/t*100 : 0;
+    return pct >= 13;
+  }).length;
+
+  function kpiColor(val, good, warn) { return val >= good ? '#00d4aa' : val >= warn ? '#fbbf24' : '#ff5f6d'; }
+  function kpiColorLow(val, bad, warn) { return val <= bad ? '#ff5f6d' : val <= warn ? '#fbbf24' : '#00d4aa'; }
+
+  const kpis = [
+    { lbl:'Průměrná délka', val:avgHours, unit:'h', sub:'norma: 7–9h', col: typeof avgHours === 'string' ? '#7a8899' : kpiColor(parseFloat(avgHours),7,6) },
+    { lbl:'Průměrné skóre', val:avgScore, unit:'', sub:'dobrý: ≥ 70', col: typeof avgScore === 'string' ? '#7a8899' : kpiColor(avgScore,70,50) },
+    { lbl:'Hluboký průměr', val:`${avgDeep}min`, unit:'', sub:`${avgDeepPct}% · norma: 13–23%`, col: typeof avgDeepPct === 'string' ? '#60a5fa' : kpiColor(avgDeepPct,13,10) },
+    { lbl:'REM průměr', val:`${avgRem}min`, unit:'', sub:`${avgRemPct}% · norma: 20–25%`, col: typeof avgRemPct === 'string' ? '#a78bfa' : kpiColor(avgRemPct,20,15) },
+    { lbl:'Dny ≥ 7h', val:daysOk7h, unit:'d', sub:`z ${slice.length} nocí`, col: kpiColor(daysOk7h/slice.length*100,70,50) },
+    { lbl:'Dny hluboký OK', val:deepOk, unit:'d', sub:`${Math.round(deepOk/slice.length*100)}% nocí`, col: kpiColor(deepOk/slice.length*100,70,50) },
+  ];
+
+  document.getElementById('sleepKPI').innerHTML = kpis.map(k => `
+    <div class="vst-stat">
+      <div class="vst-stat-lbl">${k.lbl}</div>
+      <div class="vst-stat-val" style="color:${k.col}">${k.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${k.unit}</span></div>
+      <div class="vst-stat-sub">${k.sub}</div>
+    </div>`).join('');
+
+  const cd = getChartDefaults();
+
+  // ── CHART 1: Duration + Score ──
+  if(sleepCharts.dur) { sleepCharts.dur.destroy(); }
+  sleepCharts.dur = new Chart(document.getElementById('cSleepDuration'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { type: 'bar', label: 'Délka (h)', data: hours,
+        backgroundColor: hours.map(v => !v ? 'transparent' : v >= 7 ? 'rgba(96,165,250,0.55)' : v >= 6 ? 'rgba(251,191,36,0.5)' : 'rgba(248,113,113,0.5)'),
+        borderRadius: 3, barPercentage: 0.65, yAxisID: 'y' },
+      { type: 'line', label: 'Skóre', data: score,
+        borderColor: '#34d399', borderWidth: 2.5, pointRadius: score.map((v,i) => i >= slice.length ? 0 : 3),
+        pointBackgroundColor: score.map(v => sleepGetColor(v)),
+        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y2' },
+      { type: 'line', label: '7h ref', data: labels.map(() => 7),
+        borderColor: 'rgba(251,191,36,0.5)', borderDash: [4,4], borderWidth: 1.5, pointRadius: 0, yAxisID: 'y' },
+    ]},
+    options: { ...cd, scales: { x: cd.scales.x,
+      y: { min: 0, max: 12, title: { display: true, text: 'hodiny', color: '#60a5fa', font: { size: 11 } }, ticks: { color: '#60a5fa', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y2: { position: 'right', min: 0, max: 100, title: { display: true, text: 'skóre', color: '#34d399', font: { size: 11 } }, ticks: { color: '#34d399', font: { size: 11 } }, grid: { display: false } }
+    }}
+  });
+
+  // ── CHART 2: Sleep Stages absolute minutes (stacked bar) ──
+  if(sleepCharts.stages) { sleepCharts.stages.destroy(); }
+  sleepCharts.stages = new Chart(document.getElementById('cSleepStages'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { label: 'Hluboký (N3)', data: deep, backgroundColor: 'rgba(96,165,250,0.65)', borderColor: '#60a5fa', borderWidth: 0.5, borderRadius: 0, stack: 'sleep', barPercentage: 0.75 },
+      { label: 'REM', data: rem, backgroundColor: 'rgba(167,139,250,0.65)', borderColor: '#a78bfa', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
+      { label: 'Lehký', data: light, backgroundColor: 'rgba(52,211,153,0.35)', borderColor: '#34d399', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
+      { label: 'Bdění', data: awake, backgroundColor: 'rgba(251,146,60,0.5)', borderColor: '#fb923c', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
+    ]},
+    options: { ...cd, scales: { x: cd.scales.x,
+      y: { stacked: true, min: 0, title: { display: true, text: 'minuty', color: '#8faabb', font: { size: 11 } }, ticks: { color: '#8faabb', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
+      callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min` }
+    }}}
+  });
+
+  // ── CHART 3: Stage percentages + reference bands ──
+  if(sleepCharts.pct) { sleepCharts.pct.destroy(); }
+  sleepCharts.pct = new Chart(document.getElementById('cSleepPct'), {
+    type: 'line',
+    data: { labels, datasets: [
+      // Reference bands as filled areas
+      { label: 'Norma hluboký horní', data: labels.map(() => 23), borderColor: 'transparent', backgroundColor: 'rgba(96,165,250,0.08)', fill: '+1', pointRadius: 0, yAxisID: 'y' },
+      { label: 'Norma hluboký dolní', data: labels.map(() => 13), borderColor: 'rgba(96,165,250,0.2)', borderDash: [2,3], borderWidth: 1, backgroundColor: 'rgba(96,165,250,0.08)', fill: false, pointRadius: 0, yAxisID: 'y' },
+      { label: 'Norma REM horní', data: labels.map(() => 25), borderColor: 'transparent', backgroundColor: 'rgba(167,139,250,0.08)', fill: '+1', pointRadius: 0, yAxisID: 'y' },
+      { label: 'Norma REM dolní', data: labels.map(() => 20), borderColor: 'rgba(167,139,250,0.2)', borderDash: [2,3], borderWidth: 1, fill: false, pointRadius: 0, yAxisID: 'y' },
+      // Actual lines
+      { label: 'Hluboký %', data: deepPct, borderColor: '#60a5fa', borderWidth: 2.5,
+        pointBackgroundColor: deepPct.map(v => !v ? 'transparent' : v >= 13 ? '#60a5fa' : '#ff5f6d'),
+        pointRadius: deepPct.map((v,i) => i >= slice.length ? 0 : (v < 13 ? 5 : 3)),
+        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
+      { label: 'REM %', data: remPct, borderColor: '#a78bfa', borderWidth: 2.5,
+        pointBackgroundColor: remPct.map(v => !v ? 'transparent' : v >= 20 ? '#a78bfa' : '#fbbf24'),
+        pointRadius: remPct.map((v,i) => i >= slice.length ? 0 : (v < 20 ? 5 : 3)),
+        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
+    ]},
+    options: { ...cd, scales: { x: cd.scales.x,
+      y: { min: 0, max: 50, title: { display: true, text: '%', color: '#8faabb', font: { size: 11 } }, ticks: { color: '#8faabb', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
+      filter: item => item.datasetIndex >= 4,
+      callbacks: { label: ctx => ctx.raw !== null ? ` ${ctx.dataset.label}: ${ctx.raw}%` : null }
+    }}}
+  });
+
+  // ── CHART 4: Stress + Respiration ──
+  if(sleepCharts.stress) { sleepCharts.stress.destroy(); }
+  sleepCharts.stress = new Chart(document.getElementById('cSleepStress'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: 'Alarm 19 brpm', data: labels.map(() => 19), borderColor: 'rgba(248,113,113,0.5)', borderDash: [4,4], borderWidth: 1.5, pointRadius: 0, yAxisID: 'y2' },
+      { label: 'Stres', data: stress, borderColor: '#f97316', borderWidth: 2,
+        pointBackgroundColor: stress.map(v => !v ? 'transparent' : v > 50 ? '#ff5f6d' : v > 30 ? '#fbbf24' : '#f97316'),
+        pointRadius: stress.map((v,i) => i >= slice.length ? 0 : (v > 50 ? 5 : 3)),
+        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
+      { label: 'Dýchání', data: resp, borderColor: '#818cf8', borderWidth: 2,
+        pointBackgroundColor: resp.map(v => !v ? 'transparent' : v > 19 ? '#ff5f6d' : v > 16 ? '#fbbf24' : '#818cf8'),
+        pointRadius: resp.map((v,i) => i >= slice.length ? 0 : (v > 19 ? 6 : 3)),
+        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y2' },
+    ]},
+    options: { ...cd, scales: { x: cd.scales.x,
+      y: { min: 0, max: 100, title: { display: true, text: 'Stres', color: '#f97316', font: { size: 11 } }, ticks: { color: '#f97316', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+      y2: { position: 'right', min: 8, title: { display: true, text: 'brpm', color: '#818cf8', font: { size: 11 } }, ticks: { color: '#818cf8', font: { size: 11 } }, grid: { display: false },
+        max: ctx => { const d=ctx.chart.data.datasets[2]?.data?.filter(v=>v!==null&&v>0)||[]; return d.length ? Math.ceil((Math.max(...d)+3)/5)*5 : 30; }
+      }
+    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
+      filter: item => item.datasetIndex >= 1 && item.raw !== null
+    }}}
+  });
+}
+
+</script>
+</body>
+</html>
