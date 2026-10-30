@@ -145,6 +145,13 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
+.gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
+.gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}
+.gc-v{font-size:var(--fs-h2);font-weight:600;margin-top:-6px;}.gc-v small{font-size:var(--fs-xs);color:var(--text3);margin-left:2px;font-weight:500;}
+.gc-a{display:flex;gap:var(--sp-2);justify-content:center;font-size:var(--fs-xs);min-height:16px;}
+.g7{color:var(--blue);}.g14{color:var(--purple);}
+@media(max-width:1099px){.gauges{grid-template-columns:repeat(3,minmax(0,1fr));}}
 .kpi{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .kpi-top{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);}
 .kpi-v{font-size:var(--fs-kpi);font-weight:600;line-height:1.2;letter-spacing:-.01em;}
@@ -609,6 +616,38 @@ const last14 = k => { const out = []; for (let i = 13; i >= 0; i--) { const x = 
 function avgK(k, n) { const v = []; for (let i = 0; i < n; i++) { const x = BYD[addD(TODAY(), -i)]; if (x && num(x[k]) != null) v.push(num(x[k])); } return v.length ? avg(v) : null; }
 function pill(t, kind) { return `<span class="pill pill-${kind}">${esc(t)}</span>`; }
 
+// ── budíky (z původního dashboardu): ručička = dnes, rysky = Ø 7 dní (modrá) a 14 dní (fialová) ──
+function gauge(value, min, max, zones, unit, a7, a14) {
+  const cx = 70, cy = 72, r = 54, sw = 12, P = v => Math.max(0, Math.min(1, (v - min) / (max - min)));
+  const pt = (v, rad) => { const a = Math.PI * (1 - P(v)); return [cx + rad * Math.cos(a), cy - rad * Math.sin(a)]; };
+  const arc = (v1, v2, col, w) => { if (v2 <= v1) return ''; const [x1, y1] = pt(v1, r), [x2, y2] = pt(v2, r);
+    return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 0,1 ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="${col}" stroke-width="${w || sw}"/>`; };
+  const tick = (v, col, ro, ri) => { if (v == null) return ''; const [x1, y1] = pt(v, ro), [x2, y2] = pt(v, ri);
+    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`; };
+  const nd = value == null || isNaN(value), bg = tok('--bg'), z = zones.filter(x => x.to > x.from);
+  let s = arc(min, max, tok('--bg4'), sw) + z.map(x => arc(x.from, x.to, x.c)).join('');
+  s += z.slice(1).map(x => { const [x1, y1] = pt(x.from, r - sw / 2 - 1), [x2, y2] = pt(x.from, r + sw / 2 + 1); return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${bg}" stroke-width="2"/>`; }).join('');
+  s += tick(a14, tok('--purple'), r + sw / 2 + 9, r + sw / 2 + 2) + tick(a7, tok('--blue'), r + sw / 2 + 8, r + sw / 2 + 1);
+  if (!nd) { const [nx, ny] = pt(value, r - 6); s += `<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="${tok('--text')}" stroke-width="2.2" stroke-linecap="round"/>`; }
+  s += `<circle cx="${cx}" cy="${cy}" r="5" fill="${tok('--bg3')}" stroke="${tok('--text2')}" stroke-width="2"/>`;
+  return `<svg class="gauge" viewBox="0 0 140 80" role="img" aria-label="${nd ? 'bez dat' : esc(String(value)) + ' ' + esc(unit || '')}">${s}</svg>`;
+}
+function gaugesHtml(v) {
+  const G = tok('--green'), A = tok('--amber'), C = tok('--crit');
+  const ca = v.ca ?? 50, a = (k, n) => { const x = avgK(k, n); return x == null ? null : Math.round(x); };
+  const L = [
+    { l: 'HRV', v: v.hrv, u: 'ms', min: 0, max: 55, z: [{ from: 0, to: T.hrv_warn.val, c: C }, { from: T.hrv_warn.val, to: T.hrv_ok.val, c: A }, { from: T.hrv_ok.val, to: 55, c: G }], a7: a('hrv', 7), a14: a('hrv', 14) },
+    { l: 'Klidová TF', v: v.hr, u: 'bpm', min: 38, max: 75, z: [{ from: 38, to: T.hr_ok.val, c: G }, { from: T.hr_ok.val, to: T.hr_warn.val, c: A }, { from: T.hr_warn.val, to: 75, c: C }], a7: a('rhr', 7), a14: a('rhr', 14) },
+    { l: 'Body Battery', v: v.bb, u: '', min: 0, max: 100, z: [{ from: 0, to: T.bb_warn.val, c: C }, { from: T.bb_warn.val, to: T.bb_ok.val, c: A }, { from: T.bb_ok.val, to: 100, c: G }], a7: a('bb', 7), a14: a('bb', 14) },
+    { l: 'Připravenost', v: v.sc, u: '', min: 0, max: 100, z: [{ from: 0, to: T.ready_warn.val, c: C }, { from: T.ready_warn.val, to: T.ready_ok.val, c: A }, { from: T.ready_ok.val, to: 100, c: G }] },
+    { l: 'Spánek', v: v.ss, u: '', min: 0, max: 100, z: [{ from: 0, to: T.sleep_warn.val, c: C }, { from: T.sleep_warn.val, to: 70, c: A }, { from: 70, to: 100, c: G }], a7: a('sc', 7), a14: a('sc', 14) },
+    { l: 'Fitness věk', v: v.fa == null ? null : Math.round(v.fa * 10) / 10, u: 'let', min: 30, max: 65, z: [{ from: 30, to: ca, c: G }, { from: ca, to: ca + 5, c: A }, { from: ca + 5, to: 65, c: C }] },
+  ];
+  return L.map(g => `<div class="gc"><div class="lbl">${esc(g.l)}</div>${gauge(g.v, g.min, g.max, g.z, g.u, g.a7, g.a14)}`
+    + `<div class="gc-v">${g.v == null ? '—' : esc(String(g.v))}<small>${esc(g.u)}</small></div>`
+    + `<div class="gc-a">${g.a7 != null ? `<span class="g7">7d ${g.a7}</span>` : ''}${g.a14 != null ? `<span class="g14">14d ${g.a14}</span>` : ''}</div></div>`).join('');
+}
+
 // ── Dnes ──
 function renderDnes() {
   const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
@@ -662,7 +701,9 @@ function renderDnes() {
       <div style="margin-top:var(--sp-3)"><button class="lnk" data-go="denik">Celý deník — jídla, doplňky, poznámka →</button></div></div>
     <div class="card"><div class="card-h"><div class="card-t">Co nejvíc ovlivňuje tvé HRV</div><button class="lnk" data-go="vlivy">Vlivy →</button></div>
       ${inf.ok.length ? infRows(inf.ok, OUT.hrv, 3) : '<div class="muted sm">Zatím žádný výrazný vliv. Vlivy z Garminu (trénink, otužování, kroky, stres) se počítají z historie hned, vlivy z deníku se ukážou po ~2 týdnech zápisů.</div>'}</div>
-  </div>`;
+  </div>
+  <div class="card"><div class="card-h"><div class="card-t">Budíky</div><span class="card-s"><span class="g7">▍Ø 7 dní</span> <span class="g14">▍Ø 14 dní</span></span></div>
+    <div class="gauges">${gaugesHtml({ hrv: num(hrv), hr: num(hr), bb: num(bb), sc: sc, ss: num(ss), fa: fa, ca: f.chronological_age })}</div></div>`;
   bindChips($('quick'), jt);
   document.querySelectorAll('#p-dnes [data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
 }

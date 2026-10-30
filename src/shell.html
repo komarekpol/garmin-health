@@ -145,6 +145,13 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
+.gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
+.gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}
+.gc-v{font-size:var(--fs-h2);font-weight:600;margin-top:-6px;}.gc-v small{font-size:var(--fs-xs);color:var(--text3);margin-left:2px;font-weight:500;}
+.gc-a{display:flex;gap:var(--sp-2);justify-content:center;font-size:var(--fs-xs);min-height:16px;}
+.g7{color:var(--blue);}.g14{color:var(--purple);}
+@media(max-width:1099px){.gauges{grid-template-columns:repeat(3,minmax(0,1fr));}}
 .kpi{display:flex;flex-direction:column;gap:2px;min-width:0;}
 .kpi-top{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);}
 .kpi-v{font-size:var(--fs-kpi);font-weight:600;line-height:1.2;letter-spacing:-.01em;}
