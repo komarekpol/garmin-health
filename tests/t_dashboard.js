@@ -46,6 +46,7 @@ async function cloud(browser, opt) {
     + '<script>window.__CALLS__=[];window.__REPLY__=' + JSON.stringify(reply).replace(/</g, '\\u003c') + ';'
     + 'window.google={script:{run:(function mk(ok,fail){return new Proxy({},{get:(t,k)=>k==="withSuccessHandler"?(f=>mk(f,fail)):k==="withFailureHandler"?(f=>mk(ok,f)):'
     + '(...a)=>setTimeout(()=>{window.__CALLS__.push([k].concat(a));if(k==="ghGet")ok(JSON.stringify(window.__REPLY__));else if(k==="ghSync")ok(JSON.stringify(Object.assign({},window.__REPLY__,{sync:{ok:true,calls:7,errs:[]}})));'
+    + 'else if(k==="ghJournalSet"&&window.__CONFLICT__)ok(JSON.stringify({ok:false,conflict:true,day:window.__CONFLICT__}));'
     + 'else if(k==="ghSet"||k==="ghJournalSet"||k==="ghJournalCfg")ok(JSON.stringify({ok:true}));else fail(new Error("?"+k));},20)})})()}};</script>';
   const page_ = gsCtx.wrapScripts_(html).replace(/<head[^>]*>/i, m => m + inj);
   const ctx = await browser.newContext({ viewport: opt.vp || { width: 1400, height: 1000 } });
@@ -84,6 +85,15 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       let js = await calls(page, 'ghJournalSet');
       const today = await page.evaluate(() => TODAY());
       ok('Dnes: rychlý štítek uloží deník (ghJournalSet)', js.length === 1 && js[0][2] === today && JSON.parse(js[0][3]).t.kava_pozde === 1, JSON.stringify(js).slice(0, 200));
+      // souběh: mezitím přišel záznam z chatu → stránka převezme stav serveru, nic nepřepíše
+      await page.evaluate(() => { window.__CONFLICT__ = { t: { alk: 1, kava_pozde: 1 }, m: [{ s: 'ob', h: '12:30', w: 'z chatu' }], src: 'chat', at: '2026-10-30T15:00:00.000Z' }; });
+      await page.click('#quick [data-t="stres"]'); await page.waitForTimeout(900);
+      const jc = await page.evaluate(() => JR.days[TODAY()]);
+      ok('Dnes: souběh se záznamem z chatu → převezme stav serveru + hláška', jc && jc.src === 'chat' && jc.t.alk === 1 && !jc.t.stres && /mezitím změnil/.test(await txt(page, '#jst')), JSON.stringify(jc) + ' ' + await txt(page, '#jst'));
+      await page.evaluate(() => { window.__CONFLICT__ = null; });
+      await page.click('#quick [data-t="stres"]'); await page.waitForTimeout(900);
+      const jl = (await calls(page, 'ghJournalSet')).pop();
+      ok('Dnes: po převzetí další změna odejde s at serveru', JSON.parse(jl[3]).at === '2026-10-30T15:00:00.000Z' && JSON.parse(jl[3]).t.stres === 1 && JSON.parse(jl[3]).m[0].w === 'z chatu');
       // Sync = jedno tlačítko
       await page.click('#syncBtn'); await page.waitForTimeout(400);
       ok('Sync: jedno tlačítko → ghSync a znovu aktivní', (await calls(page, 'ghSync')).length === 1 && await page.$eval('#syncBtn', e => !e.disabled));

@@ -438,7 +438,7 @@ function take(r, src) {
   if (r.data.error) throw new Error(r.data.error);
   DATA = r.data;
   const se = r.sync && !r.sync.ok ? r.sync.error : (r.sync && r.sync.errs && r.sync.errs.length ? r.sync.errs.join(' · ') : null);
-  META = { src: src, at: r.at || DATA.exported_at, ageH: r.ageH || 0, stale: !!r.stale, warn: se ? 'Sync z Garminu: ' + se : (DATA.warn || null), jerr: r.journalErr || null };
+  META = { src: src, at: r.at || DATA.exported_at, ageH: r.ageH || 0, stale: !!r.stale, warn: se ? 'Sync z Garminu: ' + se : (DATA.warn || null), jerr: r.journalErr || null, ierr: r.inboxErr || null };
   buildDays();
   return DATA;
 }
@@ -471,6 +471,7 @@ function dataNote() {
   if (META && META.stale) note(`Data jsou stará ${Math.round(META.ageH)} h — sync z Garminu neprobíhá. Zkontroluj synchronizaci hodinek s telefonem a klíč Personal API (vyprší nejvýš za rok).`, 'warn');
   else if (META && META.warn) note(esc(META.warn), 'warn');
   else if (META && META.jerr) note('Deník se nepodařilo načíst: ' + esc(META.jerr), 'warn');
+  else if (META && META.ierr) note('Záznam z chatu se nepodařilo převzít do deníku: ' + esc(META.ierr), 'warn');
   else note(null);
 }
 function ageText() {
@@ -538,17 +539,30 @@ function jPut(d, j) {
   j.m = (j.m || []).filter(m => m.w || m.h);
   if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;
   jStatus('Ukládám…');
-  clearTimeout(jSaveT[d]); jSaveT[d] = setTimeout(() => jFlush(d), 700);
+  clearTimeout(jSaveT[d] && jSaveT[d].t); jSaveT[d] = { _pending: true, t: setTimeout(() => { jSaveT[d]._pending = false; jFlush(d); }, 700) };
 }
+const jBusy = {}, jAgain = {};
 async function jFlush(d) {
+  if (jBusy[d]) { jAgain[d] = true; return; }   // jeden zápis dne naráz — jinak by druhý nesl staré „at“ a hlásil souběh sám se sebou
+  jBusy[d] = true;
   const day = JR.days[d] || {};
   try {
     const r = CLOUD ? await gsRun('ghJournalSet', CLOUD.key, d, JSON.stringify(day))
       : await (await fetch(`${API}/journal`, { method: 'POST', body: JSON.stringify({ date: d, day: day }), headers: { 'Content-Type': 'text/plain' } })).json();
+    if (r.conflict) { jAgain[d] = false; if (r.day) JR.days[d] = r.day; else delete JR.days[d]; renderPage(); jStatus('Deník se mezitím změnil (záznam z chatu) — načteno znovu, zopakuj poslední změnu', true); return; }
     if (!r.ok) throw new Error(r.error || 'neznámá chyba');
+    if (r.at && JR.days[d]) JR.days[d].at = r.at;
     jStatus('Uloženo ✓');
   } catch (e) { jStatus('Neuloženo: ' + (e.message || e), true); }
+  finally { jBusy[d] = false; if (jAgain[d]) { jAgain[d] = false; jFlush(d); } }
 }
+// návrat na stránku (telefon z pozadí) → čerstvá data i deník, ať se nepřepíše, co mezitím přišlo z chatu
+let lastFetch = Date.now();
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState !== 'visible' || Date.now() - lastFetch < 120e3 || Object.values(jBusy).some(Boolean) || Object.keys(jSaveT).some(k => jSaveT[k] && jSaveT[k]._pending)) return;
+  lastFetch = Date.now();
+  try { await fetchData(); dataNote(); renderAll(); } catch (e) {}
+});
 function jStatus(t, err) { const el = $('jst'); if (el) { el.textContent = t; el.classList.toggle('err', !!err); } }
 async function jCfgSave() {
   try {

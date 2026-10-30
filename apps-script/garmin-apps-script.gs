@@ -26,7 +26,9 @@ const KEEP_KEYS_ = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 
 const JOURNAL_FILE = 'garmin-journal.json';
 const JOURNAL_DAY_MAX_ = 6000;      // jeden den (štítky + jídla + poznámka) — běžně ~0,3 kB
 const JOURNAL_CFG_MAX_ = 20000;     // vlastní štítky a doplňky
-const JOURNAL_MAX_ = 2000000;       // celý soubor (~0,3 kB / den ≈ 0,1 MB / rok) — nad limit se nezapíše a stránka to řekne
+const JOURNAL_MAX_ = 2000000;
+const INBOX_PREFIX_ = 'garmin-denik-vstup';   // schránka deníku: soubory, které zapíše Claude z chatu (konektor Disku umí soubory jen zakládat)
+const INBOX_MAX_ = 20000;           // jeden soubor schránky       // celý soubor (~0,3 kB / den ≈ 0,1 MB / rok) — nad limit se nezapíše a stránka to řekne
 
 function props_() { return PropertiesService.getScriptProperties(); }
 function cfg_() { return { key: props_().getProperty('SYNC_KEY') || '' }; }
@@ -106,6 +108,7 @@ function ghSync(key) {
 function apiData_() {
   const d = dataRead_();
   d.settings = settingsRead_();
+  try { const ib = inboxMerge_(); if (ib.errs && ib.errs.length) d.inboxErr = ib.errs.join(' | '); } catch (e) { d.inboxErr = String(e.message || e); }
   try { d.journal = journalRead_(); } catch (e) { d.journalErr = String(e.message || e); }
   if (d.ok) d.stale = d.ageH > STALE_H_;
   return d;
@@ -151,9 +154,13 @@ function ghJournalSet(key, date, dayJson) {
     if (!keyOk_(key)) throw new Error('Neplatný klíč');
     if (!isYmd_(String(date || '')) || String(date).length !== 10) throw new Error('Neplatné datum');
     if (typeof dayJson !== 'string' || dayJson.length > JOURNAL_DAY_MAX_) throw new Error('Záznam dne je větší než ' + JOURNAL_DAY_MAX_ + ' znaků — neuloženo');
-    const day = JSON.parse(dayJson);
-    const at = journalWrite_(j => { if (!day || typeof day !== 'object' || !Object.keys(day).filter(k => k !== 'at').length) delete j.days[date]; else { day.at = new Date().toISOString(); j.days[date] = day; } });
-    out = { ok: true, at: at };
+    const day = JSON.parse(dayJson), base = day && day.at || null; let conflict = null, at = null;
+    // souběh: den se mezitím změnil jinde (záznam z chatu přes schránku, jiné zařízení) → neukládat, vrátit aktuální stav (stránka ho převezme)
+    journalWrite_(j => { const cur = j.days[date];
+      if (cur && (cur.at || null) !== base) { conflict = cur; return; }
+      if (!day || typeof day !== 'object' || !Object.keys(day).filter(k => k !== 'at' && k !== 'src').length) delete j.days[date];
+      else { delete day.src; day.at = at = new Date().toISOString(); j.days[date] = day; } });
+    out = conflict ? { ok: false, conflict: true, day: conflict, error: 'Deník se mezitím změnil jinde (např. záznam z chatu) — načteno znovu' } : { ok: true, at: at };
   } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
   return JSON.stringify(out);
 }
@@ -167,6 +174,49 @@ function ghJournalCfg(key, cfgJson) {
     out = { ok: true, at: journalWrite_(j => { j.cfg = cfg || {}; }) };
   } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
   return JSON.stringify(out);
+}
+
+// ── 📥 Schránka deníku (Pavel 30.10.2026: „řeknu přes chat mikrofonem, co jsem jedl a pil, a ty mi aktualizuješ deník“) ──
+// Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
+//   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
+//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku) }] }.
+// Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
+function inboxMerge_() {
+  const it = dataFolder_().getFiles(), files = [];
+  while (it.hasNext()) { const f = it.next(); const n = f.getName(); if (n.indexOf(INBOX_PREFIX_) === 0 && n.indexOf('CHYBA') < 0 && !f.isTrashed()) files.push(f); }
+  if (!files.length) return { n: 0 };
+  files.sort((a, b) => a.getDateCreated() - b.getDateCreated());
+  const p = props_(); let done = 0; const errs = [];
+  files.forEach(f => {
+    try {
+      const txt = f.getBlob().getDataAsString('UTF-8');
+      if (txt.length > INBOX_MAX_) throw new Error('soubor má ' + txt.length + ' znaků (limit ' + INBOX_MAX_ + ')');
+      const inp = JSON.parse(txt), items = Array.isArray(inp.items) ? inp.items : [inp];
+      items.forEach(x => { if (!x || !isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
+      journalWrite_(j => items.forEach(x => inboxApply_(j, x)));
+      f.setTrashed(true); done++;
+    } catch (e) {
+      errs.push(f.getName() + ': ' + (e.message || e));
+      try { f.setName(f.getName().replace(/\.json$/, '') + ' CHYBA.json'); } catch (e2) {}
+    }
+  });
+  p.setProperty('INBOX_LAST', JSON.stringify({ at: new Date().toISOString(), done: done, errs: errs.slice(0, 5) }).slice(0, 2000));
+  return { n: done, errs: errs };
+}
+function inboxApply_(j, x) {
+  const id = v => String(v || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  const day = j.days[x.d] || {}; day.t = day.t || {}; day.m = day.m || []; day.sup = day.sup || [];
+  Object.keys(x.t || {}).forEach(k => { const v = Number(x.t[k]); if (id(k) && isFinite(v)) { if (v > 0) day.t[id(k)] = Math.min(v, 99); else delete day.t[id(k)]; } });
+  Object.keys(x.tadd || {}).forEach(k => { const v = Number(x.tadd[k]); if (id(k) && isFinite(v)) { const r = Math.max(0, Math.min(99, (Number(day.t[id(k)]) || 0) + v)); if (r > 0) day.t[id(k)] = r; else delete day.t[id(k)]; } });
+  (x.m || []).forEach(m => { const s = ['sn', 'ob', 've', 'sv'].indexOf(m && m.s) >= 0 ? m.s : 'sv', h = /^\d{2}:\d{2}$/.test(m && m.h || '') ? m.h : '', w = String(m && m.w || '').slice(0, 200);
+    if ((w || h) && !day.m.some(o => o.s === s && o.h === h && o.w === w)) day.m.push({ s: s, h: h, w: w }); });
+  (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });
+  if (x.n) day.n = ((day.n ? day.n + ' · ' : '') + String(x.n)).slice(0, 1000);
+  [['newSup', 'sup'], ['newTags', 'tags']].forEach(([a, b]) => (x[a] || []).forEach(o => { const k = id(o && o.id), l = String(o && o.l || '').slice(0, 40);
+    if (!k || !l) return; const arr = j.cfg[b] = j.cfg[b] || []; if (!arr.some(z => z.id === k)) arr.push({ id: k, l: l }); }));
+  day.at = new Date().toISOString(); day.src = 'chat';
+  if (JSON.stringify(day).length > JOURNAL_DAY_MAX_) throw new Error('den ' + x.d + ' by byl větší než ' + JOURNAL_DAY_MAX_ + ' znaků');
+  j.days[x.d] = day;
 }
 
 // HtmlService při servírování „minifikuje“ skripty vlastním tokenizérem, který se plete u regexů a vnořených šablon
@@ -224,7 +274,7 @@ function healthOut_() {
   const d = dataRead_(), p = props_();
   return { at: new Date().toISOString(), data: d.ok ? { at: d.at, ageH: d.ageH, bytes: d.bytes, date: d.data.date, warn: d.data.warn || null, stale: d.ageH > STALE_H_ } : { error: d.error },
     sync: { at: p.getProperty('SYNC_AT'), err: p.getProperty('SYNC_ERR'), backfill: p.getProperty('BF_STATE'), keyExp: p.getProperty('GARMIN_KEY_EXP') || null, cooldown: p.getProperty('GARMIN_COOLDOWN') },
-    selfSha: p.getProperty('SELF_SHA'), selfAt: p.getProperty('SELF_AT'), selfErr: p.getProperty('SELF_ERR'), staleMail: p.getProperty('STALE_MAIL_DAY'),
+    selfSha: p.getProperty('SELF_SHA'), selfAt: p.getProperty('SELF_AT'), selfErr: p.getProperty('SELF_ERR'), inbox: p.getProperty('INBOX_LAST'), staleMail: p.getProperty('STALE_MAIL_DAY'),
     triggers: (() => { try { return ScriptApp.getProjectTriggers().map(x => x.getHandlerFunction()); } catch (e) { return null; } })() };
 }
 function staleWatch_() {
@@ -276,6 +326,7 @@ function selfUpdate(force) {
 function selfUpdateTick() {
   const p = props_();
   try { syncTick_(); } catch (e) { console.warn('syncTick_: ' + e); }
+  try { inboxMerge_(); } catch (e) { console.warn('inboxMerge_: ' + e); }
   try { staleWatch_(); } catch (e) { console.warn('staleWatch_: ' + e); }
   try { keyExpWatch_(); } catch (e) { console.warn('keyExpWatch_: ' + e); }
   let r; try { r = selfUpdate(false); p.deleteProperty('SELF_ERR'); } catch (err) { console.warn('selfUpdate: ' + err); r = { ok: false, error: String(err) }; p.setProperty('SELF_ERR', new Date().toISOString() + ' ' + String(err).slice(0, 400)); }

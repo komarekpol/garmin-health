@@ -77,13 +77,13 @@ function sleepObj(d) {
 function gasEnv() {
   const props = {}, cache = {}, files = {}, mails = [];
   let fid = 0;
-  const mkFile = (name, content) => { const f = { id: 'f' + (++fid), name, content, upd: new Date(), trashed: false };
+  const mkFile = (name, content) => { const f = { id: 'f' + (++fid), name, content, upd: new Date(), cr: new Date(Date.now() + fid), trashed: false };
     files[f.id] = f; return wrapF(f); };
   const wrapF = f => ({ getId: () => f.id, getName: () => f.name, isTrashed: () => f.trashed, getLastUpdated: () => f.upd, getSize: () => Buffer.byteLength(f.content),
-    setContent: c => { f.content = c; f.upd = new Date(); }, getBlob: () => ({ getDataAsString: () => f.content }), getUrl: () => 'drive://' + f.id });
+    setContent: c => { f.content = c; f.upd = new Date(); }, getDateCreated: () => f.cr, setTrashed: t => { f.trashed = !!t; }, setName: n => { f.name = n; }, getBlob: () => ({ getDataAsString: () => f.content }), getUrl: () => 'drive://' + f.id });
   const iter = arr => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
   const folder = { getId: () => 'folder', getName: () => 'Garmin Data', isTrashed: () => false, getUrl: () => 'drive://folder',
-    getFilesByName: n => iter(Object.values(files).filter(f => f.name === n).map(wrapF)), createFile: (n, c) => mkFile(n, c) };
+    getFilesByName: n => iter(Object.values(files).filter(f => f.name === n).map(wrapF)), getFiles: () => iter(Object.values(files).map(wrapF)), createFile: (n, c) => mkFile(n, c) };
   const env = {
     console, JSON, Date, Math, Object, Array, String, Number, Buffer, URL, encodeURIComponent, parseFloat, isFinite, Error,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => k in props ? props[k] : null, setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
@@ -108,7 +108,7 @@ function gasEnv() {
   };
   vm.createContext(env);
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps-script/garmin-apps-script.gs'), 'utf8'), env);
-  return { env, props, files, mails, file: n => Object.values(files).find(f => f.name === n) };
+  return { env, props, files, mails, folder, file: n => Object.values(files).find(f => f.name === n) };
 }
 
 // ── běhy ──
@@ -209,17 +209,46 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   ok('deník: ghGet vrací záznam dne', g2.journal && g2.journal.days[TODAY] && g2.journal.days[TODAY].t.alk === 2 && g2.journal.days[TODAY].m[0].w === 'pizza');
   r = JSON.parse(G.env.ghJournalCfg('k1', JSON.stringify({ sup: [{ id: 'mg', l: 'Hořčík' }] })));
   ok('deník: nastavení (doplňky)', r.ok && JSON.parse(G.env.ghGet('k1')).journal.cfg.sup[0].l === 'Hořčík');
-  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({})));
+  const at1 = JSON.parse(G.env.ghGet('k1')).journal.days[TODAY].at;
+  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({ t: { alk: 3 } })));
+  ok('deník: souběh — zápis se starým / chybějícím at odmítnut a vrátí aktuální den', !r.ok && r.conflict && r.day.t.alk === 2, JSON.stringify(r));
+  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify(Object.assign({}, day, { at: at1, n: 'změna' }))));
+  ok('deník: zápis se správným at projde a vrátí nové at', r.ok && r.at && r.at === JSON.parse(G.env.ghGet('k1')).journal.days[TODAY].at);
+  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({ at: r.at })));
   ok('deník: prázdný den = smazání', r.ok && !JSON.parse(G.env.ghGet('k1')).journal.days[TODAY]);
   ok('deník: špatný klíč odmítnut', !JSON.parse(G.env.ghJournalSet('x', TODAY, '{}')).ok);
   ok('deník: neplatné datum odmítnuto', !JSON.parse(G.env.ghJournalSet('k1', '2026-1-1', '{}')).ok);
   ok('deník: příliš velký den odmítnut', !JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({ n: 'x'.repeat(7000) }))).ok);
   G.env.ghJournalSet('k1', add(TODAY, -1), JSON.stringify(day));
+  G.env.ghJournalSet('k1', TODAY, JSON.stringify(day));
   // nečitelný soubor deníku = chyba, ne tiché přepsání
   const jf = G.file('garmin-journal.json'), keep = jf.content; jf.content = '{rozbité';
   r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify(day)));
   ok('deník: poškozený soubor se nepřepíše', !r.ok && jf.content === '{rozbité', JSON.stringify(r));
   jf.content = keep;
+}
+
+// schránka deníku: soubor od Clauda z chatu → převezme se při otevření stránky, hotový do koše, chybný „CHYBA“
+{
+  const Y = add(TODAY, -1), j0 = JSON.parse(G.file('garmin-journal.json').content).days[Y];
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1612.json', JSON.stringify({ v: 1, items: [
+    { d: Y, tadd: { alk: 1 }, t: { kava_pozde: 0, sauna: 1 }, m: [{ s: 'ob', h: '12:30', w: 'kuře s rýží' }, { s: 'ob', h: '12:30', w: 'kuře s rýží' }], sup: ['mg', 'd3'], n: 'z chatu', newSup: [{ id: 'd3', l: 'Vitamín D3' }] },
+    { d: TODAY, t: { med: 15 }, m: [{ s: 'sn', h: '07:10', w: 'ovesná kaše' }] } ] }));
+  G.folder.createFile('garmin-denik-vstup zly.json', '{nečitelné');
+  const g = JSON.parse(G.env.ghGet('k1')), dy = g.journal.days[Y], dt = g.journal.days[TODAY];
+  ok('schránka: počítadlo se přičte, štítek nastaví / smaže', dy.t.alk === j0.t.alk + 1 && dy.t.sauna === 1 && !dy.t.kava_pozde, JSON.stringify(dy.t));
+  ok('schránka: jídla přidána bez duplicit, doplňky sjednoceny, poznámka připojena', dy.m.length === 2 && dy.m[1].w === 'kuře s rýží' && dy.sup.join() === 'mg,d3' && /test · z chatu/.test(dy.n), JSON.stringify(dy));
+  ok('schránka: nový doplněk do nastavení, nový den, src chat', g.journal.cfg.sup.some(x => x.id === 'd3' && x.l === 'Vitamín D3') && dt.t.med === 15 && dt.m.some(m => m.w === 'ovesná kaše' && m.s === 'sn') && dt.src === 'chat');
+  const fs_ = Object.values(G.files);
+  ok('schránka: hotový soubor v koši, chybný přejmenován + chyba vrácena', fs_.find(f => f.name === 'garmin-denik-vstup 2026-10-30 1612.json').trashed && fs_.some(f => f.name === 'garmin-denik-vstup zly CHYBA.json' && !f.trashed) && /zly/.test(g.inboxErr || ''), g.inboxErr);
+  const g2 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: druhé otevření nic nezdvojí', g2.journal.days[Y].t.alk === dy.t.alk && g2.journal.days[Y].m.length === 2 && !g2.inboxErr);
+  G.folder.createFile('garmin-denik-vstup bez-data.json', JSON.stringify({ items: [{ t: { alk: 1 } }] }));
+  ok('schránka: záznam bez data odmítnut', /datum/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
+  // stránka otevřená se starou kopií dne, mezitím přišel záznam z chatu → klik na stránce záznam nepřepíše
+  const old = Object.assign({}, dy, { at: '2026-01-01T00:00:00.000Z' });
+  const rc = JSON.parse(G.env.ghJournalSet('k1', Y, JSON.stringify(old)));
+  ok('schránka: stará kopie ze stránky záznam z chatu nepřepíše', !rc.ok && rc.conflict && rc.day.src === 'chat' && rc.day.m.length === 2);
 }
 
 fs.writeFileSync(path.join(OUT, 'sample-api.json'), G.file('garmin-data.json').content);
