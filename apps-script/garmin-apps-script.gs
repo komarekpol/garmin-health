@@ -541,3 +541,33 @@ function testGarmin() {
   writeFile_(SAMPLES_FILE, JSON.stringify({ at: new Date().toISOString(), samples: ctx.samples }, null, 1), MimeType.PLAIN_TEXT);
   Logger.log('Vzorky odpovědí: Garmin Data/%s (%s volání)', SAMPLES_FILE, ctx.calls);
 }
+
+// Diagnostika (v editoru): každý endpoint s několika daty → HTTP kód, délka a začátek odpovědi do protokolu.
+// Slouží k ověření, co Personal API skutečně vrací (prázdné odpovědi u HRV / spánku / souhrnů při prvním testu 30.10.2026).
+function diagGarmin() {
+  let tok; try { tok = gpToken_(true); Logger.log('✓ token'); } catch (e) { Logger.log('✖ ' + e); return; }
+  const t = ymd_(new Date()), d1 = addDays_(t, -1), d2 = addDays_(t, -2), d7 = addDays_(t, -7), d30 = addDays_(t, -30);
+  const probes = [
+    ['profil', '/userprofile-service/userprofile/settings'],
+    ['HRV den dnes', '/hrv-service/hrv/' + t], ['HRV den včera', '/hrv-service/hrv/' + d1], ['HRV den -30', '/hrv-service/hrv/' + d30],
+    ['HRV rozsah 7 d', '/hrv-service/hrv/daily/' + d7 + '/' + t],
+    ['spánek den dnes', '/sleep-service/sleep/dailySleep?date=' + t], ['spánek den -2', '/sleep-service/sleep/dailySleep?date=' + d2],
+    ['spánek den -30', '/sleep-service/sleep/dailySleep?date=' + d30],
+    ['spánek rozsah 7 d', '/sleep-service/sleep/dailySleepSummariesByDate?startDate=' + d7 + '&endDate=' + t],
+    ['souhrny 7 d', '/usersummary-service/v2/dailysummaries?startDate=' + d7 + '&endDate=' + t],
+    ['souhrny 1 d', '/usersummary-service/v2/dailysummaries?startDate=' + d1 + '&endDate=' + d1],
+    ['stres 7 d', '/usersummary-service/stats/stress/daily/' + d7 + '/' + t],
+    ['kroky 7 d', '/usersummary-service/stats/steps/daily/' + d7 + '/' + t],
+    ['TF den včera', '/wellness-service/wellness/dailyHeartRate?date=' + d1],
+    ['SpO2 včera', '/wellness-service/wellness/daily/spo2acclimation/' + d1],
+    ['wellness aktivity 7 d', '/wellnessactivity-service/activity/summary/range/' + d7 + '/' + t],
+  ];
+  probes.forEach(p => {
+    try {
+      const r = UrlFetchApp.fetch(GP_BASE_ + p[1], { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/json' }, muteHttpExceptions: true });
+      const s = r.getContentText('UTF-8') || '';
+      // jen tvar odpovědi: čísla nahrazena #, ať v protokolu nejsou zdravotní hodnoty
+      Logger.log('%s → HTTP %s, %s znaků: %s', p[0], r.getResponseCode(), s.length, s.replace(/-?\d+(\.\d+)?/g, '#').replace(/"(fullName|displayName|ownerFullName|ownerDisplayName|userName|emailAddress)":"[^"]*"/g, '"$1":"…"').slice(0, 300));
+    } catch (e) { Logger.log('%s → výjimka %s', p[0], e); }
+  });
+}
