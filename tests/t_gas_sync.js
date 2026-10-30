@@ -280,6 +280,12 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   G.folder.createFile('garmin-denik-vstup import.json', JSON.stringify({ v: 1, items: [{ food: [{ id: 'quinoa', l: 'Quinoa', por: 60, k: 368, p: 14.1, f: 6.1, c: 64.2, src: 'https://www.kaloricketabulky.cz/potraviny/quinoa' }] }] }));
   const g4 = JSON.parse(G.env.ghGet('k1'));
   ok('schránka: import jen jídel bez dne', g4.journal.food.quinoa && g4.journal.food.quinoa.k === 368 && Object.keys(g4.journal.days).length === nd0 && !g4.inboxErr, g4.inboxErr);
+  // váha a tělesný tuk z exportu váhy
+  G.folder.createFile('garmin-denik-vstup vaha.json', JSON.stringify({ v: 1, items: [{ d: '2025-08-01', kg: 78.4, bf: 17.8 }, { d: '2025-08-02', kg: 78.0, bf: 18.7 }] }));
+  const g5 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: váha + tělesný tuk', g5.journal.days['2025-08-01'].kg === 78.4 && g5.journal.days['2025-08-01'].bf === 17.8 && !g5.inboxErr, g5.inboxErr);
+  G.folder.createFile('garmin-denik-vstup vaha2.json', JSON.stringify({ items: [{ d: '2025-08-03', bf: 95 }] }));
+  ok('schránka: nesmyslný tuk odmítnut', /tělesný tuk/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
   // databáze ze stránky
   let fr = JSON.parse(G.env.ghFoodSet('k1', 'rohlik', JSON.stringify({ l: 'Rohlík', por: 43, porL: '1 ks', k: 290, p: 9, f: 4, c: 54 })));
   ok('jídla: ghFoodSet uloží a vrátí jídlo', fr.ok && fr.food.k === 290 && JSON.parse(G.env.ghGet('k1')).journal.food.rohlik.por === 43, JSON.stringify(fr));

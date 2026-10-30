@@ -28,7 +28,7 @@ sample.days.slice(-121, -1).forEach((x, i) => {
   if (i % 3 === 0) j.m.push({ s: 've', h: '19:00', w: 'večeře' });
   // posledních 60 dní jídlo z databáze (kaše + oběd, ve dny s alkoholem i pivo pozdě večer) a váha
   if (i >= 60) { j.m.push({ s: 'sn', h: '07:00', w: '', it: [{ f: 'ovesna_kase', g: 300 }] }, { s: 'ob', h: '12:30', w: '', it: [{ f: 'kure_ryze', g: 400 + (i % 3) * 100 }] });
-    if (j.t.alk) j.m.push({ s: 've', h: '21:00', w: '', it: [{ f: 'pivo', g: 1000 }] }); if (i % 2 === 0) j.kg = 82 - (i - 60) * 0.02; }
+    if (j.t.alk) j.m.push({ s: 've', h: '21:00', w: '', it: [{ f: 'pivo', g: 1000 }] }); if (i % 2 === 0) { j.kg = 82 - (i - 60) * 0.02; j.bf = 17 + (i % 5) * 0.3; } }
   j.n = 'den ' + i; journal.days[x.d] = j;
 });
 
@@ -165,6 +165,8 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
         ok(`Trendy: ${k} — graf s daty + týdenní tabulka`, await page.evaluate(() => CH.data.datasets[0].data.some(v => v != null)) && /Po týdnech/i.test(await txt(page, '#twk')), await page.evaluate(() => JSON.stringify(CH.data.datasets[0].data.slice(-5))) + (await txt(page, '#twk')).slice(0, 80)); }
       await page.screenshot({ path: path.join(OUT, 'd-trendy-kcal.png'), fullPage: true });
       await page.click('#tmet [data-k="hrv"]');
+      ok('Trendy: váha + tělesný tuk (2. osa)', await page.evaluate(() => { const b = UI.trend; UI.trend = 'kg'; renderTrendy(); const r = CH.data.datasets.some(d => /tuk/.test(d.label) && d.data.some(v => v != null)); UI.trend = b; renderTrendy(); return r; }));
+      ok('Vlivy: den jen s váhou se nepočítá jako den deníku', await page.evaluate(() => { const d = '2020-01-01'; JR.days[d] = { kg: 80 }; const f = factors().find(x => x.id === 't:alk'); const r = f.f(d); delete JR.days[d]; return r === null; }));
       const nf = await page.evaluate(() => factors().filter(f => f.g === 'Jídlo').map(f => f.id));
       ok('Vlivy: faktory z jídla', nf.includes('n:khi') && nf.includes('n:late') && nf.includes('n:def'), JSON.stringify(nf));
       // Vlivy

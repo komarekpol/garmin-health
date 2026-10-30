@@ -22,6 +22,7 @@ function foodUse(days) {
   Object.keys(JR.days).forEach(d => { if (d < from) return; (JR.days[d].m || []).forEach(m => (m.it || []).forEach(it => { u[it.f] = (u[it.f] || 0) + 1; })); });
   return u;
 }
+const bfOf = d => { const j = JR.days[d]; return j && j.bf != null ? +j.bf : null; };
 const kgOf = d => { const j = JR.days[d]; return j && j.kg != null ? +j.kg : null; };
 function kgSeries(n) { const out = []; for (let i = n - 1; i >= 0; i--) { const d = addD(TODAY(), -i); out.push(kgOf(d)); } return out; }
 function lastKg() { const ks = Object.keys(JR.days).filter(d => JR.days[d].kg != null).sort(); return ks.length ? { d: ks[ks.length - 1], kg: +JR.days[ks[ks.length - 1]].kg } : null; }
@@ -75,7 +76,7 @@ function renderJidlo() {
       ${N && N.unk ? `<div class="xs" style="color:var(--amber);margin-top:var(--sp-2)">${N.unk} položek odkazuje na jídlo, které v databázi už není.</div>` : ''}</div>
     <div class="card"><div class="card-h"><div class="card-t">Váha</div><span class="card-s">${lk ? 'poslední ' + esc(dShort(lk.d)) : 'zatím žádná'}</span></div>
       <div class="kgrow"><label class="lbl" for="fkg">Váha ${esc(dShort(d))}</label><input type="number" id="fkg" step="0.1" min="30" max="250" inputmode="decimal" value="${j.kg != null ? j.kg : ''}" placeholder="kg"></div>
-      <div class="sm t2" style="margin-top:var(--sp-2)">Ø 7 dní ${k7 == null ? '—' : fmt(k7, 1) + ' kg'}${k30 != null ? ' · za měsíc ' + sgn(k30, 1) + ' kg' : ''}</div>${spark(ks, tok('--blue'))}</div>
+      <div class="sm t2" style="margin-top:var(--sp-2)">Ø 7 dní ${k7 == null ? '—' : fmt(k7, 1) + ' kg'}${k30 != null ? ' · za měsíc ' + sgn(k30, 1) + ' kg' : ''}${(() => { const b = Object.keys(JR.days).filter(x => JR.days[x].bf != null).sort().pop(); return b ? ' · tuk ' + fmt(JR.days[b].bf, 1) + ' % (' + esc(dShort(b)) + ')' : ''; })()}</div>${spark(ks, tok('--blue'))}</div>
   </div>
   <div class="card"><div class="card-h"><div class="card-t">Jídla dne</div><button class="btn" id="faddm">+ Jídlo</button></div>
     <div class="lbl">Přidat do</div><div class="seg" id="ftgt">${MEAL_S.map(([k, l]) => `<button data-v="${k}" class="${k === tgt ? 'on' : ''}">${l}</button>`).join('')}</div>

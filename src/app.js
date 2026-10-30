@@ -216,7 +216,7 @@ const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id 
 const jDay = d => JR.days[d] || null;
 function jEdit(d) { const j = JR.days[d] ? JSON.parse(JSON.stringify(JR.days[d])) : {}; j.t = j.t || {}; j.m = j.m || []; j.sup = j.sup || []; return j; }
 const mealHas = m => m && (m.w || m.h || (m.it || []).length);
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.n || '').trim() && j.kg == null; }
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.n || '').trim() && j.kg == null && j.bf == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
@@ -271,7 +271,7 @@ const OUT = {
 const acts = d => (BYD[d] && BYD[d].a) || [];
 const isTrain = a => (a.l || 0) >= 20;
 function factors() {
-  const J = d => jDay(d), tg = (d, id, min) => { const j = J(d); return j ? ((j.t && j.t[id] || 0) >= (min || 1) ? 1 : 0) : null; };
+  const J = d => { const j = jDay(d); return j && (Object.keys(j.t || {}).length || (j.m || []).length || (j.sup || []).length || (j.n || '').trim()) ? j : null; }, tg = (d, id, min) => { const j = J(d); return j ? ((j.t && j.t[id] || 0) >= (min || 1) ? 1 : 0) : null; };
   const F = [];
   TAGS.forEach(g => g.items.forEach(t => F.push({ id: 't:' + t.id, l: t.l, g: g.g, src: 'deník', f: d => tg(d, t.id) })));
   F.push({ id: 't:alk2', l: 'Alkohol 2+ sklenky', g: 'Jídlo a pití', src: 'deník', f: d => tg(d, 'alk', 2) });
@@ -639,13 +639,16 @@ function drawTrend() {
     } else {
       title = 'Váha';
       const kv = dd.map(kgOf), roll = kv.map((_, i) => { const a = kv.slice(Math.max(0, i - 6), i + 1).filter(v => v != null); return a.length ? Math.round(avg(a) * 10) / 10 : null; });
-      ds = [{ type: 'line', label: 'Váha (kg)', data: kv, borderColor: tok('--blue'), backgroundColor: tok('--blue'), pointRadius: 3, borderWidth: 1.4, spanGaps: true, tension: .2 },
-        { type: 'line', label: 'Ø 7 d', data: roll, borderColor: tok('--text2'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.6, spanGaps: true, tension: .3 }];
-      leg = `<span><i style="background:${tok('--blue')}"></i>Váha</span><span><i style="background:${tok('--text2')}"></i>Ø 7 dní</span>`;
+      const bfv = dd.map(bfOf), hasBf = bfv.some(v => v != null);
+      ds = [{ type: 'line', label: 'Váha (kg)', data: kv, borderColor: tok('--blue'), backgroundColor: tok('--blue'), pointRadius: dd.length > 120 ? 1.5 : 3, borderWidth: 1.4, spanGaps: true, tension: .2, yAxisID: 'y' },
+        { type: 'line', label: 'Ø 7 d', data: roll, borderColor: tok('--text2'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.6, spanGaps: true, tension: .3, yAxisID: 'y' }];
+      if (hasBf) ds.push({ type: 'line', label: 'Tělesný tuk (%)', data: bfv, borderColor: tok('--purple'), backgroundColor: tok('--purple'), pointRadius: dd.length > 120 ? 1 : 2, borderWidth: 1.2, spanGaps: true, tension: .2, yAxisID: 'y2' });
+      leg = `<span><i style="background:${tok('--blue')}"></i>Váha</span><span><i style="background:${tok('--text2')}"></i>Ø 7 dní</span>` + (hasBf ? `<span><i style="background:${tok('--purple')}"></i>Tělesný tuk % (pravá osa)</span>` : '');
     }
-    CH = new Chart($('tch'), { data: { labels: lb, datasets: ds }, options: { ...base, scales: { x: { ...base.scales.x, stacked: m === 'makra' }, y: { ...base.scales.y, stacked: m === 'makra', beginAtZero: m !== 'kg' } } } });
+    const sc2 = m === 'kg' && ds.some(x => x.yAxisID === 'y2') ? { y2: { position: 'right', ticks: { color: tok('--text3'), font }, grid: { display: false } } } : {};
+    CH = new Chart($('tch'), { data: { labels: lb, datasets: ds }, options: { ...base, scales: { x: { ...base.scales.x, stacked: m === 'makra' }, y: { ...base.scales.y, stacked: m === 'makra', beginAtZero: m !== 'kg' }, ...sc2 } } });
     const logged = NU.filter(Boolean), kvs = dd.map(kgOf).filter(v => v != null), burn = dd.map((d, i) => NU[i] && BYD[d] && num(BYD[d].kc) != null ? NU[i].k - num(BYD[d].kc) : null).filter(v => v != null);
-    $('tst').innerHTML = m === 'kg' ? stat('Poslední', kvs.length ? fmt(kvs[kvs.length - 1], 1) + ' kg' : '—') + stat('Min', kvs.length ? fmt(Math.min(...kvs), 1) : '—') + stat('Max', kvs.length ? fmt(Math.max(...kvs), 1) : '—') + stat('Změna za období', kvs.length > 1 ? sgn(kvs[kvs.length - 1] - kvs[0], 1) + ' kg' : '—') + stat('Vážení', fmt(kvs.length))
+    $('tst').innerHTML = m === 'kg' ? stat('Poslední', kvs.length ? fmt(kvs[kvs.length - 1], 1) + ' kg' : '—') + stat('Min', kvs.length ? fmt(Math.min(...kvs), 1) : '—') + stat('Max', kvs.length ? fmt(Math.max(...kvs), 1) : '—') + stat('Změna za období', kvs.length > 1 ? sgn(kvs[kvs.length - 1] - kvs[0], 1) + ' kg' : '—') + stat('Vážení', fmt(kvs.length)) + (() => { const b = dd.map(bfOf).filter(v => v != null); return b.length ? stat('Tuk naposledy', fmt(b[b.length - 1], 1) + ' %') : ''; })()
       : stat('Dny se zápisem', fmt(logged.length)) + stat('Ø kcal', kc(logged.length ? avg(logged.map(x => x.k)) : null)) + stat('Ø B / T / S', logged.length ? ['p', 'f', 'c'].map(k => fmt(Math.round(avg(logged.map(x => x[k]))))).join(' / ') + ' g' : '—') + stat('Ø bilance', burn.length ? sgn(Math.round(avg(burn)), 0) + ' kcal' : '—');
     // po týdnech (po–ne), nejnovější nahoře
     const wk = {}; dd.forEach((d, i) => { const dt = new Date(d + 'T12:00:00'), mo = addD(d, -((dt.getDay() + 6) % 7)); const w = wk[mo] = wk[mo] || { n: [], kg: [], b: [] };

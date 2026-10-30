@@ -211,7 +211,7 @@ function ghFoodSet(key, id, json) {
 // Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
 //   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
 //   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku),
-//   kg: váha (nastaví); položka bez d jen s food = jen do databáze (import), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
+//   kg: váha (nastaví), bf: tělesný tuk % (nastaví); položka bez d jen s food = jen do databáze (import), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
 //   jídlo s položkami z databáze: m: [{ s, h, w, it: [{ f: id jídla, g: gramy }] }] }] }.
 // Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
 function inboxMerge_() {
@@ -225,7 +225,7 @@ function inboxMerge_() {
       const txt = f.getBlob().getDataAsString('UTF-8');
       if (txt.length > INBOX_MAX_) throw new Error('soubor má ' + txt.length + ' znaků (limit ' + INBOX_MAX_ + ')');
       const inp = JSON.parse(txt), items = Array.isArray(inp.items) ? inp.items : [inp];
-      items.forEach(x => { if (!x) throw new Error('prázdná položka'); if (x.d == null && (x.food || []).length && !['t', 'tadd', 'm', 'sup', 'n', 'kg', 'newSup', 'newTags'].some(k => k in x)) return; /* jen jídla do databáze, bez dne */ if (!isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
+      items.forEach(x => { if (!x) throw new Error('prázdná položka'); if (x.d == null && (x.food || []).length && !['t', 'tadd', 'm', 'sup', 'n', 'kg', 'bf', 'newSup', 'newTags'].some(k => k in x)) return; /* jen jídla do databáze, bez dne */ if (!isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
       let jj = null, food = false;
       journalWrite_(j => { items.forEach(x => { if (x.food) food = true; inboxApply_(j, x); }); jj = j; });
       if (food) foodExtract_(jj);
@@ -257,6 +257,7 @@ function inboxApply_(j, x) {
     const o = { s: s, h: h, w: w }; if (it.length) o.it = it;
     if ((w || h || it.length) && !day.m.some(z => JSON.stringify(z) === JSON.stringify(o))) day.m.push(o); });
   if (x.kg != null) { const kg = Number(x.kg); if (!isFinite(kg) || kg < 30 || kg > 250) throw new Error('nesmyslná váha ' + x.kg); day.kg = Math.round(kg * 10) / 10; }
+  if (x.bf != null) { const bf = Number(x.bf); if (!isFinite(bf) || bf < 3 || bf > 60) throw new Error('nesmyslný tělesný tuk ' + x.bf); day.bf = Math.round(bf * 10) / 10; }
   (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });
   if (x.n) day.n = ((day.n ? day.n + ' · ' : '') + String(x.n)).slice(0, 1000);
   [['newSup', 'sup'], ['newTags', 'tags']].forEach(([a, b]) => (x[a] || []).forEach(o => { const k = id(o && o.id), l = String(o && o.l || '').slice(0, 40);
