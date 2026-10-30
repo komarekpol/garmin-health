@@ -2,1870 +2,867 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Garmin Health</title>
+<meta name="apple-mobile-web-app-title" content="Garmin Health">
+<!-- Design systém převzatý z EdgePilot (Tradelog, design 2.0): tokeny v :root, Inter s tabulkovými číslicemi, boční panel na PC,
+     spodní lišta na telefonu, KPI dlaždice, štítky. Motiv (břidlice / grafit) se nastaví před vykreslením, ať nebliká. -->
+<script>try { if (localStorage.getItem('gh_theme') === 'graphite') document.documentElement.setAttribute('data-theme', 'graphite'); } catch (e) {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" media="print" onload="this.media='all'">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#080b10;--bg2:#0e1219;--bg3:#141820;--bg4:#1c2230;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--text:#e8edf5;--text2:#9aaabb;--text3:#5a6e82;--accent:#00d4aa;--accent-dim:rgba(0,212,170,0.1);--accent2:#5b8fff;--accent2-dim:rgba(91,143,255,0.1);--warn:#ffb547;--warn-dim:rgba(255,181,71,0.1);--danger:#ff5f6d;--danger-dim:rgba(255,95,109,0.1);--purple:#b18fff;--r:10px;--r-sm:6px;}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:'Syne',sans-serif;min-height:100vh;overflow-x:hidden;}
-body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,170,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,170,0.025) 1px,transparent 1px);background-size:44px 44px;pointer-events:none;z-index:0;}
-header{position:sticky;top:0;z-index:50;background:rgba(8,11,16,0.93);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 28px;height:58px;display:flex;align-items:center;justify-content:space-between;}
-.logo{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;color:var(--accent);letter-spacing:0.05em;display:flex;align-items:center;gap:10px;}
-.logo-dot{width:7px;height:7px;background:var(--accent);border-radius:50%;animation:pulse 2.5s infinite;}
-@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,212,170,0.4);}50%{opacity:0.4;box-shadow:0 0 0 6px rgba(0,212,170,0);}}
-.logo-sub{color:#6a7f92;font-size:11px;}
-.header-right{display:flex;align-items:center;gap:10px;}
-#lastUpdated{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;}
-.btn{border:1px solid;font-family:'JetBrains Mono',monospace;font-size:11px;padding:7px 16px;border-radius:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;white-space:nowrap;}
-.btn:disabled{opacity:0.35;cursor:not-allowed;}
-.btn-sync{background:var(--accent2-dim);border-color:rgba(91,143,255,0.3);color:var(--accent2);}
-.btn-sync:hover:not(:disabled){background:rgba(91,143,255,0.18);border-color:var(--accent2);}
-.btn-refresh{background:var(--accent-dim);border-color:rgba(0,212,170,0.25);color:var(--accent);}
-.btn-refresh:hover:not(:disabled){background:rgba(0,212,170,0.18);border-color:var(--accent);}
-.spin{display:none;animation:spin 0.9s linear infinite;}
-.loading .spin{display:inline;}.loading .icon{display:none;}
-@keyframes spin{to{transform:rotate(360deg);}}
-main{position:relative;z-index:1;width:100%;overflow-x:hidden;}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-.date-bar{display:flex;align-items:baseline;gap:14px;margin-bottom:22px;}
-.date-big{font-size:30px;font-weight:700;color:var(--text);letter-spacing:-0.02em;}
-.date-small{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;}
-#serverError{display:none;background:var(--bg2);border:1px solid rgba(255,95,109,0.25);border-radius:var(--r);padding:20px 24px;margin-bottom:18px;}
-#serverError h3{color:var(--danger);font-size:14px;margin-bottom:8px;}
-#serverError p{font-size:13px;color:var(--text2);line-height:1.8;}
-#serverError.note-warn{border-color:rgba(255,181,71,0.35);padding:12px 18px;}
-#serverError.note-warn h3{color:var(--warn);margin-bottom:0;}
-code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7px;border-radius:4px;font-size:11px;color:var(--accent);}
-#syncOverlay{display:none;position:fixed;inset:0;background:rgba(8,11,16,0.88);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
-#syncOverlay.show{display:flex;}
-.sync-spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--accent2);border-radius:50%;animation:spin 0.8s linear infinite;}
-.sync-title{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent2);}
-.sync-sub{font-size:12px;color:#6a7f92;}
-#readinessBanner{border-radius:var(--r);padding:20px 24px;margin-bottom:18px;display:none;align-items:center;gap:20px;border:1px solid;animation:fadeIn 0.4s ease;}
-.readiness-score{font-family:'JetBrains Mono',monospace;font-size:46px;font-weight:500;line-height:1;flex-shrink:0;}
-.readiness-score sup{font-size:18px;opacity:0.5;}
-.readiness-label{font-size:13px;font-weight:700;letter-spacing:0.06em;margin-bottom:4px;}
-.readiness-desc{font-size:12px;opacity:0.65;line-height:1.6;}
-#alertsContainer{margin-bottom:18px;}
-.alert-item{display:flex;align-items:flex-start;gap:12px;padding:11px 15px;border-radius:var(--r-sm);margin-bottom:7px;border-left:3px solid;animation:fadeIn 0.3s ease;}
-.alert-danger{background:var(--danger-dim);border-color:var(--danger);}
-.alert-warn{background:var(--warn-dim);border-color:var(--warn);}
-.alert-ok{background:var(--accent-dim);border-color:var(--accent);}
-.alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px;}
-.alert-danger .alert-dot{background:var(--danger);}.alert-warn .alert-dot{background:var(--warn);}.alert-ok .alert-dot{background:var(--accent);}
-.alert-text strong{display:block;font-size:13px;font-weight:600;}
-.alert-danger .alert-text strong{color:var(--danger);}.alert-warn .alert-text strong{color:var(--warn);}.alert-ok .alert-text strong{color:var(--accent);}
-.alert-text span{font-size:12px;color:var(--text2);}
-.section-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 11px;}
-.section-title{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.12em;}
-.range-tabs{display:flex;gap:4px;}
-.rtab{background:transparent;border:1px solid var(--border);color:#6a7f92;font-family:'JetBrains Mono',monospace;font-size:10px;padding:4px 12px;border-radius:20px;cursor:pointer;transition:all 0.15s;}
-.rtab:hover{color:var(--text2);border-color:var(--border2);}.rtab.active{background:var(--accent-dim);border-color:rgba(0,212,170,0.3);color:var(--accent);}
-.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px;}
-.gcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 12px 14px;text-align:center;animation:fadeIn 0.4s ease both;transition:border-color 0.2s,transform 0.15s;display:flex;flex-direction:column;align-items:center;gap:6px;}
-.gcard:hover{border-color:var(--border2);transform:translateY(-2px);}
-.gcard-label{font-size:12px;font-family:'JetBrains Mono',monospace;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.09em;font-weight:600;display:block;width:100%;background:rgba(20,50,90,0.75);border-radius:6px;padding:5px 12px;}
-.gcard-status{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:0.07em;}
-.mcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px 15px;position:relative;overflow:hidden;transition:border-color 0.2s,transform 0.15s;animation:fadeIn 0.4s ease both;}
-.mcard:hover{transform:translateY(-2px);border-color:var(--border2);}
-.mcard::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:var(--r) var(--r) 0 0;}
-.mcard.c-green::after{background:var(--accent);}.mcard.c-blue::after{background:var(--accent2);}.mcard.c-warn::after{background:var(--warn);}.mcard.c-danger::after{background:var(--danger);}.mcard.c-purple::after{background:var(--purple);}
-.mc-icon{font-size:11px;color:#8899aa;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;}
-.mc-val{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:500;line-height:1;margin-bottom:3px;}
-.mc-unit{font-size:12px;color:var(--text3);margin-left:2px;}
-.mc-status{font-size:10px;margin-top:8px;font-weight:700;letter-spacing:0.06em;}
-.mcard.c-green .mc-val,.mcard.c-green .mc-status{color:var(--accent);}
-.mcard.c-blue .mc-val,.mcard.c-blue .mc-status{color:var(--accent2);}
-.mcard.c-warn .mc-val,.mcard.c-warn .mc-status{color:var(--warn);}
-.mcard.c-danger .mc-val,.mcard.c-danger .mc-status{color:var(--danger);}
-.mcard.c-purple .mc-val,.mcard.c-purple .mc-status{color:var(--purple);}
-.mc-bar{height:3px;background:var(--bg4);border-radius:2px;margin-top:10px;overflow:hidden;}
-.mc-bar-fill{height:100%;border-radius:2px;transition:width 0.8s ease;}
-.chart-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
-.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;animation:fadeIn 0.5s ease both;}
-.chart-title{font-size:13px;font-weight:600;margin-bottom:3px;color:#dce8f0;}
-.chart-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:#e8f4ff;margin-bottom:11px;display:inline-block;background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 8px;}
-.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:11px;}
-.legend-item{display:flex;align-items:center;gap:5px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#e8f4ff;background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 8px;}
-.legend-sq{width:8px;height:8px;border-radius:2px;}.legend-ln{width:14px;height:2px;}
-.thresh-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:40px;}
-.thresh-table{width:100%;border-collapse:collapse;}
-.thresh-table th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:11px;color:#8899aa;text-transform:uppercase;letter-spacing:0.08em;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg3);}
-.thresh-table td{padding:11px 16px;font-size:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
-.thresh-table tr:last-child td{border-bottom:none;}.thresh-table tr:hover td{background:var(--bg3);}
-.td-metric{font-weight:600;color:var(--text);}.td-val{font-family:'JetBrains Mono',monospace;color:#9aaabb;font-size:11px;}
-.badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;letter-spacing:0.04em;}
-.badge-ok{background:var(--accent-dim);color:var(--accent);border:1px solid rgba(0,212,170,0.2);}
-.badge-warn{background:var(--warn-dim);color:var(--warn);border:1px solid rgba(255,181,71,0.2);}
-.badge-danger{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(255,95,109,0.2);}
-@media(max-width:768px){.chart-grid{grid-template-columns:1fr;}main{padding:14px;}header{padding:0 14px;}}
-/* telefon (cloud verze na iPhonu): nic nesmí být širší než obrazovka */
-@media(max-width:600px){
-  html,body{overflow-x:hidden;}
-  .cards-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
-  .tab-bar{padding:0 8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
-  .tab-bar::-webkit-scrollbar{display:none;}
-  .tab-btn{flex:0 0 auto;}
-  .thresh-card{overflow-x:auto;}
-  .header-right{gap:6px;}
-  .logo-sub{display:none;}
-  #lastUpdated{display:none;}   /* čas syncu je na telefonu u „data:“ v sekci Aktuální stav */
-  [id^="tab-"]>div[style*="padding:24px 28px"]{padding:14px 12px!important;}
+:root {
+  --bg:#121A27; --bg2:#182233; --bg3:#1E2839; --bg4:#243045; --bg5:#2D3A50;
+  --border:rgba(255,255,255,.09); --border2:rgba(255,255,255,.15); --grid:rgba(255,255,255,.07);
+  --text:#EEF2F8; --text2:#A9B4C6; --text3:#8995AB;
+  --green:#00C17D; --green-bg:rgba(0,193,125,.12);
+  --red:#FF5A65; --red-bg:rgba(255,90,101,.12);
+  --amber:#F2C94C; --amber-bg:rgba(242,201,76,.12);
+  --crit:#FF7A1A; --crit-bg:rgba(255,122,26,.14);
+  --blue:#4D9EFF; --blue-bg:rgba(77,158,255,.12); --blue-hi:#6AADFF;
+  --purple:#9B7CF8; --purple-bg:rgba(155,124,248,.12);
+  --teal:#2DD4BF; --teal-bg:rgba(45,212,191,.12);
+  --on-fill:#FFFFFF; --ink:#0B0E14;
+  --s-deep:#4C6FFF; --s-rem:#B07CF8; --s-light:#5EB8FF; --s-awake:#F2C94C;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --fs-kpi:26px; --fs-h1:20px; --fs-h2:15px; --fs-md:14px; --fs-sm:12px; --fs-xs:11px; --fs-lbl:11px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+  --r-sm:6px; --r-md:8px; --r-lg:12px;
+  --hdr-h:52px; --sn-w:216px; --bnav-h:58px;
 }
-::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px;}
+:root[data-theme="graphite"] { --bg:#1D1A16; --bg2:#25211C; --bg3:#2D2822; --bg4:#363029; --bg5:#413A32; --text:#F3EFE8; --text2:#BDB5A9; --text3:#A0968A; }
+*{margin:0;padding:0;box-sizing:border-box;}
+html{color-scheme:dark;-webkit-text-size-adjust:100%;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:var(--fs-md);line-height:1.5;min-height:100vh;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"lnum" 1;}
+button{font:inherit;color:inherit;}
+:where(input:not([type=checkbox]),select,textarea){background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:var(--r-sm);padding:6px 10px;font:inherit;font-size:var(--fs-md);outline:none;min-width:0;}
+:where(input,select,textarea):focus-visible{border-color:var(--blue);}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+::selection{background:rgba(77,158,255,.3);}
 
-/* ── TABS ─────────────────────────────────────────────────── */
-.tab-bar{display:flex;gap:2px;padding:0 28px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:40;}
-.tab-btn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:var(--text3);padding:12px 20px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.18s;letter-spacing:0.04em;white-space:nowrap;}
-.tab-btn:hover{color:var(--text2);}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
-.tab-panel{display:none;}
-.tab-panel.active{display:block;}
+/* ── hlavička ── */
+.hdr{position:sticky;top:0;z-index:100;height:var(--hdr-h);display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-5);background:var(--bg2);border-bottom:1px solid var(--border);}
+.logo{display:flex;align-items:center;gap:10px;min-width:0;}
+.logo-mark{width:28px;height:28px;flex:none;border-radius:7px;background:linear-gradient(135deg,var(--teal),var(--blue));display:flex;align-items:center;justify-content:center;color:var(--on-fill);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);}
+.logo-mark svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.logo-text{font-weight:700;letter-spacing:-.2px;white-space:nowrap;}.logo-text span{font-weight:500;color:var(--blue);}
+.hdr-sp{flex:1 1 auto;}
+.chip-age{font-size:var(--fs-xs);color:var(--text3);white-space:nowrap;}
+.chip-age.stale{color:var(--amber);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 14px;border-radius:var(--r-md);border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:var(--fs-sm);font-weight:500;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap;}
+.btn:hover{background:var(--bg4);}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:var(--on-fill);}
+.btn-primary:hover{background:var(--blue-hi);}
+.btn:disabled{opacity:.6;cursor:wait;}
+.btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.btn.loading svg{animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text2);}
+.btn-ghost:hover{background:var(--bg3);color:var(--text);}
 
-/* ── VST CHART ───────────────────────────────────────────── */
-.vst-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;}
-.vst-range-btn{font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 18px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;}
-.vst-range-btn:hover{border-color:var(--accent);color:var(--accent);}
-.vst-range-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
-.vst-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;position:relative;}
-.vst-chart-inner{position:relative;height:360px;cursor:grab;}
-.vst-chart-inner:active{cursor:grabbing;}
-.vst-hint{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:8px;text-align:center;}
-.vst-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;}
-.vst-leg-item{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#c8dff0;}
-.vst-leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
-.vst-leg-tri{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:10px solid;flex-shrink:0;}
-.vst-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
-.vst-stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:14px 16px;}
-.vst-stat-label{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
-.vst-stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:500;}
-.vst-stat-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+/* ── navigace: boční panel (≥ 1100 px), pás nahoře (761–1099 px), spodní lišta (≤ 760 px) ── */
+#sidenav{display:none;}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding:0 var(--sp-4);background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:var(--hdr-h);z-index:90;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{flex:none;display:flex;align-items:center;gap:6px;padding:12px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--text2);font-size:var(--fs-md);cursor:pointer;}
+.tab svg,.sn-i svg,.bnav-i svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.tab.active{color:var(--text);border-bottom-color:var(--blue);}
+.bnav{display:none;}
+@media(min-width:1100px){
+  .tabs{display:none;}
+  #sidenav{display:flex;flex-direction:column;position:fixed;left:0;top:var(--hdr-h);bottom:0;width:var(--sn-w);background:var(--bg2);border-right:1px solid var(--border);padding:var(--sp-3) var(--sp-2);gap:2px;}
+  main{margin-left:var(--sn-w);}
+  .sn-gl{font-size:var(--fs-lbl);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;padding:var(--sp-3) 10px var(--sp-1);}
+  .sn-i{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:7px 10px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font-size:var(--fs-md);text-align:left;cursor:pointer;}
+  .sn-i:hover{background:var(--bg3);color:var(--text);}
+  .sn-i svg{color:var(--text3);}
+  .sn-i.active{background:var(--blue-bg);color:var(--text);box-shadow:inset 3px 0 0 var(--blue);}
+  .sn-i.active svg,.sn-i:hover svg{color:var(--blue);}
+  .sn-foot{margin-top:auto;padding:var(--sp-3) 10px;font-size:var(--fs-xs);color:var(--text3);line-height:1.6;}
+}
+@media(max-width:760px){
+  .tabs{display:none;}
+  .hdr{padding:0 var(--sp-3);}
+  .logo-text span{display:none;}
+  body{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px));}
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:300;height:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px));padding:0 var(--sp-1) env(safe-area-inset-bottom,0px);background:var(--bg2);border-top:1px solid var(--border2);box-shadow:0 -6px 18px rgba(0,0,0,.35);}
+  .bnav-i{flex:1 1 0;min-width:0;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:none;color:var(--text3);font-size:var(--fs-xs);font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+  .bnav-i svg{width:22px;height:22px;}
+  .bnav-i.active{color:var(--blue);}
+}
 
-.tab-bar{display:flex;gap:2px;padding:0 28px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:40;}
-.tab-btn{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500;color:#6a7f92;padding:12px 20px;border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.18s;letter-spacing:0.04em;}
-.tab-btn:hover{color:var(--text2);}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
-.tab-panel{display:none;}.tab-panel.active{display:block;}
-.vst-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
-.vst-range-btn{font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 18px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);cursor:pointer;transition:all 0.15s;}
-.vst-range-btn:hover{border-color:var(--accent);color:var(--accent);}
-.vst-range-btn.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
-.vst-chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px 14px;width:calc(100% - 3cm);margin:0 1.5cm;box-sizing:border-box;}
-.vst-chart-inner{position:relative;height:665px;cursor:grab;user-select:none;}
-.vst-chart-inner:active{cursor:grabbing;}
-.vst-hint{font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;margin-top:12px;text-align:center;}
-.vst-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;}
-.vst-leg-item{display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#c8dff0;}
-.vst-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;}
-.vst-stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:14px 16px;}
-.vst-stat-lbl{font-family:'JetBrains Mono',monospace;font-size:12px;color:#aac4d8;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
-.vst-stat-val{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;}
-.vst-stat-sub{font-size:13px;color:#8faabb;margin-top:4px;}
+/* ── obsah ── */
+main{padding:var(--sp-5);max-width:1400px;}
+@media(min-width:1100px){main{max-width:calc(1400px + var(--sn-w));padding:var(--sp-5) var(--sp-6);}}
+@media(max-width:760px){main{padding:var(--sp-4) var(--sp-3);}}
+.page{display:none;}.page.active{display:block;}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-4);}
+.page-t{font-size:var(--fs-h1);font-weight:700;letter-spacing:-.01em;}
+.page-s{font-size:var(--fs-sm);color:var(--text3);margin-top:2px;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--sp-4);min-width:0;}
+.card+.card,.grid+.card,.card+.grid,.grid+.grid{margin-top:var(--sp-4);}
+.grid>.card{margin-top:0;}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap;margin-bottom:var(--sp-3);}
+.card-t{font-size:var(--fs-h2);font-weight:600;}
+.card-s{font-size:var(--fs-sm);color:var(--text3);}
+.lbl{font-size:var(--fs-lbl);color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+.muted{color:var(--text3);}.t2{color:var(--text2);}.sm{font-size:var(--fs-sm);}.xs{font-size:var(--fs-xs);}
+.grid{display:grid;gap:var(--sp-4);}
+.g-hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);}
+.g-kpi{grid-template-columns:repeat(3,minmax(0,1fr));}
+.g-2{grid-template-columns:repeat(2,minmax(0,1fr));}
+@media(max-width:1000px){.g-hero,.g-2{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:760px){.g-kpi{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3);}.card{padding:var(--sp-3);}}
+a.lnk,button.lnk{color:var(--blue);background:none;border:0;cursor:pointer;font-size:var(--fs-sm);padding:0;text-decoration:none;}
+a.lnk:hover,button.lnk:hover{text-decoration:underline;}
+
+/* štítky stavu (I-129 EdgePilot): JEDNAT = plná oranžová, SLEDOVAT = žlutý obrys, OK = neutrální; zelená / červená jen lepší / horší */
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-xs);font-weight:600;line-height:1.5;padding:1px 8px;border-radius:999px;border:1px solid var(--border2);white-space:nowrap;letter-spacing:.02em;}
+.pill-crit{background:var(--crit);color:var(--ink);border-color:var(--crit);}
+.pill-amber{color:var(--amber);border-color:var(--amber);}
+.pill-ok{background:var(--bg4);color:var(--text2);}
+.pill-good{background:var(--green-bg);color:var(--green);border-color:rgba(0,193,125,.3);}
+.pill-bad{background:var(--red-bg);color:var(--red);border-color:rgba(255,90,101,.3);}
+.pill-info{background:var(--blue-bg);color:var(--blue);border-color:rgba(77,158,255,.3);}
+
+/* ── Dnes: připravenost ── */
+.hero{display:flex;gap:var(--sp-5);align-items:center;}
+.ring{position:relative;width:132px;height:132px;flex:none;}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg);}
+.ring-v{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.ring-n{font-size:36px;font-weight:700;line-height:1;letter-spacing:-.02em;}
+.ring-u{font-size:var(--fs-xs);color:var(--text3);margin-top:4px;}
+.hero-l{font-size:var(--fs-h2);font-weight:700;letter-spacing:.02em;}
+.hero-d{color:var(--text2);margin-top:2px;}
+.comp{display:grid;grid-template-columns:auto 1fr auto;gap:6px var(--sp-3);align-items:center;margin-top:var(--sp-3);font-size:var(--fs-sm);}
+.bar{height:6px;border-radius:3px;background:var(--bg4);overflow:hidden;}
+.bar>i{display:block;height:100%;border-radius:3px;}
+@media(max-width:760px){.hero{gap:var(--sp-4);}.ring{width:104px;height:104px;}.ring-n{font-size:30px;}}
+.alerts{display:flex;flex-direction:column;gap:var(--sp-2);}
+.alert{display:flex;gap:var(--sp-3);align-items:flex-start;padding:var(--sp-3);border-radius:var(--r-md);background:var(--bg3);border-left:3px solid var(--border2);font-size:var(--fs-sm);}
+.alert b{display:block;font-size:var(--fs-md);font-weight:600;}
+.alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
+
+/* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.kpi{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.kpi-top{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);}
+.kpi-v{font-size:var(--fs-kpi);font-weight:600;line-height:1.2;letter-spacing:-.01em;}
+.kpi-v small{font-size:var(--fs-sm);font-weight:500;color:var(--text3);margin-left:3px;}
+.kpi-s{font-size:var(--fs-xs);color:var(--text3);line-height:1.45;}
+.spark{width:100%;height:36px;display:block;margin-top:6px;}
+@media(max-width:760px){.kpi-v{font-size:22px;}.kpi-top .pill{display:none;}}
+
+/* ── segmentové přepínače a čipy ── */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);}
+.seg button{border:0;background:none;color:var(--text2);padding:6px 12px;border-radius:var(--r-sm);font-size:var(--fs-sm);cursor:pointer;min-height:30px;}
+.seg button.on{background:var(--bg5);color:var(--text);font-weight:600;}
+.seg-scroll{display:flex;overflow-x:auto;scrollbar-width:none;max-width:100%;}
+.seg-scroll::-webkit-scrollbar{display:none;}
+.seg-scroll button{flex:none;}
+.chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:var(--fs-sm);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.chip:hover{border-color:var(--border2);color:var(--text);}
+.chip.on{background:var(--blue-bg);border-color:var(--blue);color:var(--text);}
+.chip .cnt{display:inline-flex;align-items:center;gap:4px;}
+.chip .cnt button{width:24px;height:24px;border-radius:50%;border:1px solid var(--border2);background:var(--bg4);cursor:pointer;line-height:1;font-size:var(--fs-md);}
+.chip .cnt b{min-width:14px;text-align:center;}
+.chip.auto{border-style:dashed;cursor:default;}
+@media(max-width:760px){.chip{min-height:40px;}}
+
+/* ── Trendy ── */
+.chart-box{position:relative;height:340px;}
+@media(max-width:760px){.chart-box{height:260px;}}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--sp-3);margin-top:var(--sp-4);}
+.stat{background:var(--bg3);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);}
+.stat b{display:block;font-size:var(--fs-h2);font-weight:600;}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.zones{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center;font-size:var(--fs-sm);color:var(--text2);margin-top:var(--sp-3);}
+.zones input{width:64px;text-align:center;}
+.legend{display:flex;flex-wrap:wrap;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--text2);}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+
+/* ── Deník ── */
+.daynav{display:flex;align-items:center;gap:var(--sp-2);}
+.daynav .btn{min-width:38px;padding:6px 10px;}
+.daynav-t{font-weight:600;min-width:150px;text-align:center;}
+.grp+.grp{margin-top:var(--sp-4);}
+.grp .lbl{margin-bottom:var(--sp-2);}
+.meals{display:flex;flex-direction:column;gap:var(--sp-2);}
+.meal{display:grid;grid-template-columns:110px 92px minmax(0,1fr) auto;gap:var(--sp-2);align-items:center;}
+.meal select,.meal input{width:100%;}
+.meal-w{grid-column:3;}
+/* telefon: druh + čas + odebrat na prvním řádku, popis jídla přes celou šířku pod nimi (16 px = iOS nezvětšuje stránku při psaní) */
+@media(max-width:760px){.meal{grid-template-columns:minmax(0,1fr) 110px auto;padding-bottom:var(--sp-2);border-bottom:1px solid var(--grid);}.meal-w{grid-column:1 / -1;order:4;}.meal input,.meal select,textarea{font-size:16px;}}
+textarea{width:100%;min-height:72px;resize:vertical;}
+.save-st{font-size:var(--fs-xs);color:var(--text3);}
+.save-st.err{color:var(--crit);}
+
+/* ── Vlivy ── */
+.inf{display:grid;grid-template-columns:minmax(120px,1.1fr) minmax(0,2fr) auto;gap:var(--sp-2) var(--sp-3);align-items:center;padding:var(--sp-2) 0;border-bottom:1px solid var(--grid);}
+.inf:last-child{border-bottom:0;}
+.inf-n{font-weight:500;min-width:0;}
+.inf-n small{display:block;font-size:var(--fs-xs);color:var(--text3);font-weight:400;}
+.dbar{position:relative;height:18px;}
+.dbar::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);}
+.dbar>i{position:absolute;top:3px;height:12px;border-radius:3px;}
+.inf-v{text-align:right;font-weight:600;white-space:nowrap;}
+.inf-v small{display:block;font-weight:400;}
+@media(max-width:760px){.inf{grid-template-columns:minmax(0,1fr) auto;}.inf .dbar{grid-column:1 / -1;order:3;}}
+
+/* ── Nastavení ── */
+table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+th{font-size:var(--fs-lbl);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;text-align:left;padding:var(--sp-2);border-bottom:1px solid var(--border);}
+td{padding:var(--sp-2);border-bottom:1px solid var(--grid);vertical-align:middle;}
+td input{width:76px;text-align:center;}
+.tbl-wrap{overflow-x:auto;}
+.list-ed{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;}
+.list-ed .chip{cursor:default;}
+.list-ed .chip button{border:0;background:none;color:var(--text3);cursor:pointer;font-size:var(--fs-md);line-height:1;}
+.row-add{display:flex;gap:var(--sp-2);margin-top:var(--sp-3);flex-wrap:wrap;}
+.row-add input{flex:1 1 180px;}
+
+#note{display:none;margin-bottom:var(--sp-4);}
+#note.on{display:flex;}
+.empty{padding:var(--sp-5) var(--sp-3);text-align:center;color:var(--text2);}
+.toast{position:fixed;left:50%;bottom:var(--sp-5);transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm);z-index:400;opacity:0;pointer-events:none;transition:opacity .2s;}
+.toast.on{opacity:1;}
+@media(max-width:760px){.toast{bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px) + var(--sp-3));}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
 </style>
 </head>
 <body>
-
-<div id="syncOverlay">
-  <div class="sync-spinner"></div>
-  <div class="sync-title">Stahuji nová data z Garmin...</div>
-  <div class="sync-sub">Trvá 15–30 sekund · okno nezavírej</div>
-</div>
-
-<header>
+<header class="hdr">
   <div class="logo">
-    <div class="logo-dot"></div>
-    <span>GARMIN HEALTH</span>
-    <span class="logo-sub">/ live dashboard</span>
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></div>
+    <div class="logo-text">Garmin <span>Health</span></div>
   </div>
-  <div class="header-right">
-    <span id="lastUpdated">—</span>
-    <button class="btn btn-sync" id="syncBtn" onclick="syncGarmin()">
-      <span class="icon">⬇</span><span class="spin">◌</span>&nbsp;Sync Garmin
-    </button>
-    <button class="btn btn-refresh" id="refreshBtn" onclick="refreshData()">
-      <span class="icon">↻</span><span class="spin">◌</span>&nbsp;Aktualizovat
-    </button>
-  </div>
+  <div class="hdr-sp"></div>
+  <span class="chip-age" id="age">—</span>
+  <button class="btn btn-primary" id="syncBtn" title="Stáhnout nová data z Garminu"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg><span>Sync</span></button>
 </header>
-
-<div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('overview',this)">◎ Přehled</button>
-  <button class="tab-btn" onclick="switchTab('vst',this)">⌁ VST / HRV</button>
-  <button class="tab-btn" onclick="switchTab('hr',this)">♥ Klidový TF</button>
-  <button class="tab-btn" onclick="switchTab('bb',this)">⚡ Body Battery</button>
-  <button class="tab-btn" onclick="switchTab('resp',this)">≈ Dýchání</button>
-  <button class="tab-btn" onclick="switchTab('sleep',this)">☽ Spánek</button>
-</div>
-
+<nav class="tabs" id="tabs" aria-label="Sekce"></nav>
+<nav id="sidenav" aria-label="Sekce"></nav>
 <main>
-<div id="tab-overview" class="tab-panel active">
-  <div style="padding:24px 28px;max-width:1400px;margin:0 auto;">
-  <div class="date-bar">
-    <div class="date-big" id="dateDisplay">—</div>
-    <div class="date-small" id="dateSmall">—</div>
-  </div>
-
-  <div id="serverError">
-    <h3>⚠ Lokální server není spuštěn</h3>
-    <p>
-      Dvojklikni na <strong>Start Garmin Dashboard.bat</strong> na ploše.<br>
-      Nebo spusť v CMD:<br>
-      <code>C:\Python314\python.exe garmin_server.py</code><br><br>
-      Pak klikni na <strong>↻ Aktualizovat</strong> výše.
-    </p>
-  </div>
-
-  <div id="readinessBanner"></div>
-  <div id="alertsContainer"></div>
-
-  <div class="section-head">
-    <div class="section-title">Aktuální stav</div>
-    <div id="dataDate" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;"></div>
-  </div>
-  <div class="cards-grid" id="cardsGrid"></div>
-
-  <div class="section-head">
-    <div class="section-title">Trendy</div>
-    <div class="range-tabs">
-      <button class="rtab" onclick="setRange(7,this)">7d</button>
-      <button class="rtab active" onclick="setRange(14,this)">14d</button>
-      <button class="rtab" onclick="setRange(30,this)">30d</button>
-    </div>
-  </div>
-  <div class="chart-grid">
-    <div class="chart-card">
-      <div class="chart-title">HRV / VST</div>
-      <div class="chart-sub">noční průměr · ms</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-ln" style="background:var(--accent)"></div>HRV noc</div>
-        <div class="legend-item"><div class="legend-ln" style="background:rgba(0,212,170,0.3);border-top:2px dashed rgba(0,212,170,0.3);height:0"></div>Práh 25ms</div>
-      </div>
-      <div style="position:relative;height:185px"><canvas id="cHRV"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Klidový TF · Body Battery</div>
-      <div class="chart-sub">bpm · nabití %</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-sq" style="background:var(--danger)"></div>TF</div>
-        <div class="legend-item"><div class="legend-sq" style="background:var(--warn)"></div>Body Battery</div>
-      </div>
-      <div style="position:relative;height:185px"><canvas id="cTF"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Spánek</div>
-      <div class="chart-sub">skóre · trvání hodin</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-sq" style="background:var(--accent2)"></div>Skóre</div>
-        <div class="legend-item"><div class="legend-ln" style="background:var(--accent)"></div>Hodiny</div>
-      </div>
-      <div style="position:relative;height:185px"><canvas id="cSleep"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Stres · Dýchání</div>
-      <div class="chart-sub">stress score · brpm</div>
-      <div class="legend">
-        <div class="legend-item"><div class="legend-sq" style="background:var(--purple)"></div>Stres</div>
-        <div class="legend-item"><div class="legend-sq" style="background:var(--accent2)"></div>Dýchání</div>
-      </div>
-      <div style="position:relative;height:185px"><canvas id="cStress"></canvas></div>
-    </div>
-  </div>
-
-  <div class="section-head" style="margin-top:26px;">
-    <div class="section-title">Prahové hodnoty</div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span id="threshSaved" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);opacity:0;transition:opacity 0.5s;">✓ Uloženo</span>
-      <button class="btn btn-refresh" onclick="resetThresholds()" style="padding:5px 12px;font-size:10px;">Obnovit výchozí</button>
-    </div>
-  </div>
-  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8faabb;margin-bottom:10px;">
-    Klikni na číslo → uprav → Enter nebo klikni jinam → uloží se a přepočítá karty automaticky
-  </div>
-  <div class="thresh-card" style="margin-bottom:40px;">
-    <table class="thresh-table">
-      <thead><tr><th>Metrika</th><th>Práh</th><th>Stav</th><th>Akce</th></tr></thead>
-      <tbody id="threshBody"></tbody>
-    </table>
-  </div>
-
-  </div></div><!-- /overview -->
-
-  <div id="tab-vst" class="tab-panel" style="width:100%;overflow-x:hidden;">
-    <div style="padding:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">VST / HRV — historický přehled</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="vstDateRange">—</div>
-      </div>
-      <div class="vst-stats" id="vstStats"></div>
-      <div style="padding:12px 20px 0;">
-      <!-- VST Zone Thresholds -->
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#8faabb;font-weight:600;">Zóny:</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;flex-shrink:0;"></span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Červená &lt;</span>
-          <span id="vstZ1Edit" contenteditable="true" spellcheck="false"
-            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;
-              background:var(--bg4);border:1px solid rgba(255,95,109,0.3);border-radius:4px;
-              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-            onfocus="this.style.borderColor='#ff5f6d'"
-            onblur="this.style.borderColor='rgba(255,95,109,0.3)';vstZoneSave()"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">26</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">ms</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;flex-shrink:0;"></span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Oranžová &lt;</span>
-          <span id="vstZ2Edit" contenteditable="true" spellcheck="false"
-            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;
-              background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;
-              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-            onfocus="this.style.borderColor='#ffb547'"
-            onblur="this.style.borderColor='rgba(255,181,71,0.3)';vstZoneSave()"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">30</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9aaabb;">ms</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;flex-shrink:0;"></span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Zelená ≥</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;
-              background:var(--bg4);border:1px solid rgba(0,212,170,0.2);border-radius:4px;
-              padding:3px 10px;" id="vstZ2Label">30</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#9aaabb;">ms</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
-          <span id="vstAvgDaysEdit" contenteditable="true" spellcheck="false"
-            style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;
-              background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;
-              padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-            onfocus="this.style.borderColor='#a78bfa'"
-            onblur="this.style.borderColor='rgba(167,139,250,0.3)';vstZoneSave()"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">7</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
-        </div>
-      </div>
-
-      <div class="vst-toolbar">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
-        <button class="vst-range-btn" onclick="vstSetRange(30,this)">1M</button>
-        <button class="vst-range-btn" onclick="vstSetRange(90,this)">3M</button>
-        <button class="vst-range-btn active" onclick="vstSetRange(180,this)">6M</button>
-        <button class="vst-range-btn" onclick="vstSetRange(0,this)">Vše</button>
-        <button class="vst-range-btn" onclick="if(vstChart)vstChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
-      </div>
-      </div><!-- /padded -->
-      <div class="vst-chart-wrap">
-        <div class="vst-chart-inner"><canvas id="cVST"></canvas></div>
-        <div style="padding:0 12px;"><div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
-        </div><div style="padding:0 12px;"><div class="vst-legend">
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Zelená (≥ Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Oranžová (Z1–Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Červená (&lt; Z1)</div>
-          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#ff5f6d,#ffb547,#00d4aa);display:inline-block;border-radius:2px;"></span>7d klouzavý průměr</div>
-          <div class="vst-leg-item"><span style="width:16px;height:2px;background:rgba(255,95,109,0.65);display:inline-block;border-top:2px dashed rgba(255,95,109,0.65);"></span>Limit Z2</div>
-        </div>
-      </div>
-    </div>
-  </div><!-- /vst-chart-wrap -->
-  </div><!-- /tab-vst -->
-
-  <div id="tab-hr" class="tab-panel" style="width:100%;overflow-x:hidden;">
-    <div style="padding:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Klidový TF — historický přehled</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="hrDateRange">—</div>
-      </div>
-      <div class="vst-stats" id="hrStats" style="padding:0 20px;"></div>
-      <div style="padding:0 20px 12px;">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Normál ≤</span>
-            <span id="hrZ1Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#00d4aa'" onblur="this.style.borderColor='rgba(0,212,170,0.3)';hrZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">54</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Pozor ≤</span>
-            <span id="hrZ2Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';hrZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">57</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Alarm &gt;</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.2);border-radius:4px;padding:3px 10px;" id="hrZ2Label">57</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">bpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
-            <span id="hrAvgDaysEdit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';hrZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
-          </div>
-        </div>
-        <div class="vst-toolbar">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
-          <button class="vst-range-btn" onclick="hrSetRange(30,this)">1M</button>
-          <button class="vst-range-btn" onclick="hrSetRange(90,this)">3M</button>
-          <button class="vst-range-btn active" onclick="hrSetRange(180,this)">6M</button>
-          <button class="vst-range-btn" onclick="hrSetRange(0,this)">Vše</button>
-          <button class="vst-range-btn" onclick="if(hrChart)hrChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
-        </div>
-      </div>
-      <div class="vst-chart-wrap">
-        <div class="vst-chart-inner"><canvas id="cHR"></canvas></div>
-        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
-        <div class="vst-legend">
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Normál (≤ Z1)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Pozor (Z1–Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Alarm (&gt; Z2)</div>
-          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#00d4aa,#ffb547,#ff5f6d);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
-        </div>
-      </div>
-    </div>
-  </div><!-- /tab-hr -->
-
-  <div id="tab-bb" class="tab-panel" style="width:100%;overflow-x:hidden;">
-    <div style="padding:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Body Battery — historický přehled</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="bbDateRange">—</div>
-      </div>
-      <div class="vst-stats" id="bbStats" style="padding:0 20px;"></div>
-      <div style="padding:0 20px 12px;">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Kritický &lt;</span>
-            <span id="bbZ1Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#ff5f6d'" onblur="this.style.borderColor='rgba(255,95,109,0.3)';bbZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">35</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Nízký &lt;</span>
-            <span id="bbZ2Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';bbZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">50</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Dobrý ≥</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.2);border-radius:4px;padding:3px 10px;" id="bbZ2Label">50</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
-            <span id="bbAvgDaysEdit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';bbZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
-          </div>
-        </div>
-        <div class="vst-toolbar">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
-          <button class="vst-range-btn" onclick="bbSetRange(30,this)">1M</button>
-          <button class="vst-range-btn" onclick="bbSetRange(90,this)">3M</button>
-          <button class="vst-range-btn active" onclick="bbSetRange(180,this)">6M</button>
-          <button class="vst-range-btn" onclick="bbSetRange(0,this)">Vše</button>
-          <button class="vst-range-btn" onclick="if(bbChart)bbChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
-        </div>
-      </div>
-      <div class="vst-chart-wrap">
-        <div class="vst-chart-inner"><canvas id="cBB"></canvas></div>
-        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
-        <div class="vst-legend">
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Dobrý (≥ Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Nízký (Z1–Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Kritický (&lt; Z1)</div>
-          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#ff5f6d,#ffb547,#00d4aa);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
-        </div>
-      </div>
-    </div>
-  </div><!-- /tab-bb -->
-
-  <div id="tab-resp" class="tab-panel" style="width:100%;overflow-x:hidden;">
-    <div style="padding:0;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;padding:12px 20px 0;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Dýchání — historický přehled</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;" id="respDateRange">—</div>
-      </div>
-      <div class="vst-stats" id="respStats" style="padding:0 20px;"></div>
-      <div style="padding:0 20px 12px;">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:12px;">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;font-weight:700;">Zóny:</span>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Normál ≤</span>
-            <span id="respZ1Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#00d4aa;background:var(--bg4);border:1px solid rgba(0,212,170,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#00d4aa'" onblur="this.style.borderColor='rgba(0,212,170,0.3)';respZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">16</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Zvýšené ≤</span>
-            <span id="respZ2Edit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ffb547;background:var(--bg4);border:1px solid rgba(255,181,71,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#ffb547'" onblur="this.style.borderColor='rgba(255,181,71,0.3)';respZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">19</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">Alarm &gt;</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#ff5f6d;background:var(--bg4);border:1px solid rgba(255,95,109,0.2);border-radius:4px;padding:3px 10px;" id="respZ2Label">19</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#c8dff0;">brpm</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-left:4px;border-left:1px solid rgba(255,255,255,0.1);padding-left:12px;">
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">Klouzavý průměr:</span>
-            <span id="respAvgDaysEdit" contenteditable="true" spellcheck="false"
-              style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#a78bfa;background:var(--bg4);border:1px solid rgba(167,139,250,0.3);border-radius:4px;padding:3px 10px;min-width:36px;text-align:center;outline:none;cursor:text;"
-              onfocus="this.style.borderColor='#a78bfa'" onblur="this.style.borderColor='rgba(167,139,250,0.3)';respZoneSave()"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">7</span>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8faabb;">dní</span>
-          </div>
-        </div>
-        <div class="vst-toolbar">
-          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
-          <button class="vst-range-btn" onclick="respSetRange(30,this)">1M</button>
-          <button class="vst-range-btn" onclick="respSetRange(90,this)">3M</button>
-          <button class="vst-range-btn active" onclick="respSetRange(180,this)">6M</button>
-          <button class="vst-range-btn" onclick="respSetRange(0,this)">Vše</button>
-          <button class="vst-range-btn" onclick="if(respChart)respChart.resetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
-        </div>
-      </div>
-      <div class="vst-chart-wrap">
-        <div class="vst-chart-inner"><canvas id="cResp"></canvas></div>
-        <div class="vst-hint">Scroll pro zoom · táhni myší pro posun · dvojklik pro reset</div>
-        <div class="vst-legend">
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#00d4aa;display:inline-block;"></span>Normál (≤ Z1)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ffb547;display:inline-block;"></span>Zvýšené (Z1–Z2)</div>
-          <div class="vst-leg-item"><span style="width:10px;height:10px;border-radius:50%;background:#ff5f6d;display:inline-block;"></span>Alarm (&gt; Z2)</div>
-          <div class="vst-leg-item"><span style="width:16px;height:3px;background:linear-gradient(to right,#00d4aa,#ffb547,#ff5f6d);display:inline-block;border-radius:2px;"></span>klouzavý průměr</div>
-        </div>
-      </div>
-    </div>
-  </div><!-- /tab-resp -->
-
-
-  <div id="tab-sleep" class="tab-panel" style="width:100%;overflow-x:hidden;">
-    <div style="padding:12px 20px 40px;max-width:1400px;margin:0 auto;">
-
-      <!-- HEADER -->
-      <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:6px;padding-top:8px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#e8f4ff;text-transform:uppercase;letter-spacing:0.1em;">Spánek — analýza</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#6a7f92;" id="sleepDateRange">—</div>
-      </div>
-      <div style="font-size:12px;color:#5a6e82;font-family:'JetBrains Mono',monospace;margin-bottom:20px;">Zdroj: Garmin Connect · vědecké normy: CDC, Sleep Foundation, Healthline</div>
-
-      <!-- KPI STATS ROW -->
-      <div id="sleepKPI" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:24px;"></div>
-
-      <!-- REFERENCE CARD -->
-      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:18px 20px;margin-bottom:24px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">📊 Vědecké normy pro dospělé (CDC / Sleep Foundation / Healthline)</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">CELKOVÁ DÉLKA</div>
-            <div style="font-size:16px;font-weight:600;color:#e8f4ff;">7 – 9 hodin</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">méně než 6h = riziko zdravotních problémů</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">HLUBOKÝ SPÁNEK (N3)</div>
-            <div style="font-size:16px;font-weight:600;color:#60a5fa;">13 – 23% celkové délky</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">~1 – 1.5h · obnova tkání, imunita, HGH</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">REM SPÁNEK</div>
-            <div style="font-size:16px;font-weight:600;color:#a78bfa;">20 – 25% celkové délky</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">~1.5 – 2h · paměť, emoce, kognitivní funkce</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">LEHKÝ SPÁNEK (N1+N2)</div>
-            <div style="font-size:16px;font-weight:600;color:#34d399;">50 – 60% celkové délky</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">přechod mezi fázemi, motorické učení</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">EFEKTIVITA SPÁNKU</div>
-            <div style="font-size:16px;font-weight:600;color:#fbbf24;">≥ 85%</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">čas spánku / čas v posteli × 100</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;">
-            <div style="font-size:11px;color:#6a7f92;font-family:'JetBrains Mono',monospace;margin-bottom:6px;">PROBUZENÍ V NOCI</div>
-            <div style="font-size:16px;font-weight:600;color:#fb923c;">< 20 min celkem</div>
-            <div style="font-size:12px;color:#7a8fa0;margin-top:4px;">fragmentace spánku snižuje kvalitu regenerace</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- RANGE + TOOLBAR -->
-      <div class="vst-toolbar" style="margin-bottom:14px;">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7a8fa0;">Rozsah:</span>
-        <button class="vst-range-btn" onclick="sleepSetRange(30,this)">1M</button>
-        <button class="vst-range-btn" onclick="sleepSetRange(90,this)">3M</button>
-        <button class="vst-range-btn active" onclick="sleepSetRange(180,this)">6M</button>
-        <button class="vst-range-btn" onclick="sleepSetRange(0,this)">Vše</button>
-        <button class="vst-range-btn" onclick="sleepResetZoom()" style="margin-left:auto;">⟳ Reset zoom</button>
-      </div>
-
-      <!-- CHART 1: Sleep Duration + Score -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Délka spánku a celkové skóre</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">hodiny · skóre 0–100 · reference: 7–9h</div>
-        <div class="vst-legend" style="margin-bottom:12px;">
-          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:rgba(96,165,250,0.5);display:inline-block;"></span>Délka (h)</div>
-          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#34d399;display:inline-block;border-radius:2px;"></span>Skóre</div>
-          <div class="vst-leg-item"><span style="width:14px;height:2px;background:rgba(251,191,36,0.6);display:inline-block;border-top:2px dashed rgba(251,191,36,0.6);"></span>Min. 7h</div>
-        </div>
-        <div style="position:relative;height:220px;"><canvas id="cSleepDuration"></canvas></div>
-      </div>
-
-      <!-- CHART 2: Sleep Stages stacked area -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Fáze spánku — absolutní čas</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">minuty v každé fázi za noc</div>
-        <div class="vst-legend" style="margin-bottom:12px;">
-          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#1e3a5f;display:inline-block;border:1px solid #60a5fa;"></span>Hluboký (N3)</div>
-          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#3b1f6b;display:inline-block;border:1px solid #a78bfa;"></span>REM</div>
-          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#1a3d2b;display:inline-block;border:1px solid #34d399;"></span>Lehký</div>
-          <div class="vst-leg-item"><span style="width:12px;height:12px;border-radius:2px;background:#3d2210;display:inline-block;border:1px solid #fb923c;"></span>Bdění</div>
-        </div>
-        <div style="position:relative;height:240px;"><canvas id="cSleepStages"></canvas></div>
-      </div>
-
-      <!-- CHART 3: Deep % and REM % with reference bands -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Podíl fází — procenta</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">% z celkového spánku · barevné pásmo = vědecká norma</div>
-        <div class="vst-legend" style="margin-bottom:12px;">
-          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#60a5fa;display:inline-block;border-radius:2px;"></span>Hluboký %</div>
-          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#a78bfa;display:inline-block;border-radius:2px;"></span>REM %</div>
-          <div class="vst-leg-item"><span style="width:12px;height:8px;background:rgba(96,165,250,0.12);border-radius:2px;display:inline-block;border:1px solid rgba(96,165,250,0.3);"></span>Norma hluboký 13–23%</div>
-          <div class="vst-leg-item"><span style="width:12px;height:8px;background:rgba(167,139,250,0.12);border-radius:2px;display:inline-block;border:1px solid rgba(167,139,250,0.3);"></span>Norma REM 20–25%</div>
-        </div>
-        <div style="position:relative;height:240px;"><canvas id="cSleepPct"></canvas></div>
-      </div>
-
-      <!-- CHART 4: Stress + Respiration during sleep -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:16px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#e8f4ff;margin-bottom:4px;">Stres a dýchání ve spánku</div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#6a7f92;margin-bottom:14px;">průměrný stres · dechová frekvence brpm · alarm dýchání &gt;19 brpm</div>
-        <div class="vst-legend" style="margin-bottom:12px;">
-          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#f97316;display:inline-block;border-radius:2px;"></span>Stres ve spánku</div>
-          <div class="vst-leg-item"><span style="width:14px;height:3px;background:#818cf8;display:inline-block;border-radius:2px;"></span>Dýchání (brpm)</div>
-          <div class="vst-leg-item"><span style="width:14px;height:2px;background:rgba(248,113,113,0.6);display:inline-block;border-top:2px dashed rgba(248,113,113,0.6);"></span>Alarm &gt;19 brpm</div>
-        </div>
-        <div style="position:relative;height:200px;"><canvas id="cSleepStress"></canvas></div>
-      </div>
-
-      <!-- DOPORUČENÍ PANEL -->
-      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#00d4aa;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px;">💡 Doporučení pro zlepšení kvality spánku</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #60a5fa;">
-            <div style="font-size:13px;font-weight:600;color:#93c5fd;margin-bottom:6px;">Hluboký spánek ↑</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Pravidelný čas usínání · cvičení ráno (ne pozdě večer) · chladná ložnice 16–18°C · vyhýbat se alkoholu · hořčík glycinát večer</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #a78bfa;">
-            <div style="font-size:13px;font-weight:600;color:#c4b5fd;margin-bottom:6px;">REM spánek ↑</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Delší spánek (REM roste ve druhé polovině noci) · stres management · vyhýbat se alkoholu a THC · pravidelný spánkový rytmus</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #34d399;">
-            <div style="font-size:13px;font-weight:600;color:#6ee7b7;margin-bottom:6px;">Efektivita spánku ↑</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Jdi spát pouze při ospalosti · vstávej v stejnou hodinu · omezte čas v posteli bez spánku · tichá tmavá ložnice</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #fbbf24;">
-            <div style="font-size:13px;font-weight:600;color:#fcd34d;margin-bottom:6px;">Stres ve spánku ↓</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">10min relaxace před spaním · box breathing (4-4-4-4) · meditace · vyhýbat se obrazovkám 1h před spaním · při CLL: zvýšený stres ve spánku = varovný signál zánětu</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #fb923c;">
-            <div style="font-size:13px;font-weight:600;color:#fdba74;margin-bottom:6px;">Dýchání ve spánku</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Zvýšená dechová frekvence (&gt;19 brpm) = alarm zánětu nebo infekce. Spánek na boku zlepšuje průchodnost dýchacích cest. Při opakovaném poklesu SpO2 konzultovat lékaře.</div>
-          </div>
-          <div style="background:var(--bg4);border-radius:var(--r-sm);padding:12px 14px;border-left:3px solid #f472b6;">
-            <div style="font-size:13px;font-weight:600;color:#f9a8d4;margin-bottom:6px;">CLL specifika</div>
-            <div style="font-size:12px;color:#8faabb;line-height:1.7;">Spánek pod 6h zvyšuje prozánětlivé cytokiny · náhlý pokles hlubokého spánku + zvýšený noční stres může signalizovat infekci dříve než příznaky · pravidelný monitoring je klíčový</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div><!-- /tab-sleep -->
-
+  <div class="card" id="note" role="status"></div>
+  <section class="page" id="p-dnes"></section>
+  <section class="page" id="p-trendy"></section>
+  <section class="page" id="p-denik"></section>
+  <section class="page" id="p-vlivy"></section>
+  <section class="page" id="p-nast"></section>
 </main>
+<nav class="bnav" id="bnav" aria-label="Sekce"></nav>
+<div class="toast" id="toast"></div>
 <script>
-// ── DATA: cloud (Apps Script → Google Disk) nebo lokální server na PC ──
-// Cloud: stránku servíruje Apps Script z GitHubu a vloží window.__GH_CLOUD__ = { key, build }; data a nastavení
-// jdou přes google.script.run (ghGet / ghSet). Lokálně (file:// na PC): http://localhost:8765 (garmin_server.py).
-// Prahy a zóny jsou v obou režimech na Disku (Garmin Data/garmin-settings.json) → stejné na PC, iPadu i iPhonu.
-const API='http://localhost:8765';
-const CLOUD=window.__GH_CLOUD__||null;
-const ST_KEYS=['garmin_thresholds','garmin_vst_zones','garmin_hr_zones','garmin_bb_zones','garmin_resp_zones'];
-const STALE_H=30;
-let DATA=null,META=null,charts={},currentRange=14;
-const ST={};   // nastavení v paměti (localStorage jen jako místní kopie — v iframe Apps Scriptu nemusí být dostupné)
-function stGet(k){if(k in ST)return ST[k];try{return localStorage.getItem(k);}catch(e){return null;}}
-function stSet(k,v){ST[k]=v;try{localStorage.setItem(k,v);}catch(e){}stQueue(k,v);}
-function stDel(k){ST[k]=null;try{localStorage.removeItem(k);}catch(e){}stQueue(k,null);}
-let stPend={},stTimer=null;
-function stQueue(k,v){stPend[k]=v;clearTimeout(stTimer);stTimer=setTimeout(stFlush,500);}
-async function stFlush(){
-  const b=stPend;stPend={};if(!Object.keys(b).length)return;
-  try{
-    const r=CLOUD?await gsRun('ghSet',CLOUD.key,JSON.stringify(b))
-      :await (await fetch(`${API}/settings`,{method:'POST',body:JSON.stringify(b),headers:{'Content-Type':'text/plain'}})).json();
-    if(!r.ok)throw new Error(r.error||'neznámá chyba');
-  }catch(e){showNote('Nastavení se neuložilo na Disk ('+(e.message||e)+') — platí jen v tomto prohlížeči.','warn');}
+/* sestaveno tools/build.py ze src/app.js — needitovat zde */
+'use strict';
+// ══════════ GARMIN HEALTH — aplikace (vkládá se do garmin-dashboard.html, viz tools/build.py) ══════════
+// Data: cloud (Apps Script: window.__GH_CLOUD__ → google.script.run ghGet / ghSync / ghSet / ghJournalSet / ghJournalCfg)
+// nebo volitelně lokální server (file:// → http://localhost:8765 /data /settings /journal /sync).
+// Tvar dat = buildData_ (Apps Script) = load_data (local/garmin_data.py); `days` (kompaktní dny + aktivity) má jen cloud.
+
+const API = 'http://localhost:8765';
+const CLOUD = window.__GH_CLOUD__ || null;
+const ST_KEYS = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 'garmin_bb_zones', 'garmin_resp_zones', 'garmin_ui'];
+const STALE_H = 30;
+let DATA = null, META = null, JR = { days: {}, cfg: {} }, DAYS = [], BYD = {}, PAGE = 'dnes';
+const UI = { trend: 'hrv', range: 30, out: 'hrv', jday: null };
+
+// ── drobnosti ──
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const num = v => (typeof v === 'number' && isFinite(v)) ? v : (v != null && v !== '' && isFinite(+v) ? +v : null);
+const fmt = (v, d) => { v = num(v); return v == null ? '—' : v.toLocaleString('cs-CZ', { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 }); };
+const sgn = (v, d) => { const p = Math.pow(10, d || 0), r = Math.round(v * p) / p; return r === 0 ? '±0' : (r > 0 ? '+' : '−') + fmt(Math.abs(r), d); };
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const vr = a => { const m = avg(a); return a.length > 1 ? a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1) : 0; };
+const ymd = d => { const z = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); };
+const addD = (s, n) => { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return ymd(d); };
+const TODAY = () => ymd(new Date());
+const DOW = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
+const MON = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+const dLong = s => { const d = new Date(s + 'T12:00:00'); return DOW[d.getDay()] + ' ' + d.getDate() + '. ' + MON[d.getMonth()]; };
+const dShort = s => s ? (+s.slice(8, 10)) + '. ' + (+s.slice(5, 7)) + '.' : '';
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+const hm = h => { if (h == null) return '—'; const m = Math.round(h * 60); return Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; };
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('on'), 2600); }
+function note(msg, kind) {
+  const el = $('note'); if (!msg) { el.className = 'card'; el.innerHTML = ''; return; }
+  el.className = 'card on'; el.style.borderLeft = '3px solid ' + tok(kind === 'warn' ? '--amber' : '--crit');
+  el.innerHTML = '<div class="sm">' + msg + '</div>';
 }
-function stApply(s){
-  if(!s||typeof s!=='object')return;
-  ST_KEYS.forEach(k=>{if(k in s&&s[k]!=null){ST[k]=String(s[k]);try{localStorage.setItem(k,ST[k]);}catch(e){}}});
-  T=loadT();
+
+// ── nastavení (prahy, zóny, vzhled): v paměti, localStorage = kopie, trvale na Disku (garmin-settings.json) ──
+const ST = {};
+function stGet(k) { if (k in ST) return ST[k]; try { return localStorage.getItem(k); } catch (e) { return null; } }
+function stSet(k, v) { ST[k] = v; try { localStorage.setItem(k, v); } catch (e) {} stQueue(k, v); }
+function stDel(k) { ST[k] = null; try { localStorage.removeItem(k); } catch (e) {} stQueue(k, null); }
+let stPend = {}, stTimer = null;
+function stQueue(k, v) { stPend[k] = v; clearTimeout(stTimer); stTimer = setTimeout(stFlush, 500); }
+async function stFlush() {
+  const b = stPend; stPend = {}; if (!Object.keys(b).length) return;
+  try {
+    const r = CLOUD ? await gsRun('ghSet', CLOUD.key, JSON.stringify(b))
+      : await (await fetch(`${API}/settings`, { method: 'POST', body: JSON.stringify(b), headers: { 'Content-Type': 'text/plain' } })).json();
+    if (!r.ok) throw new Error(r.error || 'neznámá chyba');
+  } catch (e) { note('Nastavení se neuložilo na Disk (' + esc(e.message || e) + ') — platí jen v tomto prohlížeči.', 'warn'); }
 }
-function gsRun(fn,...a){
-  return new Promise((res,rej)=>{
-    if(!window.google||!google.script||!google.script.run)return rej(new Error('google.script.run není k dispozici'));
-    google.script.run.withSuccessHandler(t=>{try{res(typeof t==='string'?JSON.parse(t):t);}catch(e){rej(e);}})
-      .withFailureHandler(e=>rej(e instanceof Error?e:new Error(String(e&&e.message||e))))[fn](...a);
+function stApply(s) {
+  if (!s || typeof s !== 'object') return;
+  ST_KEYS.forEach(k => { if (k in s && s[k] != null) { ST[k] = String(s[k]); try { localStorage.setItem(k, ST[k]); } catch (e) {} } });
+  T = loadT();
+}
+function gsRun(fn, ...a) {
+  return new Promise((res, rej) => {
+    if (!window.google || !google.script || !google.script.run) return rej(new Error('google.script.run není k dispozici'));
+    google.script.run.withSuccessHandler(t => { try { res(typeof t === 'string' ? JSON.parse(t) : t); } catch (e) { rej(e); } })
+      .withFailureHandler(e => rej(e instanceof Error ? e : new Error(String(e && e.message || e))))[fn](...a);
   });
 }
 
-// ── PRAHY ───────────────────────────────────────────────────────
-const THRESH_DEF={
-  hrv_ok:     {val:28, label:'HRV normál ≥',        unit:'ms',  stav:'ok',     badge:'normál', akce:'trénink OK'},
-  hrv_warn:   {val:20, label:'HRV pozor ≥',          unit:'ms',  stav:'warn',   badge:'pozor',  akce:'lehčí trénink nebo chůze'},
-  hrv_danger: {val:0,  label:'HRV alarm < (min)',    unit:'ms',  stav:'danger', badge:'alarm',  akce:'žádný trénink · zvážit lékaře'},
-  hr_ok:      {val:54, label:'Klidový TF normál ≤',  unit:'bpm', stav:'ok',     badge:'normál', akce:'trénink OK'},
-  hr_warn:    {val:57, label:'Klidový TF pozor >',   unit:'bpm', stav:'warn',   badge:'pozor',  akce:'sledovat příznaky'},
-  hr_danger:  {val:62, label:'Klidový TF alarm >',   unit:'bpm', stav:'danger', badge:'alarm',  akce:'lékař / hematolog'},
-  bb_ok:      {val:45, label:'Body Battery dobrý ≥', unit:'',    stav:'ok',     badge:'normál', akce:'trénink OK'},
-  bb_warn:    {val:35, label:'Body Battery pozor ≥', unit:'',    stav:'warn',   badge:'pozor',  akce:'nahradit chůzí'},
-  sleep_warn: {val:50, label:'Skóre spánku pozor <', unit:'',    stav:'warn',   badge:'pozor',  akce:'snížit intenzitu tréninku'},
-  ready_ok:   {val:80, label:'Readiness normál ≥',   unit:'%',   stav:'ok',     badge:'normál', akce:'trénink OK'},
-  ready_warn: {val:60, label:'Readiness pozor ≥',    unit:'%',   stav:'warn',   badge:'pozor',  akce:'lehčí pohyb'},
+// ── prahy (Pavlovy, editovatelné v Nastavení) ──
+const THRESH_DEF = {
+  hrv_ok:     { val: 28, label: 'HRV normál ≥',        unit: 'ms',  stav: 'ok',     badge: 'normál', akce: 'trénink OK' },
+  hrv_warn:   { val: 20, label: 'HRV pozor ≥',          unit: 'ms',  stav: 'warn',   badge: 'pozor',  akce: 'lehčí trénink nebo chůze' },
+  hrv_danger: { val: 0,  label: 'HRV alarm < (min)',    unit: 'ms',  stav: 'danger', badge: 'alarm',  akce: 'žádný trénink · zvážit lékaře' },
+  hr_ok:      { val: 54, label: 'Klidový TF normál ≤',  unit: 'bpm', stav: 'ok',     badge: 'normál', akce: 'trénink OK' },
+  hr_warn:    { val: 57, label: 'Klidový TF pozor >',   unit: 'bpm', stav: 'warn',   badge: 'pozor',  akce: 'sledovat příznaky' },
+  hr_danger:  { val: 62, label: 'Klidový TF alarm >',   unit: 'bpm', stav: 'danger', badge: 'alarm',  akce: 'lékař / hematolog' },
+  bb_ok:      { val: 45, label: 'Body Battery dobrý ≥', unit: '',    stav: 'ok',     badge: 'normál', akce: 'trénink OK' },
+  bb_warn:    { val: 35, label: 'Body Battery pozor ≥', unit: '',    stav: 'warn',   badge: 'pozor',  akce: 'nahradit chůzí' },
+  sleep_warn: { val: 50, label: 'Skóre spánku pozor <', unit: '',    stav: 'warn',   badge: 'pozor',  akce: 'snížit intenzitu tréninku' },
+  ready_ok:   { val: 80, label: 'Připravenost normál ≥', unit: '%',  stav: 'ok',     badge: 'normál', akce: 'trénink OK' },
+  ready_warn: { val: 60, label: 'Připravenost pozor ≥', unit: '%',   stav: 'warn',   badge: 'pozor',  akce: 'lehčí pohyb' },
 };
-
-function loadT(){
-  try{
-    const s=stGet('garmin_thresholds');
-    if(s){const p=JSON.parse(s);const m={};for(const k in THRESH_DEF)m[k]={...THRESH_DEF[k],...(p[k]||{})};return m;}
-  }catch(e){}
+function loadT() {
+  try { const s = stGet('garmin_thresholds'); if (s) { const p = JSON.parse(s), m = {}; for (const k in THRESH_DEF) m[k] = { ...THRESH_DEF[k], ...(p[k] || {}) }; return m; } } catch (e) {}
   return JSON.parse(JSON.stringify(THRESH_DEF));
 }
+let T = loadT();
+function saveT() { const o = {}; for (const k in T) o[k] = { val: T[k].val }; stSet('garmin_thresholds', JSON.stringify(o)); }
 
-function saveT(T){
-  const out={};for(const k in T)out[k]={val:T[k].val};
-  stSet('garmin_thresholds',JSON.stringify(out));
-  const el=document.getElementById('threshSaved');
-  el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2000);
+// zóny grafů (stejné klíče jako původní dashboard): z1 / z2 + okno klouzavého průměru
+const ZDEF = {
+  hrv:  { key: 'garmin_vst_zones',  z1: 26, z2: 30, avgDays: 7, up: true,  l: 'HRV', u: 'ms' },
+  rhr:  { key: 'garmin_hr_zones',   z1: 54, z2: 57, avgDays: 7, up: false, l: 'Klidová TF', u: 'bpm' },
+  bb:   { key: 'garmin_bb_zones',   z1: 35, z2: 50, avgDays: 7, up: true,  l: 'Body Battery ráno', u: '' },
+  resp: { key: 'garmin_resp_zones', z1: 16, z2: 19, avgDays: 7, up: false, l: 'Dýchání', u: 'dech/min' },
+};
+function zones(m) { const z = ZDEF[m]; if (!z) return null; try { const p = JSON.parse(stGet(z.key) || 'null'); if (p) return { ...z, z1: +p.z1 || z.z1, z2: +p.z2 || z.z2, avgDays: +p.avgDays || z.avgDays }; } catch (e) {} return { ...z }; }
+function zoneSave(m, z) { stSet(ZDEF[m].key, JSON.stringify({ z1: z.z1, z2: z.z2, avgDays: z.avgDays })); }
+// barva podle zóny: up = vyšší je lepší (HRV, BB), jinak nižší je lepší (TF, dýchání)
+function zoneCol(m, v) { const z = zones(m); if (!z || v == null) return tok('--blue'); if (z.up) return v < z.z1 ? tok('--red') : v < z.z2 ? tok('--amber') : tok('--green'); return v <= z.z1 ? tok('--green') : v <= z.z2 ? tok('--amber') : tok('--red'); }
+
+// ── vzhled ──
+function uiGet() { try { return JSON.parse(stGet('garmin_ui') || '{}') || {}; } catch (e) { return {}; } }
+function themeSet(t) { document.documentElement.toggleAttribute('data-theme', t === 'graphite'); if (t === 'graphite') document.documentElement.setAttribute('data-theme', 'graphite'); try { localStorage.setItem('gh_theme', t); } catch (e) {} renderAll(); }
+
+// ══════════ DATA ══════════
+async function fetchData() {
+  if (CLOUD) return take(await gsRun('ghGet', CLOUD.key), 'cloud');
+  const r = await fetch(`${API}/data`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('Lokální server: HTTP ' + r.status);
+  try { const s = await fetch(`${API}/settings`, { cache: 'no-store' }); if (s.ok) { const st = await s.json(); migrateLocal(st); stApply(st); } } catch (e) {}
+  let journal = null; try { const j = await (await fetch(`${API}/journal`, { cache: 'no-store' })).json(); if (j.ok) journal = j.journal; } catch (e) {}
+  return take({ ok: true, data: await r.json(), journal: journal, at: new Date().toISOString(), ageH: 0 }, 'local');
 }
-
-function resetThresholds(){
-  if(!confirm('Obnovit výchozí prahové hodnoty?'))return;
-  stDel('garmin_thresholds');
-  T=loadT();renderThresholds();if(DATA)renderAll();
-}
-
-let T=loadT();
-
-function renderThresholds(){
-  document.getElementById('threshBody').innerHTML=Object.entries(T).map(([key,row])=>`
-    <tr>
-      <td class="td-metric">${row.label}</td>
-      <td style="white-space:nowrap;">
-        <span class="thresh-editable" data-key="${key}"
-          contenteditable="true" spellcheck="false"
-          style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;
-            color:${row.stav==='ok'?'var(--accent)':row.stav==='warn'?'var(--warn)':'var(--danger)'};
-            background:var(--bg3);border:1px solid var(--border2);border-radius:5px;
-            padding:3px 12px;display:inline-block;min-width:44px;text-align:center;
-            cursor:text;outline:none;transition:border-color 0.15s,box-shadow 0.15s;"
-          onfocus="this.style.borderColor='var(--accent)';this.style.boxShadow='0 0 0 2px rgba(0,212,170,0.15)'"
-          onblur="this.style.borderColor='var(--border2)';this.style.boxShadow='none';threshSave(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
-        >${row.val}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-left:5px;">${row.unit}</span>
-      </td>
-      <td><span class="badge badge-${row.stav}">${row.badge}</span></td>
-      <td style="font-size:12px;color:var(--text2);">${row.akce}</td>
-    </tr>`).join('');
-}
-
-function threshSave(el){
-  const key=el.dataset.key;
-  const newVal=parseFloat(el.textContent.trim());
-  if(isNaN(newVal)){el.textContent=T[key].val;return;}
-  T[key].val=newVal;el.textContent=newVal;
-  saveT(T);if(DATA)renderAll();
-}
-
-async function fetchData(){
-  if(CLOUD)return cloudTake(await gsRun('ghGet',CLOUD.key));
-  const r=await fetch(`${API}/data`,{cache:'no-store'});
-  if(!r.ok)throw new Error('Lokální server: HTTP '+r.status);
-  try{
-    const s=await fetch(`${API}/settings`,{cache:'no-store'});
-    if(s.ok){
-      const st=await s.json();
-      // jednorázová migrace: prahy a zóny, které zatím žijí jen v tomto prohlížeči (stará verze), nahrát na Disk
-      ST_KEYS.forEach(k=>{if(!(k in st)){let v=null;try{v=localStorage.getItem(k);}catch(e){}if(v!=null)stQueue(k,v);}});
-      stApply(st);
-    }
-  }catch(e){}
-  const d=await r.json();
-  if(d.error)throw new Error(d.error);
-  META={src:'local',at:new Date().toISOString(),ageH:0,stale:false};
-  return d;
-}
-function cloudTake(r){
+// stará lokální verze měla prahy jen v localStorage prohlížeče → jednorázově na Disk
+function migrateLocal(st) { ST_KEYS.forEach(k => { if (!(k in st)) { let v = null; try { v = localStorage.getItem(k); } catch (e) {} if (v != null) stQueue(k, v); } }); }
+function take(r, src) {
   stApply(r.settings);
-  if(!r.ok)throw new Error(r.error||'Data se nepodařilo načíst');
-  const se=r.sync&&!r.sync.ok?r.sync.error:(r.sync&&r.sync.errs&&r.sync.errs.length?r.sync.errs.join(' · '):null);
-  META={src:'cloud',at:r.at,ageH:r.ageH,stale:!!r.stale,warn:se?'Sync z Garminu: '+se:(r.data&&r.data.warn)};
-  return r.data;
+  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {} };
+  if (!r.ok || !r.data) throw new Error(r.error || 'Data se nepodařilo načíst');
+  if (r.data.error) throw new Error(r.data.error);
+  DATA = r.data;
+  const se = r.sync && !r.sync.ok ? r.sync.error : (r.sync && r.sync.errs && r.sync.errs.length ? r.sync.errs.join(' · ') : null);
+  META = { src: src, at: r.at || DATA.exported_at, ageH: r.ageH || 0, stale: !!r.stale, warn: se ? 'Sync z Garminu: ' + se : (DATA.warn || null), jerr: r.journalErr || null };
+  buildDays();
+  return DATA;
 }
-function showNote(msg,kind){
-  const el=document.getElementById('serverError');
-  if(!msg){el.style.display='none';return;}
-  el.querySelector('h3').textContent=(kind==='warn'?'⚠ ':'✖ ')+msg;
-  el.querySelector('p').innerHTML=kind==='warn'?'':(CLOUD
-    ?'Data stahuje Apps Script „Garmin Health“ z Garmin Personal API každé ~2 hodiny (nebo tlačítkem <strong>Sync Garmin</strong>). Když hláška trvá, zkontroluj klíč <strong>GARMIN_API_KEY</strong> ve Vlastnostech skriptu (vyprší nejvýš za rok).'
-    :'Dvojklikni na <strong>Start Garmin Dashboard</strong> na ploše.<br>Nebo spusť v CMD: <code>C:\\Python314\\python.exe garmin_server.py</code><br><br>Pak klikni na <strong>↻ Aktualizovat</strong> výše.');
-  el.className=kind==='warn'?'note-warn':'';
-  el.style.display='block';
-}
-function dataFail(e){showNote(CLOUD?String(e&&e.message||e):'Lokální server není spuštěn','err');}
-function dataOk(){
-  if(META&&META.stale)showNote(`Data jsou stará ${Math.round(META.ageH)} h — sync z Garminu neprobíhá (klíč Personal API?)`,'warn');
-  else if(META&&META.warn)showNote(META.warn,'warn');
-  else showNote(null);
-}
-
-async function refreshData(){
-  const btn=document.getElementById('refreshBtn');
-  btn.disabled=true;btn.classList.add('loading');
-  try{
-    DATA=await fetchData();
-    dataOk();
-    renderAll();
-  }catch(e){dataFail(e);}
-  finally{btn.disabled=false;btn.classList.remove('loading');}
-}
-
-async function syncGarmin(){
-  const btn=document.getElementById('syncBtn');
-  const ov=document.getElementById('syncOverlay');
-  btn.disabled=true;btn.classList.add('loading');ov.classList.add('show');
-  try{
-    if(CLOUD)DATA=cloudTake(await gsRun('ghSync',CLOUD.key));   // Apps Script stáhne poslední dny z Garmin Personal API
-    else{
-      await fetch(`${API}/sync`,{cache:'no-store'});
-      await new Promise(r=>setTimeout(r,28000));
-      DATA=await fetchData();
-    }
-    dataOk();
-    renderAll();
-  }catch(e){dataFail(e);}
-  finally{btn.disabled=false;btn.classList.remove('loading');ov.classList.remove('show');}
-}
-
-const CD={responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
-  plugins:{legend:{display:false},tooltip:{backgroundColor:'#0e1219',borderColor:'rgba(255,255,255,0.07)',borderWidth:1,titleColor:'#aabbcc',bodyColor:'#dce4f0',padding:10,titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'Syne',size:12}}},
-  scales:{x:{ticks:{color:'#6a7f92',font:{size:9,family:'JetBrains Mono'},maxRotation:45,autoSkip:true,maxTicksLimit:10},grid:{color:'rgba(255,255,255,0.03)'}}}};
-function yAx(label,color,min,max,pos='left'){return{position:pos,min,max,title:{display:true,text:label,color,font:{size:10,family:'JetBrains Mono'}},ticks:{color,font:{size:10}},grid:{color:'rgba(255,255,255,0.03)'}};}
-function dc(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
-
-function getSlice(days){const n=DATA.nights||[];return days===0?n:n.slice(-days);}
-
-function renderCharts(){
-  const ns=getSlice(currentRange);
-  const lbl=ns.map(n=>n.label||(n.calendar_date||'').substring(5).replace('-','.')+'.');
-  const hrv=ns.map(n=>n.hrv??null);
-  const hr=ns.map(n=>n.hr??n.resting_heart_rate??null);
-  const bb=ns.map(n=>n.bb??n.body_battery_sleep_result??null);
-  const sc=ns.map(n=>n.score??n.sleep_score_overall??null);
-  const ho=ns.map(n=>n.hours??(n.total_duration?n.total_duration/3600:null));
-  const st=ns.map(n=>n.stress??n.average_sleep_stress??null);
-  const re=ns.map(n=>n.resp??n.average_respiration_value??null);
-  function hc(v){if(!v)return'transparent';if(v<20)return'#ff5f6d';if(v<28)return'#ffb547';return'#00d4aa';}
-  dc('HRV');charts['HRV']=new Chart(document.getElementById('cHRV'),{type:'line',data:{labels:lbl,datasets:[
-    {data:hrv,borderColor:'#00d4aa',backgroundColor:'rgba(0,212,170,0.06)',pointBackgroundColor:hrv.map(hc),pointRadius:hrv.map((_,i)=>i>=ns.length-5?5:3),tension:0.3,fill:true,spanGaps:true,borderWidth:2,yAxisID:'y'},
-    {data:lbl.map(()=>25),borderColor:'rgba(0,212,170,0.22)',borderDash:[3,4],pointRadius:0,yAxisID:'y'}
-  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('HRV ms','#00d4aa',0,55)}}});
-  dc('TF');charts['TF']=new Chart(document.getElementById('cTF'),{type:'line',data:{labels:lbl,datasets:[
-    {data:hr,borderColor:'#ff5f6d',pointRadius:hr.map(v=>v>57?6:3),pointBackgroundColor:hr.map(v=>v>57?'#ff5f6d':'rgba(255,95,109,0.5)'),tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y'},
-    {data:bb,borderColor:'#ffb547',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:1.5,yAxisID:'y2'},
-    {data:lbl.map(()=>57),borderColor:'rgba(255,95,109,0.25)',borderDash:[2,4],pointRadius:0,yAxisID:'y'}
-  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('TF bpm','#ff5f6d',35,75),y2:{...yAx('Battery','#ffb547',0,100,'right'),grid:{display:false}}}}});
-  dc('Sleep');charts['Sleep']=new Chart(document.getElementById('cSleep'),{type:'bar',data:{labels:lbl,datasets:[
-    {type:'bar',data:sc,backgroundColor:sc.map(v=>v==null?'transparent':v<50?'rgba(255,95,109,0.5)':v<70?'rgba(255,181,71,0.4)':'rgba(91,143,255,0.45)'),borderRadius:3,yAxisID:'y',barPercentage:0.6},
-    {type:'line',data:ho,borderColor:'#00d4aa',pointRadius:3,tension:0.3,spanGaps:true,yAxisID:'y2'}
-  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('Skóre','#5b8fff',0,100),y2:{...yAx('Hodiny','#00d4aa',0,12,'right'),grid:{display:false}}}}});
-  dc('Stress');charts['Stress']=new Chart(document.getElementById('cStress'),{type:'line',data:{labels:lbl,datasets:[
-    {data:st,borderColor:'#b18fff',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y'},
-    {data:re,borderColor:'#5b8fff',pointRadius:3,tension:0.3,spanGaps:true,borderWidth:2,yAxisID:'y2'}
-  ]},options:{...CD,scales:{x:CD.scales.x,y:yAx('Stres','#b18fff',0,100),y2:{...yAx('Dýchání','#5b8fff',10,30,'right'),grid:{display:false}}}}});
-}
-
-function setRange(days,el){currentRange=days;document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');if(DATA)renderCharts();}
-
-function buildGauge(value,min,max,zones,unit,needle_color,avg7,avg14){
-  const cx=70,cy=72,r=54,sw=13;
-  function pt(v,rad){
-    const pct=Math.max(0,Math.min(1,(v-min)/(max-min)));
-    const a=Math.PI*(1-pct);
-    return [cx+(rad||r)*Math.cos(a), cy-(rad||r)*Math.sin(a)];
+// jednotná tabulka dní: cloud dává `days`, lokální režim se skládá z nocí a HRV historie
+function buildDays() {
+  let rows = Array.isArray(DATA.days) && DATA.days.length ? DATA.days.map(x => ({ ...x, a: x.a || [] })) : null;
+  if (!rows) {
+    const m = {};
+    (DATA.nights || []).forEach(n => { const d = n.date || n.calendar_date; if (!d) return; m[d] = { d: d, sc: num(n.score), sh: num(n.hours), rhr: num(n.hr), bb: num(n.bb), rs: num(n.resp), st: null, stp: null, hrv: num(n.hrv), a: [] }; });
+    (DATA.hrv_history || []).forEach(h => { if (!h.date) return; (m[h.date] = m[h.date] || { d: h.date, a: [] }).hrv = num(h.hrv); });
+    rows = Object.values(m);
   }
-  function arc(v1,v2,color,width,cap){
-    if(v2<=v1)return'';
-    const [x1,y1]=pt(v1),[x2,y2]=pt(v2);
-    const span=(v2-v1)/(max-min);
-    const large=span>0.999?1:0;
-    return `<path d="M${x1.toFixed(1)},${y1.toFixed(1)} A${r},${r} 0 ${large},1 ${x2.toFixed(1)},${y2.toFixed(1)}" fill="none" stroke="${color}" stroke-width="${width||sw}" stroke-linecap="${cap||'butt'}"/>`;
-  }
-  function tick(v,color,rOut,rIn,sw2){
-    if(v===null||v===undefined)return'';
-    const pct=Math.max(0,Math.min(1,(v-min)/(max-min)));
-    const a=Math.PI*(1-pct);
-    const x1=cx+rOut*Math.cos(a),y1=cy-rOut*Math.sin(a);
-    const x2=cx+rIn*Math.cos(a),y2=cy-rIn*Math.sin(a);
-    return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="${sw2||3}" stroke-linecap="round"/>`;
-  }
-  const pct=Math.max(0,Math.min(1,(value-min)/(max-min)));
-  const na=Math.PI*(1-pct);
-  const nx=cx+(r-5)*Math.cos(na),ny=cy-(r-5)*Math.sin(na);
-  const noData=(!value&&value!==0)||isNaN(value);
-  let s='';
-  s+=arc(min,max,'#141820',sw+4);
-  s+=arc(min,max,'#1c2230',sw);
-  for(const z of zones) s+=arc(z.from,z.to,z.color);
-  // Zone dividers
-  for(const z of zones){
-    const a2=Math.PI*(1-(z.from-min)/(max-min));
-    const i=r-sw/2-1,o=r+sw/2+1;
-    s+=`<line x1="${(cx+i*Math.cos(a2)).toFixed(1)}" y1="${(cy-i*Math.sin(a2)).toFixed(1)}" x2="${(cx+o*Math.cos(a2)).toFixed(1)}" y2="${(cy-o*Math.sin(a2)).toFixed(1)}" stroke="#080b10" stroke-width="2"/>`;
-  }
-  // 14d avg tick — purple, outside arc only
-  s+=tick(avg14,'#c084fc',r+sw/2+10,r+sw/2+2,3.5);
-  // 7d avg tick — light blue, outside arc only (slightly shorter)
-  s+=tick(avg7,'#60a5fa',r+sw/2+8,r+sw/2+1,3);
-  // Needle
-  if(!noData){
-    s+=`<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="rgba(0,0,0,0.5)" stroke-width="4" stroke-linecap="round"/>`;
-    s+=`<line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>`;
-  }
-  s+=`<circle cx="${cx}" cy="${cy}" r="5.5" fill="${noData?'#1c2230':needle_color}" stroke="#080b10" stroke-width="2.5"/>`;
-  const disp=noData?'—':value;
-  s+=`<text x="${cx}" y="${cy-18}" text-anchor="middle" font-size="22" font-weight="600" fill="#e8edf5" font-family="JetBrains Mono,monospace">${disp}</text>`;
-  if(unit) s+=`<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="9" fill="#8899aa" font-family="JetBrains Mono,monospace">${unit}</text>`;
-  return `<svg viewBox="0 0 140 82" style="width:100%;height:auto;" xmlns="http://www.w3.org/2000/svg">${s}</svg>`;
+  const nm = {}; (DATA.nights || []).forEach(n => { nm[n.date || n.calendar_date] = n; });
+  const hm_ = {}; (DATA.hrv_history || []).forEach(h => { hm_[h.date] = h; });
+  rows.forEach(x => { const n = nm[x.d]; if (n) { x.deep = num(n.deep_min); x.rem = num(n.rem_min); x.light = num(n.light_min); x.awake = num(n.awake_min); if (x.rs == null) x.rsN = num(n.resp); else x.rsN = num(n.resp); }
+    const h = hm_[x.d]; if (h) { x.bl = num(h.baseline_low); x.bu = num(h.baseline_upper); } });
+  DAYS = rows.sort((a, b) => a.d < b.d ? -1 : 1); BYD = {}; DAYS.forEach(x => { BYD[x.d] = x; });
 }
 
-
-function calcAvg(field,days){
-  const nights=DATA.nights||[];
-  const sl=nights.slice(-days).filter(n=>n[field]!==null&&n[field]!==undefined&&n[field]>0);
-  if(!sl.length)return null;
-  return Math.round(sl.reduce((s,n)=>s+n[field],0)/sl.length);
+async function doSync() {
+  const b = $('syncBtn'); b.disabled = true; b.classList.add('loading'); b.querySelector('span').textContent = 'Stahuji…';
+  try {
+    if (CLOUD) take(await gsRun('ghSync', CLOUD.key), 'cloud');
+    else { await fetch(`${API}/sync`, { cache: 'no-store' }); await new Promise(r => setTimeout(r, 28000)); await fetchData(); }
+    dataNote(); renderAll(); toast('Data z Garminu aktualizována');
+  } catch (e) { note(esc(e.message || e), 'err'); }
+  finally { b.disabled = false; b.classList.remove('loading'); b.querySelector('span').textContent = 'Sync'; }
+}
+function dataNote() {
+  if (META && META.stale) note(`Data jsou stará ${Math.round(META.ageH)} h — sync z Garminu neprobíhá. Zkontroluj synchronizaci hodinek s telefonem a klíč Personal API (vyprší nejvýš za rok).`, 'warn');
+  else if (META && META.warn) note(esc(META.warn), 'warn');
+  else if (META && META.jerr) note('Deník se nepodařilo načíst: ' + esc(META.jerr), 'warn');
+  else note(null);
+}
+function ageText() {
+  if (!META) return '—';
+  const t = new Date(META.at), s = t.toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return (META.src === 'cloud' ? 'sync ' : 'načteno ') + s + (META.src === 'cloud' && META.ageH >= 1 ? ` · před ${Math.round(META.ageH)} h` : '');
 }
 
-function avgsRow(a7,a14,unit){
-  const C7='#60a5fa',C14='#c084fc';
-  const t7=a7!==null&&a7!==undefined?`<span style="color:${C7};background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 7px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;">${a7}${unit}</span>`:'';
-  const t14=a14!==null&&a14!==undefined?`<span style="color:${C14};background:rgba(20,50,90,0.75);border-radius:4px;padding:2px 7px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:600;">${a14}${unit}</span>`:'';
-  if(!t7&&!t14)return'';
-  return `<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:2px;">
-    ${t7?`<span style="font-size:10px;color:${C7};font-family:'JetBrains Mono',monospace;">7d</span>${t7}`:''}
-    ${t14?`<span style="font-size:10px;color:${C14};font-family:'JetBrains Mono',monospace;">14d</span>${t14}`:''}
-  </div>`;
-}
-
-// ── PŘIPRAVENOST ─────────────────────────────────────────────────
-// Garmin Personal API Training Readiness nevrací → když chybí, odhad z toho, co máme (vážený průměr dostupných složek 0–100):
+// ══════════ PŘIPRAVENOST ══════════
+// Garmin Personal API Training Readiness nevrací → odhad z dostupných složek (vážený průměr 0–100):
 // HRV 35 % (poslední noc v pásmu baseline: dolní mez = 50, horní = 100), skóre spánku 30 %, Body Battery při probuzení 20 %,
 // klidová TF 15 % (každý tep nad 7denním průměrem −10). Orientační — není to Garminův algoritmus.
-const clamp100=v=>Math.max(0,Math.min(100,v));
-function readinessOf(){
-  const r=DATA.readiness||{};
-  if(r.score!=null)return{score:r.score,est:false};
-  const h=DATA.hrv||{},d=DATA.daily||{},sl=DATA.sleep_latest||{},parts=[];
-  const hv=h.last_night_avg,lo=h.baseline_low,up=h.baseline_upper;
-  if(hv!=null&&lo!=null&&up!=null&&up>lo)parts.push(['HRV',35,clamp100(50+50*(hv-lo)/(up-lo))]);
-  if(sl.sleep_score_overall!=null)parts.push(['spánek',30,clamp100(sl.sleep_score_overall)]);
-  if(d.body_battery_at_wake!=null)parts.push(['BB',20,clamp100(d.body_battery_at_wake)]);
-  const rhr=d.resting_heart_rate??sl.resting_heart_rate,r7=d.avg_resting_heart_rate_7day;
-  if(rhr!=null&&r7!=null)parts.push(['TF',15,clamp100(100-10*(rhr-r7))]);
-  if(!parts.length)return{score:null,est:true,parts};
-  const w=parts.reduce((a,p)=>a+p[1],0);
-  return{score:Math.round(parts.reduce((a,p)=>a+p[1]*p[2],0)/w),est:true,parts};
+const clamp100 = v => Math.max(0, Math.min(100, v));
+function readinessOf() {
+  const r = DATA.readiness || {};
+  if (r.score != null) return { score: r.score, est: false, parts: [] };
+  const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, parts = [];
+  const hv = h.last_night_avg, lo = h.baseline_low, up = h.baseline_upper;
+  if (hv != null && lo != null && up != null && up > lo) parts.push(['HRV', 35, clamp100(50 + 50 * (hv - lo) / (up - lo))]);
+  if (sl.sleep_score_overall != null) parts.push(['Spánek', 30, clamp100(sl.sleep_score_overall)]);
+  if (d.body_battery_at_wake != null) parts.push(['Body Battery', 20, clamp100(d.body_battery_at_wake)]);
+  const rhr = d.resting_heart_rate ?? sl.resting_heart_rate, r7 = d.avg_resting_heart_rate_7day;
+  if (rhr != null && r7 != null) parts.push(['Klidová TF', 15, clamp100(100 - 10 * (rhr - r7))]);
+  if (!parts.length) return { score: null, est: true, parts };
+  const w = parts.reduce((a, p) => a + p[1], 0);
+  return { score: Math.round(parts.reduce((a, p) => a + p[1] * p[2], 0) / w), est: true, parts };
+}
+function alertsOf() {
+  const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, al = [];
+  const hrv = h.last_night_avg ?? sl.avg_overnight_hrv ?? 0, hr = d.resting_heart_rate ?? sl.resting_heart_rate ?? 0;
+  const bb = d.body_battery_at_wake ?? d.body_battery_most_recent ?? 0, sc = sl.sleep_score_overall ?? 0;
+  if (hrv > 0 && hrv < T.hrv_warn.val) al.push({ t: 'crit', h: `HRV kritická: ${hrv} ms`, b: 'Žádný trénink. Při příznacích kontaktovat lékaře.' });
+  else if (hrv > 0 && hrv < T.hrv_ok.val) al.push({ t: 'warn', h: `HRV nízká: ${hrv} ms`, b: `Pod baselineem (${h.baseline_low ?? T.hrv_ok.val}–${h.baseline_upper ?? '—'} ms). Lehčí pohyb.` });
+  else if (hrv > 0) al.push({ t: 'ok', h: `HRV v normálu: ${hrv} ms`, b: 'Nervový systém se dobře regeneruje.' });
+  if (hr > T.hr_danger.val) al.push({ t: 'crit', h: `Klidová TF kritická: ${hr} bpm`, b: 'Lékař nebo hematolog.' });
+  else if (hr > T.hr_warn.val) al.push({ t: 'warn', h: `Klidová TF zvýšená: ${hr} bpm`, b: 'Sledovat 2–3 dny.' });
+  if (bb > 0 && bb < T.bb_warn.val) al.push({ t: 'warn', h: `Body Battery nízká: ${bb}`, b: 'Náročný trénink dnes nevhodný.' });
+  if (sc > 0 && sc < T.sleep_warn.val) al.push({ t: 'warn', h: `Skóre spánku nízké: ${sc}`, b: 'Snížit intenzitu tréninku. Priorita: spánek a regenerace.' });
+  return al;
 }
 
-function renderCards(){
-  const d=DATA.daily||{},h=DATA.hrv||{},r=readinessOf(),f=DATA.fitness||{},sl=DATA.sleep_latest||{};
-  const hrv=h.last_night_avg??0;
-  const hr=d.resting_heart_rate??sl.resting_heart_rate??0;
-  const bb=d.body_battery_at_wake??d.body_battery_most_recent??0;
-  const sc=r.score??0;
-  const fa=f.fitness_age?Math.round(f.fitness_age):null;
-  const ca=f.chronological_age??50;
-  const sleepScore=sl.sleep_score_overall??0;
-
-  const hrv7=calcAvg('hrv',7),hrv14=calcAvg('hrv',14);
-  const hr7=calcAvg('hr',7),hr14=calcAvg('hr',14);
-  const bb7=calcAvg('bb',7),bb14=calcAvg('bb',14);
-  const sleep7=calcAvg('score',7),sleep14=calcAvg('score',14);
-
-  const COK='#00d4aa',CW='#ffb547',CD='#ff5f6d';
-  const hrvOk=T.hrv_ok.val,hrvW=T.hrv_warn.val;
-  const hrOk=T.hr_ok.val,hrW=T.hr_warn.val;
-  const bbOk=T.bb_ok.val,bbW=T.bb_warn.val;
-  const rOk=T.ready_ok.val,rW=T.ready_warn.val;
-  const slW=T.sleep_warn.val;
-
-  const cHrv=hrv>=hrvOk?COK:hrv>=hrvW?CW:CD;
-  const cHr=hr<=hrOk?COK:hr<=hrW?CW:CD;
-  const cBb=bb>=bbOk?COK:bb>=bbW?CW:CD;
-  const cSc=sc>=rOk?COK:sc>=rW?CW:CD;
-  const cSl=sleepScore>=70?COK:sleepScore>=slW?CW:CD;
-  const cFa=fa!==null&&fa<=ca?COK:CW;
-
-  const gauges=[
-    {label:'HRV / VST',
-     zones:[{from:0,to:hrvW,color:CD},{from:hrvW,to:hrvOk,color:CW},{from:hrvOk,to:55,color:COK}],
-     val:hrv,min:0,max:55,unit:'ms',color:cHrv,avg7:hrv7,avg14:hrv14,avgUnit:'ms',
-     status:hrv>=hrvOk?'NORMÁL':hrv>=hrvW?'NÍZKÁ':'KRITICKÁ'},
-    {label:'Klidový TF',
-     zones:[{from:38,to:hrOk,color:COK},{from:hrOk,to:hrW,color:CW},{from:hrW,to:75,color:CD}],
-     val:hr,min:38,max:75,unit:'bpm',color:cHr,avg7:hr7,avg14:hr14,avgUnit:'',
-     status:hr<=hrOk?'NORMÁL':hr<=hrW?'ZVÝŠENÝ':'VYSOKÝ'},
-    {label:'Body Battery',
-     zones:[{from:0,to:bbW,color:CD},{from:bbW,to:bbOk,color:CW},{from:bbOk,to:100,color:COK}],
-     val:bb,min:0,max:100,unit:'',color:cBb,avg7:bb7,avg14:bb14,avgUnit:'',
-     status:bb>=bbOk?'DOBRÝ':bb>=bbW?'NÍZKÝ':'KRITICKÝ'},
-    {label:r.est?'Připravenost (odhad)':'Training Readiness',
-     zones:[{from:0,to:rW,color:CD},{from:rW,to:rOk,color:CW},{from:rOk,to:100,color:COK}],
-     val:Math.round(sc),min:0,max:100,unit:'%',color:cSc,avg7:null,avg14:null,avgUnit:'',
-     status:sc>=rOk?'PŘIPRAVEN':sc>=rW?'OPATRNĚ':'ODPOČÍVAT'},
-    {label:'Spánek — skóre',
-     zones:[{from:0,to:slW,color:CD},{from:slW,to:70,color:CW},{from:70,to:100,color:COK}],
-     val:sleepScore,min:0,max:100,unit:'',color:cSl,avg7:sleep7,avg14:sleep14,avgUnit:'',
-     status:sleepScore>=70?'DOBRÝ':sleepScore>=slW?'USPOKOJIVÝ':'ŠPATNÝ'},
-    {label:'Fitness věk',
-     zones:[{from:30,to:ca,color:COK},{from:ca,to:ca+5,color:CW},{from:ca+5,to:65,color:CD}],
-     val:fa??0,min:30,max:65,unit:'let',color:cFa,avg7:null,avg14:null,avgUnit:'',
-     status:fa!==null?`CHRON. ${ca}`:'—'},
-  ];
-
-  document.getElementById('cardsGrid').innerHTML=gauges.map((g,i)=>`
-    <div class="gcard" style="animation-delay:${i*0.06}s">
-      <div class="gcard-label">${g.label}</div>
-      ${buildGauge(g.val,g.min,g.max,g.zones.filter(z=>z.from<z.to),g.unit,g.color,g.avg7,g.avg14)}
-      ${avgsRow(g.avg7,g.avg14,g.avgUnit)}
-      <div class="gcard-status" style="color:${g.color}">${g.status}</div>
-    </div>`).join('');
+// ══════════ DENÍK ══════════
+const TAGS = [
+  { g: 'Jídlo a pití', items: [
+    { id: 'alk', l: 'Alkohol', c: 1, u: 'skl.' }, { id: 'kava', l: 'Káva', c: 1, u: '×' }, { id: 'kava_pozde', l: 'Káva po 14 h' },
+    { id: 'vecere_pozde', l: 'Pozdní večeře' }, { id: 'tezke', l: 'Těžké / tučné jídlo' }, { id: 'sladke', l: 'Sladké' },
+    { id: 'malo_vody', l: 'Málo vody' }, { id: 'hodne_vody', l: 'Hodně vody' } ] },
+  { g: 'Pohyb a regenerace', items: [
+    { id: 'otuz', l: 'Otužování' }, { id: 'sauna', l: 'Sauna' }, { id: 'med', l: 'Meditace', c: 5, u: 'min' }, { id: 'dech', l: 'Dechová cvičení' },
+    { id: 'strecink', l: 'Strečink / jóga' }, { id: 'venku', l: 'Procházka venku' } ] },
+  { g: 'Stres a zdraví', items: [
+    { id: 'stres', l: 'Pracovní stres' }, { id: 'cesta', l: 'Cestování' }, { id: 'nemoc', l: 'Nemoc / nachlazení' }, { id: 'bolest', l: 'Bolest' },
+    { id: 'nalada', l: 'Špatná nálada' }, { id: 'pozde_spat', l: 'Pozdě do postele' }, { id: 'obrazovka', l: 'Obrazovka před spaním' } ] },
+];
+const QUICK = ['alk', 'kava_pozde', 'vecere_pozde', 'stres', 'otuz', 'med', 'pozde_spat', 'nemoc'];
+const MEAL_S = [['sn', 'Snídaně'], ['ob', 'Oběd'], ['ve', 'Večeře'], ['sv', 'Svačina']];
+const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id === id) return t; const c = (JR.cfg.tags || []).find(x => x.id === id); return c ? { id: c.id, l: c.l } : null; };
+const jDay = d => JR.days[d] || null;
+function jEdit(d) { const j = JR.days[d] ? JSON.parse(JSON.stringify(JR.days[d])) : {}; j.t = j.t || {}; j.m = j.m || []; j.sup = j.sup || []; return j; }
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(m => m.w || m.h) && !(j.sup || []).length && !(j.n || '').trim(); }
+const jSaveT = {};
+function jPut(d, j) {
+  // úklid: nulové štítky a prázdná jídla pryč
+  Object.keys(j.t).forEach(k => { if (!(j.t[k] > 0)) delete j.t[k]; });
+  j.m = (j.m || []).filter(m => m.w || m.h);
+  if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;
+  jStatus('Ukládám…');
+  clearTimeout(jSaveT[d]); jSaveT[d] = setTimeout(() => jFlush(d), 700);
+}
+async function jFlush(d) {
+  const day = JR.days[d] || {};
+  try {
+    const r = CLOUD ? await gsRun('ghJournalSet', CLOUD.key, d, JSON.stringify(day))
+      : await (await fetch(`${API}/journal`, { method: 'POST', body: JSON.stringify({ date: d, day: day }), headers: { 'Content-Type': 'text/plain' } })).json();
+    if (!r.ok) throw new Error(r.error || 'neznámá chyba');
+    jStatus('Uloženo ✓');
+  } catch (e) { jStatus('Neuloženo: ' + (e.message || e), true); }
+}
+function jStatus(t, err) { const el = $('jst'); if (el) { el.textContent = t; el.classList.toggle('err', !!err); } }
+async function jCfgSave() {
+  try {
+    const r = CLOUD ? await gsRun('ghJournalCfg', CLOUD.key, JSON.stringify(JR.cfg))
+      : await (await fetch(`${API}/journal-cfg`, { method: 'POST', body: JSON.stringify(JR.cfg), headers: { 'Content-Type': 'text/plain' } })).json();
+    if (!r.ok) throw new Error(r.error); toast('Uloženo');
+  } catch (e) { note('Nastavení deníku se neuložilo: ' + esc(e.message || e), 'warn'); }
 }
 
-
-function renderBanner(){
-  const r=readinessOf(),ts=DATA.training_status||{};
-  const sc=Math.round(r.score||0);
-  let bg,border,color,label,desc;
-  if(sc>=80){bg='var(--accent-dim)';border='rgba(0,212,170,0.22)';color='var(--accent)';label='TRÉNINK OK';desc='Všechny metriky zelené.';}
-  else if(sc>=60){bg='var(--warn-dim)';border='rgba(255,181,71,0.22)';color='var(--warn)';label='POSLECHNI TĚLO';desc='Lehčí pohyb — žádný náročný trénink.';}
-  else{bg='var(--danger-dim)';border='rgba(255,95,109,0.22)';color='var(--danger)';label='ODPOČÍVAT';desc='Tělo potřebuje regeneraci.';}
-  const el=document.getElementById('readinessBanner');
-  el.style.cssText=`background:${bg};border-color:${border};display:flex`;
-  el.innerHTML=`<div class="readiness-score" style="color:${color}">${sc}<sup>/100</sup></div>
-    <div class="readiness-info">
-      <div class="readiness-label" style="color:${color}">${label}</div>
-      <div class="readiness-desc">${desc}${r.est
-        ?` · odhad z ${r.parts.map(p=>p[0]+' '+Math.round(p[2])).join(' · ')||'—'} (Garmin readiness API nedává)`
-        :` · Acute ${ts.training_load_acute??ts.acute_load??'—'} · Chronic ${ts.training_load_chronic??ts.chronic_load??'—'}`}</div>
-    </div>`;
+// ══════════ VLIVY ══════════
+// Faktor dne D (večer / během dne) → výsledek ráno D+1 (Garmin přiřazuje spánek a HRV k datu probuzení).
+// Výsledek se porovnává s osobním průměrem předchozích 14 rán (min. 5 hodnot) — tím se odfiltruje dlouhodobý trend.
+// Efekt = průměrná odchylka dnů S faktorem − dnů BEZ něj; Welchův t. Štítky deníku se hodnotí jen ve dnech, kdy je deník
+// vyplněný (nevyplněný den ≠ „bez alkoholu“); údaje z Garminu (trénink, otužování, kroky, stres) platí pro všechny dny.
+const OUT = {
+  hrv: { l: 'HRV', u: 'ms', k: 'hrv', better: 1, d: 0 },
+  sc:  { l: 'Skóre spánku', u: 'b.', k: 'sc', better: 1, d: 0 },
+  rhr: { l: 'Klidová TF', u: 'bpm', k: 'rhr', better: -1, d: 1 },
+  bb:  { l: 'Body Battery ráno', u: '', k: 'bb', better: 1, d: 0 },
+};
+const acts = d => (BYD[d] && BYD[d].a) || [];
+const isTrain = a => (a.l || 0) >= 20;
+function factors() {
+  const J = d => jDay(d), tg = (d, id, min) => { const j = J(d); return j ? ((j.t && j.t[id] || 0) >= (min || 1) ? 1 : 0) : null; };
+  const F = [];
+  TAGS.forEach(g => g.items.forEach(t => F.push({ id: 't:' + t.id, l: t.l, g: g.g, src: 'deník', f: d => tg(d, t.id) })));
+  F.push({ id: 't:alk2', l: 'Alkohol 2+ sklenky', g: 'Jídlo a pití', src: 'deník', f: d => tg(d, 'alk', 2) });
+  F.push({ id: 'm:late', l: 'Jídlo po 20 h', g: 'Jídlo a pití', src: 'deník', f: d => { const j = J(d); if (!j) return null; return (j.m || []).some(m => (m.h || '') >= '20:00') || (j.t || {}).vecere_pozde ? 1 : 0; } });
+  (JR.cfg.tags || []).forEach(t => F.push({ id: 't:' + t.id, l: t.l, g: 'Vlastní', src: 'deník', f: d => tg(d, t.id) }));
+  (JR.cfg.sup || []).forEach(s => F.push({ id: 's:' + s.id, l: s.l, g: 'Doplňky', src: 'deník', f: d => { const j = J(d); return j ? ((j.sup || []).includes(s.id) ? 1 : 0) : null; } }));
+  const hasDay = d => !!BYD[d];
+  const gF = (id, l, fn) => F.push({ id: id, l: l, g: 'Z Garminu', src: 'Garmin', f: d => hasDay(d) ? (fn(d) ? 1 : 0) : null });
+  gF('g:train', 'Trénink (zátěž ≥ 20)', d => acts(d).some(isTrain));
+  gF('g:hard', 'Tvrdý trénink (zátěž ≥ 100 / TE ≥ 3,5)', d => acts(d).some(a => (a.l || 0) >= 100 || (a.te || 0) >= 3.5));
+  gF('g:late', 'Trénink po 18 h', d => acts(d).some(a => isTrain(a) && a.h >= 18));
+  gF('g:cold', 'Otužování (Garmin + deník)', d => acts(d).some(a => /cold|plunge|otu[žz]|ledov/i.test(a.n || '')) || tg(d, 'otuz') === 1);
+  gF('g:sauna', 'Sauna (Garmin + deník)', d => acts(d).some(a => /sauna/i.test(a.n || '')) || tg(d, 'sauna') === 1);
+  gF('g:med', 'Meditace / dech (Garmin + deník)', d => acts(d).some(a => /medit|breath|dech/i.test((a.n || '') + ' ' + (a.k || ''))) || tg(d, 'med') === 1 || tg(d, 'dech') === 1);
+  gF('g:steps', 'Kroky ≥ 10 000', d => (BYD[d].stp || 0) >= 10000);
+  gF('g:stress', 'Stresový den (Ø stres ≥ 40)', d => (BYD[d].st || 0) >= 40);
+  return F;
+}
+function influence(ok) {
+  const o = OUT[ok], rows = [];
+  DAYS.forEach(x => {
+    const n = BYD[addD(x.d, 1)], y = n ? num(n[o.k]) : null; if (y == null) return;
+    const prev = []; for (let i = 0; i < 14; i++) { const p = BYD[addD(x.d, -i)]; const v = p ? num(p[o.k]) : null; if (v != null) prev.push(v); }
+    if (prev.length < 5) return;
+    rows.push({ d: x.d, r: y - avg(prev) });
+  });
+  const res = factors().map(f => {
+    const w = [], wo = [];
+    rows.forEach(r => { const x = f.f(r.d); if (x == null) return; (x ? w : wo).push(r.r); });
+    if (w.length < 3 || wo.length < 3) return { f, n1: w.length, n0: wo.length, ok: false };
+    const e = avg(w) - avg(wo), se = Math.sqrt(vr(w) / w.length + vr(wo) / wo.length), t = se > 0 ? e / se : 0;
+    return { f, n1: w.length, n0: wo.length, e, t, ok: true, good: e * o.better > 0 };
+  });
+  return { rows: rows.length, ok: res.filter(r => r.ok).sort((a, b) => Math.abs(b.t) - Math.abs(a.t)), few: res.filter(r => !r.ok && r.n1 > 0) };
+}
+function confPill(r) { return r.n1 < 8 ? '<span class="pill pill-ok">málo dat</span>' : Math.abs(r.t) >= 2 ? '<span class="pill pill-info">průkazné</span>' : '<span class="pill pill-ok">naznačuje</span>'; }
+function infRows(res, o, max) {
+  const m = Math.max(...res.map(r => Math.abs(r.e)), 0.0001);
+  return res.slice(0, max || 99).map(r => {
+    const w = Math.abs(r.e) / m * 50, col = tok(r.good ? '--green' : '--red');
+    const bar = `<i style="background:${col};width:${w}%;${r.e >= 0 ? 'left:50%' : 'right:50%'}"></i>`;
+    return `<div class="inf"><div class="inf-n">${esc(r.f.l)}<small>${esc(r.f.src)} · ${r.n1}× s, ${r.n0}× bez</small></div><div class="dbar">${bar}</div>`
+      + `<div class="inf-v" style="color:${col}">${sgn(r.e, o.d)} ${esc(o.u)}<small>${confPill(r)}</small></div></div>`;
+  }).join('');
 }
 
-function renderAlerts(){
-  const h=DATA.hrv||{},d=DATA.daily||{},sl=DATA.sleep_latest||{};
-  const hrv=h.last_night_avg??sl.avg_overnight_hrv??0;
-  const hr=d.resting_heart_rate??sl.resting_heart_rate??0;
-  const bb=d.body_battery_at_wake??d.body_battery_most_recent??0;
-  const sl2=DATA.sleep_latest||{};
-  const sleepScore=sl2.sleep_score_overall??0;
-  // Použij prahy z T
-  const al=[];
-  if(hrv>0&&hrv<T.hrv_warn.val)
-    al.push({t:'danger',title:`HRV kritická: ${hrv} ms`,body:'Žádný trénink. Při příznacích kontaktovat lékaře.'});
-  else if(hrv>0&&hrv<T.hrv_ok.val)
-    al.push({t:'warn',title:`HRV nízká: ${hrv} ms`,body:`Pod baselineem (${h.baseline_low??T.hrv_ok.val}–${h.baseline_upper??39} ms). Lehčí pohyb.`});
-  else if(hrv>0)
-    al.push({t:'ok',title:`HRV v normálu: ${hrv} ms`,body:'Nervový systém se dobře regeneruje.'});
-  if(hr>T.hr_danger.val)
-    al.push({t:'danger',title:`TF kritický: ${hr} bpm`,body:'Lékař nebo hematolog ihned.'});
-  else if(hr>T.hr_warn.val)
-    al.push({t:'warn',title:`TF zvýšený: ${hr} bpm`,body:'Sledovat 2–3 dny.'});
-  if(bb>0&&bb<T.bb_warn.val)
-    al.push({t:'warn',title:`Body Battery nízká: ${bb}`,body:'Náročný trénink dnes nevhodný.'});
-  if(sleepScore>0&&sleepScore<T.sleep_warn.val)
-    al.push({t:'warn',title:`Skóre spánku nízké: ${sleepScore}`,body:'Intenzitu tréninku snížit. Priorita: spánek a regenerace.'});
-  document.getElementById('alertsContainer').innerHTML=al.map(a=>`
-    <div class="alert-item alert-${a.t}"><div class="alert-dot"></div>
-    <div class="alert-text"><strong>${a.title}</strong><span>${a.body}</span></div></div>`).join('');
+// ══════════ VYKRESLENÍ ══════════
+const IC = {
+  dnes: '<path d="M3 12h4l2-5 4 10 2-5h6"/>',
+  trendy: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+  denik: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/>',
+  vlivy: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+};
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['vlivy', 'Vlivy'], ['nast', 'Nastavení']];
+const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
+function navInit() {
+  $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}</button>`).join('');
+  $('sidenav').innerHTML = '<div class="sn-gl">Garmin Health</div>' + NAV.map(([k, l]) => `<button class="sn-i" data-p="${k}">${svgI(k)}<span>${l}</span></button>`).join('')
+    + '<div class="sn-foot" id="snfoot"></div>';
+  $('bnav').innerHTML = NAV.map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span></button>`).join('');
+  document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
 }
-
-function renderDate(){
-  const now=new Date();
-  const days=['Neděle','Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota'];
-  const months=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
-  document.getElementById('dateDisplay').textContent=`${days[now.getDay()]} ${now.getDate()}. ${months[now.getMonth()]}`;
-  document.getElementById('dateSmall').textContent=`${now.getFullYear()} · data z Garmin Connect`;
-  document.getElementById('lastUpdated').textContent=META&&META.at
-    ?(META.src==='cloud'?'sync ':'načteno ')+new Date(META.at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(META.src==='cloud'&&META.ageH>=1?` · před ${Math.round(META.ageH)} h`:'')
-    :now.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
-  if(DATA?.date)document.getElementById('dataDate').textContent=`data: ${DATA.date}`+(META&&META.at?` · ${document.getElementById('lastUpdated').textContent}`:'');
+function go(p) {
+  PAGE = p; try { history.replaceState(null, '', '#' + p); } catch (e) {}
+  document.querySelectorAll('.page').forEach(s => s.classList.toggle('active', s.id === 'p-' + p));
+  document.querySelectorAll('[data-p]').forEach(b => { const on = b.dataset.p === p; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  renderPage(); window.scrollTo(0, 0);
 }
-
-function renderAll(){
-  renderDate();renderBanner();renderAlerts();renderCards();renderCharts();renderThresholds();
-  // Re-render VST if that tab is active
-  if(document.getElementById('tab-vst').classList.contains('active')) renderVST();
+function renderAll() {
+  $('age').textContent = ageText(); $('age').classList.toggle('stale', !!(META && META.stale));
+  const f = $('snfoot'); if (f) f.innerHTML = DATA ? 'Data za ' + esc(dShort(DATA.date)) + '<br>' + esc(ageText()) : '';
+  renderPage();
 }
-
-(async()=>{
-  renderDate();
-  renderThresholds();
-  try{DATA=await fetchData();dataOk();renderAll();}
-  catch(e){dataFail(e);}
-})();
-
-// ── TAB SWITCHING ─────────────────────────────────────────────────
-function switchTab(name, el) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  el.classList.add('active');
+function renderPage() {
   if (!DATA) return;
-  if (name === 'vst') renderVST();
-  if (name === 'hr') renderHR();
-  if (name === 'bb') renderBB();
-  if (name === 'resp') renderResp();
-  if (name === 'sleep') renderSleep();
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, vlivy: renderVlivy, nast: renderNast })[PAGE](); }
+  catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
-// ── VST DATA & CHART ────────────────────────────────────────────
-let vstChart = null;
-let vstCurrentDays = 180;
-let vstZ1 = 26;  // red below
-let vstZ2 = 30;  // orange below, green above
-let vstAvgDays = 7; // rolling average window
+// ── minigrafy ──
+function spark(vals, col) {
+  const v = vals.map(num), ok = v.filter(x => x != null); if (ok.length < 2) return '';
+  const W = 200, H = 36, mn = Math.min(...ok), mx = Math.max(...ok), rg = mx - mn || 1;
+  const pts = v.map((x, i) => x == null ? null : [i * W / (v.length - 1), H - 4 - (x - mn) / rg * (H - 8)]).filter(Boolean);
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" points="${pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')}"/><circle cx="${last[0]}" cy="${last[1]}" r="2.6" fill="${col}"/></svg>`;
+}
+function ring(score, col) {
+  const r = 52, c = 2 * Math.PI * r, p = score == null ? 0 : Math.max(0, Math.min(100, score)) / 100;
+  return `<div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${r}" fill="none" stroke="${tok('--bg4')}" stroke-width="10"/>`
+    + `<circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(c * p).toFixed(1)} ${c.toFixed(1)}"/></svg>`
+    + `<div class="ring-v"><div class="ring-n">${score == null ? '—' : score}</div><div class="ring-u">ze 100</div></div></div>`;
+}
+const last14 = k => { const out = []; for (let i = 13; i >= 0; i--) { const x = BYD[addD(TODAY(), -i)]; out.push(x ? x[k] : null); } return out; };
+function avgK(k, n) { const v = []; for (let i = 0; i < n; i++) { const x = BYD[addD(TODAY(), -i)]; if (x && num(x[k]) != null) v.push(num(x[k])); } return v.length ? avg(v) : null; }
+function pill(t, kind) { return `<span class="pill pill-${kind}">${esc(t)}</span>`; }
 
-function vstLoadZones(){
-  try{
-    const s=stGet('garmin_vst_zones');
-    if(s){const p=JSON.parse(s);vstZ1=p.z1||26;vstZ2=p.z2||30;vstAvgDays=p.avgDays||7;}
-  }catch(e){}
-  const el1=document.getElementById('vstZ1Edit');
-  const el2=document.getElementById('vstZ2Edit');
-  const el2l=document.getElementById('vstZ2Label');
-  const elAvg=document.getElementById('vstAvgDaysEdit');
-  if(el1)el1.textContent=vstZ1;
-  if(el2)el2.textContent=vstZ2;
-  if(el2l)el2l.textContent=vstZ2;
-  if(elAvg)elAvg.textContent=vstAvgDays;
+// ── Dnes ──
+function renderDnes() {
+  const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
+  const R = readinessOf(), sc = R.score;
+  const rk = sc == null ? 'ok' : sc >= T.ready_ok.val ? 'good' : sc >= T.ready_warn.val ? 'warn' : 'crit';
+  const rcol = tok(rk === 'good' ? '--green' : rk === 'warn' ? '--amber' : rk === 'crit' ? '--crit' : '--text3');
+  const rl = sc == null ? 'MÁLO DAT' : rk === 'good' ? 'TRÉNINK OK' : rk === 'warn' ? 'POSLECHNI TĚLO' : 'ODPOČÍVAT';
+  const rd = sc == null ? 'Chybí HRV i spánek za poslední noc.' : rk === 'good' ? 'Metriky v normálu — náročnější trénink je v pořádku.' : rk === 'warn' ? 'Lehčí pohyb, žádný náročný trénink.' : 'Tělo potřebuje regeneraci.';
+  const comp = R.parts.map(p => { const c = tok(p[2] >= 70 ? '--green' : p[2] >= 45 ? '--amber' : '--crit');
+    return `<span class="t2">${esc(p[0])}</span><div class="bar"><i style="width:${p[2]}%;background:${c}"></i></div><span>${Math.round(p[2])}</span>`; }).join('');
+  const al = alertsOf();
+  const hrv = h.last_night_avg, hr = d.resting_heart_rate ?? sl.resting_heart_rate, bb = d.body_battery_at_wake ?? d.body_battery_most_recent, ss = sl.sleep_score_overall;
+  const st = d.average_stress_level, fa = f.fitness_age != null ? Math.round(f.fitness_age * 10) / 10 : null;
+  const tile = (l, v, u, p, sub, sp) => `<div class="card kpi"><div class="kpi-top"><span class="lbl">${l}</span>${p || ''}</div><div class="kpi-v">${v}<small>${u}</small></div><div class="kpi-s">${sub}</div>${sp || ''}</div>`;
+  const hrvP = hrv == null ? '' : hrv >= T.hrv_ok.val ? pill('normál', 'ok') : hrv >= T.hrv_warn.val ? pill('nízká', 'amber') : pill('kritická', 'crit');
+  const hrP = hr == null ? '' : hr > T.hr_danger.val ? pill('vysoká', 'crit') : hr > T.hr_warn.val ? pill('zvýšená', 'amber') : pill('normál', 'ok');
+  const bbP = bb == null ? '' : bb >= T.bb_ok.val ? pill('dobrá', 'ok') : bb >= T.bb_warn.val ? pill('nízká', 'amber') : pill('kritická', 'crit');
+  const ssP = ss == null ? '' : ss >= 70 ? pill('dobrý', 'ok') : ss >= T.sleep_warn.val ? pill('uspokojivý', 'amber') : pill('špatný', 'crit');
+  const stP = st == null ? '' : st <= 25 ? pill('klid', 'ok') : st <= 50 ? pill('nízký', 'ok') : st <= 75 ? pill('střední', 'amber') : pill('vysoký', 'crit');
+  const faP = fa == null ? '' : fa <= (f.chronological_age || 99) ? pill('mladší', 'ok') : pill('starší', 'amber');
+  const hrv7 = avgK('hrv', 7), r7 = d.avg_resting_heart_rate_7day ?? avgK('rhr', 7);
+  // Dnes jen výrazné vlivy (|t| ≥ 1,5, aspoň 5 dní s faktorem), bez odvozené varianty, když je vidět základní (Alkohol 2+ vs Alkohol)
+  const infAll = DAYS.length > 20 ? influence('hrv').ok : [], ids = new Set(infAll.map(r => r.f.id));
+  const inf = { ok: infAll.filter(r => Math.abs(r.t) >= 1.5 && r.n1 >= 5 && !(r.f.id === 't:alk2' && ids.has('t:alk'))) };
+  const jt = TODAY(), jd = jEdit(jt);
+  const quick = QUICK.map(id => chipHtml(tagById(id), jd, jt)).join('');
+  const lastAct = a.activity_name ? `<div class="sm t2" style="margin-top:var(--sp-3)">Poslední aktivita: <b>${esc(a.activity_name)}</b> · ${esc(dShort(String(a.start_time_local || '').slice(0, 10)))}${a.duration_min ? ' · ' + fmt(a.duration_min) + ' min' : ''}${a.avg_hr ? ' · Ø TF ' + fmt(a.avg_hr) : ''}</div>` : '';
+  $('p-dnes').innerHTML = `
+  <div class="page-head"><div><div class="page-t">${esc(cap(dLong(TODAY())))}</div><div class="page-s">Data za ${esc(dShort(DATA.date))} · ${esc(ageText())}</div></div></div>
+  <div class="grid g-hero">
+    <div class="card"><div class="hero">${ring(sc, rcol)}<div style="min-width:0;flex:1">
+      <div class="lbl">${R.est ? 'Připravenost (odhad)' : 'Training Readiness'}</div>
+      <div class="hero-l" style="color:${rcol}">${rl}</div><div class="hero-d">${rd}</div>
+      ${R.parts.length ? `<div class="comp">${comp}</div>` : ''}
+      ${R.est ? '<div class="xs muted" style="margin-top:var(--sp-2)">Odhad z HRV, spánku, Body Battery a klidové TF — Garmin readiness přes API nedává.</div>' : ''}
+    </div></div>${lastAct}</div>
+    <div class="card"><div class="card-h"><div class="card-t">Dnes hlídat</div></div>
+      <div class="alerts">${al.length ? al.map(x => `<div class="alert a-${x.t}"><div><b>${esc(x.h)}</b><span class="t2">${esc(x.b)}</span></div></div>`).join('') : '<div class="muted sm">Žádná upozornění.</div>'}</div></div>
+  </div>
+  <div class="grid g-kpi">
+    ${tile('HRV', fmt(hrv), 'ms', hrvP, `baseline ${fmt(h.baseline_low)}–${fmt(h.baseline_upper)} · 7d Ø ${fmt(hrv7)}`, spark(last14('hrv'), tok('--blue')))}
+    ${tile('Klidová TF', fmt(hr), 'bpm', hrP, `7d Ø ${fmt(r7)}`, spark(last14('rhr'), tok('--blue')))}
+    ${tile('Body Battery ráno', fmt(bb), '', bbP, `max ${fmt(d.body_battery_highest)} · teď ${fmt(d.body_battery_most_recent)}`, spark(last14('bb'), tok('--blue')))}
+    ${tile('Spánek', fmt(ss), 'b.', ssP, `${hm(sl.sleep_hours)} · hluboký ${fmt(sl.deep_min)} min · REM ${fmt(sl.rem_min)} min`, spark(last14('sc'), tok('--blue')))}
+    ${tile('Stres dne', fmt(st), '', stP, `max ${fmt(d.max_stress_level)} · dýchání ${fmt(d.avg_waking_respiration)}`, spark(last14('st'), tok('--blue')))}
+    ${tile('Fitness věk', fa == null ? '—' : fmt(fa, 1), 'let', faP, `chronologický ${fmt(f.chronological_age)}`, '')}
+  </div>
+  <div class="grid g-2">
+    <div class="card"><div class="card-h"><div class="card-t">Deník dnes</div><span class="save-st" id="jst"></span></div>
+      <div class="chips" id="quick">${quick}</div>
+      <div style="margin-top:var(--sp-3)"><button class="lnk" data-go="denik">Celý deník — jídla, doplňky, poznámka →</button></div></div>
+    <div class="card"><div class="card-h"><div class="card-t">Co nejvíc ovlivňuje tvé HRV</div><button class="lnk" data-go="vlivy">Vlivy →</button></div>
+      ${inf.ok.length ? infRows(inf.ok, OUT.hrv, 3) : '<div class="muted sm">Zatím žádný výrazný vliv. Vlivy z Garminu (trénink, otužování, kroky, stres) se počítají z historie hned, vlivy z deníku se ukážou po ~2 týdnech zápisů.</div>'}</div>
+  </div>`;
+  bindChips($('quick'), jt);
+  document.querySelectorAll('#p-dnes [data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
 }
 
-function vstZoneSave(){
-  const v1=parseFloat(document.getElementById('vstZ1Edit')?.textContent||vstZ1);
-  const v2=parseFloat(document.getElementById('vstZ2Edit')?.textContent||vstZ2);
-  const va=parseInt(document.getElementById('vstAvgDaysEdit')?.textContent||vstAvgDays);
-  if(!isNaN(v1))vstZ1=v1;
-  if(!isNaN(v2))vstZ2=v2;
-  if(!isNaN(va)&&va>=2&&va<=30)vstAvgDays=va;
-  const el2l=document.getElementById('vstZ2Label');
-  if(el2l)el2l.textContent=vstZ2;
-  stSet('garmin_vst_zones',JSON.stringify({z1:vstZ1,z2:vstZ2,avgDays:vstAvgDays}));
-  if(DATA)renderVST();
+// ── čipy deníku ──
+function chipHtml(t, j, d) {
+  if (!t) return '';
+  const v = (j.t || {})[t.id] || 0;
+  if (t.c) return `<span class="chip${v ? ' on' : ''}" data-t="${t.id}" data-c="${t.c}">${esc(t.l)}<span class="cnt"><button type="button" data-a="-" aria-label="méně">−</button><b>${v ? v : 0}</b><button type="button" data-a="+" aria-label="více">+</button></span>${t.u ? '<span class="xs muted">' + esc(t.u) + '</span>' : ''}</span>`;
+  return `<button type="button" class="chip${v ? ' on' : ''}" data-t="${t.id}" aria-pressed="${v ? 'true' : 'false'}">${esc(t.l)}</button>`;
+}
+function bindChips(root, d) {
+  root.querySelectorAll('[data-t]').forEach(el => {
+    const id = el.dataset.t, step = +el.dataset.c || 0;
+    const upd = delta => { const j = jEdit(d), v = Math.max(0, (j.t[id] || 0) + delta); j.t[id] = v; jPut(d, j); const nj = jEdit(d), nv = nj.t[id] || 0;
+      el.classList.toggle('on', nv > 0); if (step) el.querySelector('b').textContent = nv; else el.setAttribute('aria-pressed', nv ? 'true' : 'false'); };
+    if (step) el.querySelectorAll('button[data-a]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); upd(b.dataset.a === '+' ? step : -step); }));
+    else el.addEventListener('click', () => { const j = jEdit(d); upd(j.t[id] ? -1 : 1); });
+  });
 }
 
-function vstGetColor(hrv){
-  if(hrv===null||hrv===undefined||hrv<=0)return'#5a6e82';
-  if(hrv<vstZ1)return'#ff5f6d';
-  if(hrv<vstZ2)return'#ffb547';
-  return'#00d4aa';
+// ── Deník ──
+function renderDenik() {
+  const d = UI.jday || TODAY(), j = jEdit(d), x = BYD[d] || {}, sup = JR.cfg.sup || [], ctags = JR.cfg.tags || [];
+  const actsH = (x.a || []).map(a => `<span class="chip auto">${esc(a.n || a.k)}${a.h != null ? ' · ' + a.h + ' h' : ''}${a.m ? ' · ' + a.m + ' min' : ''}${a.l ? ' · zátěž ' + a.l : ''}</span>`).join('');
+  const meals = (j.m.length ? j.m : [{ s: 'sn' }, { s: 'ob' }, { s: 've' }]).map((m, i) => mealRow(m, i)).join('');
+  $('p-denik').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Deník</div><div class="page-s">Co jíš, piješ a děláš — Vlivy z toho počítají, co tvé HRV a spánek ovlivňuje.</div></div>
+    <div class="daynav"><button class="btn" id="jprev" aria-label="Předchozí den">‹</button><div class="daynav-t">${esc(cap(dLong(d)))}</div>
+    <button class="btn" id="jnext" aria-label="Další den" ${d >= TODAY() ? 'disabled' : ''}>›</button>${d !== TODAY() ? '<button class="btn btn-ghost" id="jtoday">Dnes</button>' : ''}</div></div>
+  <div class="card"><div class="card-h"><div class="card-t">Štítky dne</div><span class="save-st" id="jst"></span></div>
+    ${TAGS.map(g => `<div class="grp"><div class="lbl">${esc(g.g)}</div><div class="chips">${g.items.map(t => chipHtml(t, j, d)).join('')}</div></div>`).join('')}
+    ${ctags.length ? `<div class="grp"><div class="lbl">Vlastní</div><div class="chips">${ctags.map(t => chipHtml({ id: t.id, l: t.l }, j, d)).join('')}</div></div>` : ''}
+    <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${j.sup.includes(s.id) ? ' on' : ''}" data-s="${esc(s.id)}">${esc(s.l)}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div></div>
+    ${actsH ? `<div class="grp"><div class="lbl">Z Garminu (automaticky)</div><div class="chips">${actsH}</div></div>` : ''}
+  </div>
+  <div class="card"><div class="card-h"><div class="card-t">Jídla</div><span class="card-s">Čas pomůže najít vliv pozdního jídla</span></div>
+    <div class="meals" id="jmeals">${meals}</div>
+    <div style="margin-top:var(--sp-3)"><button class="btn" id="jaddm">+ Přidat jídlo</button></div></div>
+  <div class="card"><div class="card-h"><div class="card-t">Poznámka</div></div>
+    <textarea id="jnote" placeholder="Jak se cítíš, co bylo jinak…">${esc(j.n || '')}</textarea></div>`;
+  const P = $('p-denik');
+  bindChips(P, d);
+  P.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { const jj = jEdit(d), id = b.dataset.s, i = jj.sup.indexOf(id); if (i >= 0) jj.sup.splice(i, 1); else jj.sup.push(id); jPut(d, jj); b.classList.toggle('on', i < 0); }));
+  P.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+  $('jprev').onclick = () => { UI.jday = addD(d, -1); renderDenik(); };
+  $('jnext').onclick = () => { if (d < TODAY()) { UI.jday = addD(d, 1); renderDenik(); } };
+  if ($('jtoday')) $('jtoday').onclick = () => { UI.jday = null; renderDenik(); };
+  $('jnote').addEventListener('input', e => { const jj = jEdit(d); jj.n = e.target.value.slice(0, 2000); jPut(d, jj); });
+  const saveMeals = () => { const jj = jEdit(d); jj.m = [...$('jmeals').querySelectorAll('.meal')].map(r => ({ s: r.querySelector('select').value, h: r.querySelector('input[type=time]').value, w: r.querySelector('input[type=text]').value.slice(0, 200) })); jPut(d, jj); };
+  $('jmeals').addEventListener('input', saveMeals); $('jmeals').addEventListener('change', saveMeals);
+  $('jmeals').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { b.closest('.meal').remove(); saveMeals(); } });
+  $('jaddm').onclick = () => { $('jmeals').insertAdjacentHTML('beforeend', mealRow({ s: 'sv' }, Date.now())); };
+}
+function mealRow(m, i) {
+  return `<div class="meal"><select aria-label="Jídlo">${MEAL_S.map(([k, l]) => `<option value="${k}"${m.s === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`
+    + `<input type="time" value="${esc(m.h || '')}" aria-label="Čas"><input class="meal-w" type="text" value="${esc(m.w || '')}" placeholder="Co jsi jedl / pil" aria-label="Co">`
+    + `<button class="btn btn-ghost" data-rm="${i}" aria-label="Odebrat">✕</button></div>`;
 }
 
-function vstSetRange(days,el){
-  vstCurrentDays=days;
-  document.querySelectorAll('.vst-range-btn').forEach(b=>b.classList.remove('active'));
-  if(el)el.classList.add('active');
-  renderVST();
+// ── Vlivy ──
+function renderVlivy() {
+  const o = OUT[UI.out], R = influence(UI.out), nJ = Object.keys(JR.days).length;
+  $('p-vlivy').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Vlivy</div><div class="page-s">Co je spojené s lepší nebo horší noční regenerací — z tvých dat.</div></div>
+    <div class="seg" id="vout">${Object.keys(OUT).map(k => `<button data-k="${k}" class="${k === UI.out ? 'on' : ''}">${OUT[k].l}</button>`).join('')}</div></div>
+  <div class="card"><div class="card-h"><div class="card-t">${esc(o.l)} ráno po dni s faktorem</div><span class="card-s">${R.rows} nocí · deník ${nJ} dní</span></div>
+    <div class="legend" style="margin-bottom:var(--sp-3)"><span><i style="background:${tok('--green')}"></i>lepší než bez faktoru</span><span><i style="background:${tok('--red')}"></i>horší</span></div>
+    ${R.ok.length ? infRows(R.ok, o) : '<div class="empty">Zatím málo dat pro porovnání. Každý faktor potřebuje aspoň 3 dny s ním a 3 bez něj.</div>'}
+  </div>
+  ${R.few.length ? `<div class="card"><div class="card-t" style="margin-bottom:var(--sp-2)">Zatím málo dat</div><div class="chips">${R.few.map(r => `<span class="chip auto">${esc(r.f.l)} · ${r.n1}×</span>`).join('')}</div></div>` : ''}
+  <div class="card sm t2"><b class="t2">Jak to počítám.</b> Pro každý den porovnám ${esc(o.l)} následujícího rána s tvým průměrem předchozích 14 rán (tím odpadne dlouhodobý trend).
+    Pak srovnám dny <i>s</i> faktorem a <i>bez</i> něj. Štítky z deníku počítám jen ve dnech, kdy je deník vyplněný. „Průkazné“ = rozdíl je aspoň 2× větší než jeho nejistota a vzorek ≥ 8 dní.
+    Je to souvislost, ne důkaz příčiny — faktory se často vyskytují spolu (např. alkohol a pozdní večeře).</div>`;
+  $('vout').querySelectorAll('button').forEach(b => b.onclick = () => { UI.out = b.dataset.k; renderVlivy(); });
 }
 
-function renderVSTStats(slice){
-  if(!slice.length)return;
-  const vals=slice.map(d=>d.hrv).filter(v=>v>0);
-  if(!vals.length)return;
-  const avg=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
-  const mx=Math.max(...vals),mn=Math.min(...vals);
-  const low=slice.filter(d=>d.hrv>0&&d.hrv<vstZ2).length;
-  const green=slice.filter(d=>d.hrv>=vstZ2).length;
-  const latest=slice[slice.length-1];
-  const baseline=latest.baseline_low?`${latest.baseline_low}–${latest.baseline_upper} ms`:'—';
-  const stats=[
-    {lbl:'Průměr HRV',val:avg,unit:'ms',sub:`za ${slice.length} dní`,color:'#e8edf5'},
-    {lbl:'Maximum',val:mx,unit:'ms',sub:'v období',color:'#00d4aa'},
-    {lbl:'Minimum',val:mn,unit:'ms',sub:'v období',color:mn<vstZ1?'#ff5f6d':mn<vstZ2?'#ffb547':'#00d4aa'},
-    {lbl:'Základní pásmo',val:baseline,unit:'',sub:'aktuální baseline',color:'#60a5fa'},
-    {lbl:'Dny pod limitem',val:low,unit:'d',sub:`z ${slice.length}`,color:low>10?'#ff5f6d':'#7a8899'},
-    {lbl:'Dny zelená',val:green,unit:'d',sub:`${Math.round(green/slice.length*100)}% dnů`,color:'#00d4aa'},
-  ];
-  document.getElementById('vstStats').innerHTML=stats.map(s=>`
-    <div class="vst-stat">
-      <div class="vst-stat-lbl">${s.lbl}</div>
-      <div class="vst-stat-val" style="color:${s.color}">${s.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${s.unit}</span></div>
-      <div class="vst-stat-sub">${s.sub}</div>
-    </div>`).join('');
+// ── Trendy ──
+const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres']];
+const RANGES = [[14, '14 d'], [30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Vše']];
+let CH = null;
+function renderTrendy() {
+  const m = UI.trend, z = zones(m);
+  const zEd = z ? `<div class="zones"><span class="lbl">Zóny</span><label>${z.up ? 'červená pod' : 'zelená do'} <input type="number" id="z1" value="${z.z1}"></label>
+    <label>${z.up ? 'žlutá pod' : 'žlutá do'} <input type="number" id="z2" value="${z.z2}"></label><label>Klouzavý průměr <input type="number" id="za" value="${z.avgDays}" min="1" max="60"> dní</label></div>` : '';
+  $('p-trendy').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Trendy</div><div class="page-s">Vývoj metrik s tvými zónami a klouzavým průměrem.</div></div>
+    <div class="seg" id="trng">${RANGES.map(([v, l]) => `<button data-v="${v}" class="${v === UI.range ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+  <div class="seg seg-scroll" id="tmet" style="margin-bottom:var(--sp-4)">${TR.map(([k, l]) => `<button data-k="${k}" class="${k === m ? 'on' : ''}">${l}</button>`).join('')}</div>
+  <div class="card"><div class="card-h"><div class="card-t" id="ttl"></div><div class="legend" id="tleg"></div></div>
+    <div class="chart-box"><canvas id="tch"></canvas></div>${zEd}<div class="stats" id="tst"></div></div>`;
+  $('tmet').querySelectorAll('button').forEach(b => b.onclick = () => { UI.trend = b.dataset.k; renderTrendy(); });
+  $('trng').querySelectorAll('button').forEach(b => b.onclick = () => { UI.range = +b.dataset.v; renderTrendy(); });
+  if (z) ['z1', 'z2', 'za'].forEach(id => $(id).addEventListener('change', () => { const nz = { z1: +$('z1').value || z.z1, z2: +$('z2').value || z.z2, avgDays: Math.max(1, Math.min(60, +$('za').value || z.avgDays)) }; zoneSave(m, nz); drawTrend(); }));
+  drawTrend();
 }
-
-function renderVST(){
-  vstLoadZones();
-  const all=DATA.hrv_history||[];
-  if(!all.length)return;
-  const slice=vstCurrentDays===0?all:all.slice(-vstCurrentDays);
-  renderVSTStats(slice);
-  if(slice.length){
-    document.getElementById('vstDateRange').textContent=`${slice[0].date} → ${slice[slice.length-1].date}`;
-  }
-  // Přidat 10 prázdných dní dopředu
-  const lastDate = slice.length ? new Date(slice[slice.length-1].date) : new Date();
-  const extraLabels = [];
-  for(let i=1;i<=10;i++){
-    const d=new Date(lastDate);d.setDate(d.getDate()+i);
-    extraLabels.push(`${d.getDate()}.${d.getMonth()+1}.`);
-  }
-  const labels=[...slice.map(d=>d.label),...extraLabels];
-  const nullPad = Array(10).fill(null);
-  const hrv=[...slice.map(d=>d.hrv),...nullPad];
-
-  // Rolling 7-day average computed from actual HRV values (not Garmin's weekly_avg)
-  // Use ALL history data for proper rolling window at start of slice
-  const allHrv = DATA.hrv_history || [];
-  const allHrvMap = {};
-  allHrv.forEach(d=>{ if(d.date && d.hrv) allHrvMap[d.date]=d.hrv; });
-
-  function rolling7(sliceArr, idx) {
-    // Collect up to 7 values ending at idx (inclusive) from full history
-    const targetDate = new Date(sliceArr[idx].date);
-    let vals = [];
-    for(let k=0; k<allHrv.length; k++){
-      const d = new Date(allHrv[k].date);
-      const diffDays = Math.round((targetDate - d) / 86400000);
-      if(diffDays >= 0 && diffDays < vstAvgDays && allHrv[k].hrv > 0) vals.push(allHrv[k].hrv);
+function trendRows() { const from = UI.range ? addD(TODAY(), -UI.range + 1) : '0000'; return DAYS.filter(x => x.d >= from); }
+function valOf(x, m) { return m === 'resp' ? num(x.rs ?? x.rsN) : m === 'sleep' ? num(x.sc) : num(x[m]); }
+function drawTrend() {
+  const m = UI.trend, rows = trendRows(), z = zones(m), labels = rows.map(x => dShort(x.d));
+  if (CH) { CH.destroy(); CH = null; }
+  const grid = tok('--grid'), t3 = tok('--text3'), font = { family: tok('--sans') || 'Inter', size: 11 };
+  const base = { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: tok('--bg4'), borderColor: tok('--border2'), borderWidth: 1, titleColor: tok('--text'), bodyColor: tok('--text2'), padding: 10, titleFont: font, bodyFont: font } },
+    scales: { x: { ticks: { color: t3, font, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: grid } }, y: { ticks: { color: t3, font }, grid: { color: grid } } } };
+  let title = '', leg = '';
+  if (m === 'sleep') {
+    title = 'Spánek — fáze a skóre';
+    const H = k => rows.map(x => x[k] != null ? Math.round(x[k] / 6) / 10 : null);
+    const ds = [['deep', 'Hluboký', '--s-deep'], ['rem', 'REM', '--s-rem'], ['light', 'Lehký', '--s-light'], ['awake', 'Bdění', '--s-awake']]
+      .map(([k, l, c]) => ({ type: 'bar', label: l + ' (h)', data: H(k), backgroundColor: tok(c), stack: 's', yAxisID: 'y', borderRadius: 2 }));
+    const hasStages = rows.some(x => x.deep != null);
+    ds.push({ type: 'line', label: 'Skóre', data: rows.map(x => num(x.sc)), borderColor: tok('--text'), backgroundColor: tok('--text'), pointRadius: rows.length > 60 ? 0 : 2, borderWidth: 1.6, tension: .3, yAxisID: 'y2', spanGaps: true });
+    if (!hasStages) ds.unshift({ type: 'bar', label: 'Spánek (h)', data: rows.map(x => num(x.sh)), backgroundColor: tok('--s-light'), yAxisID: 'y', borderRadius: 2 });
+    CH = new Chart($('tch'), { data: { labels, datasets: hasStages ? ds : ds.filter(x => x.stack !== 's') }, options: { ...base, scales: { x: { ...base.scales.x, stacked: true }, y: { ...base.scales.y, stacked: true, title: { display: true, text: 'hodiny', color: t3, font } }, y2: { position: 'right', min: 0, max: 100, ticks: { color: t3, font }, grid: { display: false } } } } });
+    leg = [['Hluboký', '--s-deep'], ['REM', '--s-rem'], ['Lehký', '--s-light'], ['Bdění', '--s-awake'], ['Skóre', '--text']].map(([l, c]) => `<span><i style="background:${tok(c)}"></i>${l}</span>`).join('');
+    const sc = rows.map(x => num(x.sc)).filter(v => v != null), sh = rows.map(x => num(x.sh)).filter(v => v != null);
+    const pct = k => { const a = rows.filter(x => x[k] != null && x.sh); return a.length ? avg(a.map(x => x[k] / 60 / x.sh * 100)) : null; };
+    $('tst').innerHTML = stat('Ø skóre', fmt(avg(sc))) + stat('Ø délka', hm(avg(sh))) + stat('Hluboký', fmt(pct('deep')) + ' %') + stat('REM', fmt(pct('rem')) + ' %') + stat('Nocí', fmt(sc.length));
+  } else {
+    const L = { hrv: ['HRV — noční průměr', 'ms'], rhr: ['Klidová TF', 'bpm'], bb: ['Body Battery při probuzení', ''], resp: ['Dýchání', 'dech/min'], st: ['Průměrný stres dne', ''] }[m];
+    title = L[0];
+    const vals = rows.map(x => valOf(x, m)), win = z ? z.avgDays : 7;
+    const roll = vals.map((_, i) => { const a = vals.slice(Math.max(0, i - win + 1), i + 1).filter(v => v != null); return a.length >= Math.min(3, win) ? Math.round(avg(a) * 10) / 10 : null; });
+    const pc = vals.map(v => z ? zoneCol(m, v) : tok('--blue'));
+    const ds = [{ type: 'line', label: L[0], data: vals, borderColor: tok('--blue'), pointBackgroundColor: pc, pointBorderColor: pc, pointRadius: rows.length > 90 ? 1.5 : 3, borderWidth: 1.4, tension: .25, spanGaps: true },
+      { type: 'line', label: `Ø ${win} d`, data: roll, borderColor: tok('--text2'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.6, tension: .3, spanGaps: true }];
+    if (m === 'hrv' && rows.some(x => x.bl != null)) {
+      ds.push({ type: 'line', label: 'baseline dolní', data: rows.map(x => x.bl ?? null), borderColor: 'transparent', pointRadius: 0, spanGaps: true, fill: false });
+      ds.push({ type: 'line', label: 'baseline horní', data: rows.map(x => x.bu ?? null), borderColor: 'transparent', backgroundColor: tok('--green-bg'), pointRadius: 0, spanGaps: true, fill: '-1' });
     }
-    if(!vals.length) return null;
-    return Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
+    CH = new Chart($('tch'), { data: { labels, datasets: ds }, options: { ...base, plugins: { ...base.plugins, tooltip: { ...base.plugins.tooltip, filter: it => !/baseline/.test(it.dataset.label) } } }, plugins: z ? [zoneBand(m)] : [] });
+    leg = `<span><i style="background:${tok('--blue')}"></i>${esc(L[0])}</span><span><i style="background:${tok('--text2')}"></i>Ø ${win} d</span>` + (m === 'hrv' ? `<span><i style="background:${tok('--green-bg')};border:1px solid ${tok('--green')}"></i>baseline Garminu</span>` : '');
+    const v = vals.filter(x => x != null), lastV = v.length ? v[v.length - 1] : null, a = avg(v);
+    const prevRows = UI.range ? DAYS.filter(x => x.d < addD(TODAY(), -UI.range + 1) && x.d >= addD(TODAY(), -2 * UI.range + 1)).map(x => valOf(x, m)).filter(x => x != null) : [];
+    const ch = prevRows.length && a != null ? a - avg(prevRows) : null;
+    $('tst').innerHTML = stat('Poslední', fmt(lastV, m === 'resp' ? 1 : 0) + ' ' + L[1]) + stat('Průměr', fmt(a, 1)) + stat('Min', fmt(v.length ? Math.min(...v) : null)) + stat('Max', fmt(v.length ? Math.max(...v) : null))
+      + stat('Změna vs předchozí období', ch == null ? '—' : sgn(ch, 1));
   }
-
-  const avg7Raw = slice.map((d,i) => rolling7(slice, i));
-  const avg7 = [...avg7Raw, ...nullPad];
-  // Point colors by zone
-  const ptColors=[...slice.map(d=>vstGetColor(d.hrv)),...nullPad];
-  const ptSize=3; // small dots, same size for all
-
-  if(vstChart){vstChart.destroy();vstChart=null;}
-  const ctx=document.getElementById('cVST');
-  vstChart=new Chart(ctx,{
-    type:'line',
-    data:{
-      labels,
-      datasets:[
-        // Red threshold line
-        {
-          label:`Limit ${vstZ2}ms`,
-          data:labels.map(()=>vstZ2),
-          borderColor:'rgba(255,95,109,0.65)',
-          borderWidth:1.5,
-          borderDash:[5,5],
-          pointRadius:0,
-          fill:false,
-          order:5
-        },
-        // 7d rolling average — solid line, color by zone
-        {
-          label:'7d průměr',
-          data:avg7,
-          borderColor: avg7.map(v => {
-            if(v===null) return 'transparent';
-            if(v < vstZ1) return '#ff5f6d';
-            if(v < vstZ2) return '#ffb547';
-            return '#00d4aa';
-          }),
-          borderWidth:2.5,
-          borderDash:[],
-          segment:{
-            borderColor: ctx => {
-              const v = avg7[ctx.p0DataIndex];
-              if(v===null) return 'transparent';
-              if(v < vstZ1) return '#ff5f6d';
-              if(v < vstZ2) return '#ffb547';
-              return '#00d4aa';
-            }
-          },
-          pointRadius:0,
-          tension:0.35,
-          spanGaps:true,
-          fill:false,
-          order:2
-        },
-        // Main HRV line — thin connector
-        {
-          label:'HRV noční průměr',
-          data:hrv,
-          borderColor:'rgba(148,163,184,0.2)',
-          borderWidth:1,
-          pointBackgroundColor:ptColors,
-          pointBorderColor:ptColors,
-          pointRadius:ptSize,
-          pointHoverRadius:ptSize+3,
-          pointStyle:'circle',
-          tension:0.15,
-          spanGaps:false,
-          fill:false,
-          order:1
-        },
-      ]
-    },
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          backgroundColor:'#0e1219',
-          borderColor:'rgba(255,255,255,0.08)',
-          borderWidth:1,
-          titleColor:'#9aaabb',
-          bodyColor:'#e8edf5',
-          padding:12,
-          titleFont:{family:'JetBrains Mono',size:13},
-          bodyFont:{family:'JetBrains Mono',size:14},
-          callbacks:{
-            label:(ctx)=>{
-              if(ctx.datasetIndex===2){
-                const d=slice[ctx.dataIndex];
-                const zone=d.hrv<vstZ1?'🔴':d.hrv<vstZ2?'🟠':'🟢';
-                return ` HRV: ${ctx.raw} ms ${zone}`;
-              }
-              if(ctx.datasetIndex===1&&ctx.raw)return ` 7d průměr: ${ctx.raw} ms`;
-              return null;
-            },
-            afterBody:(items)=>{
-              const d=slice[items[0].dataIndex];
-              if(d.baseline_low)return[`Baseline: ${d.baseline_low}–${d.baseline_upper} ms`];
-              return[];
-            }
-          },
-          filter:(item)=>item.datasetIndex>=1
-        },
-        zoom:{
-          pan:{enabled:true,mode:'x',threshold:5},
-          zoom:{
-            wheel:{enabled:true,speed:0.06},
-            pinch:{enabled:true},
-            mode:'x',
-          },
-          limits:{x:{minRange:7}}
-        }
-      },
-      scales:{
-        x:{
-          ticks:{
-            color:'#9ab4c8',
-            font:{size:13,family:'JetBrains Mono'},
-            maxRotation:40,
-            autoSkip:true,
-            maxTicksLimit:20
-          },
-          grid:{color:'rgba(255,255,255,0.04)'}
-        },
-        y:{
-          min:0,
-          max:(ctx)=>{
-            // Auto max: highest value in visible range + padding, rounded up to 5
-            const datasets=ctx.chart.data.datasets;
-            const hrvData=datasets[2]?.data||[];
-            const visibleVals=hrvData.filter(v=>v!==null&&v!==undefined&&v>0);
-            if(!visibleVals.length)return 60;
-            const maxVal=Math.max(...visibleVals);
-            return Math.ceil((maxVal+6)/5)*5;
-          },
-          title:{display:true,text:'HRV (ms)',color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'}},
-          ticks:{color:'#9ab4c8',font:{size:13},stepSize:5},
-          grid:{color:'rgba(255,255,255,0.05)'}
-        }
-      },
-      onHover:(e,el)=>{e.native.target.style.cursor=el.length?'crosshair':'grab';}
-    }
-  });
+  $('ttl').textContent = title; $('tleg').innerHTML = leg;
+}
+function stat(l, v) { return `<div class="stat"><span class="lbl">${esc(l)}</span><b>${v}</b></div>`; }
+// barevná pásma zón za grafem
+function zoneBand(m) {
+  return { id: 'zb', beforeDatasetsDraw(c) {
+    const z = zones(m), y = c.scales.y, a = c.chartArea, ctx = c.ctx; if (!z || !y) return;
+    const band = (lo, hi, col) => { const t = Math.max(a.top, y.getPixelForValue(hi)), b = Math.min(a.bottom, y.getPixelForValue(lo)); if (b > t) { ctx.fillStyle = col; ctx.fillRect(a.left, t, a.right - a.left, b - t); } };
+    ctx.save(); ctx.globalAlpha = .07;
+    if (z.up) { band(y.min, z.z1, tok('--red')); band(z.z1, z.z2, tok('--amber')); band(z.z2, y.max, tok('--green')); }
+    else { band(y.min, z.z1, tok('--green')); band(z.z1, z.z2, tok('--amber')); band(z.z2, y.max, tok('--red')); }
+    ctx.restore();
+  } };
 }
 
+// ── Nastavení ──
+function renderNast() {
+  const sup = JR.cfg.sup || [], tags = JR.cfg.tags || [], theme = document.documentElement.getAttribute('data-theme') === 'graphite' ? 'graphite' : 'slate';
+  $('p-nast').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Nastavení</div><div class="page-s">Ukládá se na Google Disk — platí na PC, iPadu i iPhonu.</div></div></div>
+  <div class="grid g-2">
+    <div class="card"><div class="card-h"><div class="card-t">Doplňky a léky</div><span class="card-s">zobrazí se v Deníku</span></div>
+      <div class="list-ed" id="lsup">${sup.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
+      <div class="row-add"><input id="nsup" placeholder="např. Hořčík, D3, Omega-3" maxlength="40"><button class="btn" id="asup">Přidat</button></div></div>
+    <div class="card"><div class="card-h"><div class="card-t">Vlastní štítky</div><span class="card-s">co chceš sledovat navíc</span></div>
+      <div class="list-ed" id="ltag">${tags.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
+      <div class="row-add"><input id="ntag" placeholder="např. Masáž, Pozdní kofein z čaje" maxlength="40"><button class="btn" id="atag">Přidat</button></div></div>
+  </div>
+  <div class="card"><div class="card-h"><div class="card-t">Prahové hodnoty</div><button class="btn btn-ghost" id="treset">Obnovit výchozí</button></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Metrika</th><th>Práh</th><th>Stav</th><th>Akce</th></tr></thead><tbody>
+    ${Object.entries(T).map(([k, r]) => `<tr><td>${esc(r.label)}</td><td><input type="number" step="any" data-th="${k}" value="${r.val}"> <span class="xs muted">${esc(r.unit)}</span></td>
+      <td>${pill(r.badge, r.stav === 'ok' ? 'ok' : r.stav === 'warn' ? 'amber' : 'crit')}</td><td class="t2">${esc(r.akce)}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="grid g-2">
+    <div class="card"><div class="card-h"><div class="card-t">Vzhled</div></div>
+      <div class="seg" id="theme"><button data-v="slate" class="${theme === 'slate' ? 'on' : ''}">Břidlice</button><button data-v="graphite" class="${theme === 'graphite' ? 'on' : ''}">Grafit</button></div></div>
+    <div class="card"><div class="card-h"><div class="card-t">Data</div></div>
+      <div class="sm t2">Zdroj: ${META.src === 'cloud' ? 'Garmin Personal API (Apps Script, ~každé 2 h)' : 'lokální server na PC'}<br>Poslední sync: ${esc(ageText())}<br>Dny v datech: ${DAYS.length} · deník: ${Object.keys(JR.days).length} dní</div>
+      <div style="margin-top:var(--sp-3)"><button class="btn" id="nsync">Stáhnout teď</button></div></div>
+  </div>`;
+  const addTo = (key, inp) => { const l = $(inp).value.trim(); if (!l) return; const id = l.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) || ('x' + Date.now());
+    const arr = JR.cfg[key] = JR.cfg[key] || []; if (!arr.some(x => x.id === id)) arr.push({ id: id, l: l.slice(0, 40) }); jCfgSave(); renderNast(); };
+  $('asup').onclick = () => addTo('sup', 'nsup'); $('atag').onclick = () => addTo('tags', 'ntag');
+  $('nsup').onkeydown = e => { if (e.key === 'Enter') addTo('sup', 'nsup'); }; $('ntag').onkeydown = e => { if (e.key === 'Enter') addTo('tags', 'ntag'); };
+  [['lsup', 'sup'], ['ltag', 'tags']].forEach(([el, key]) => $(el).querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { JR.cfg[key] = (JR.cfg[key] || []).filter(x => x.id !== b.dataset.rm); jCfgSave(); renderNast(); }));
+  $('p-nast').querySelectorAll('[data-th]').forEach(i => i.addEventListener('change', () => { const v = parseFloat(i.value); if (isNaN(v)) { i.value = T[i.dataset.th].val; return; } T[i.dataset.th].val = v; saveT(); toast('Práh uložen'); }));
+  $('treset').onclick = () => { stDel('garmin_thresholds'); T = loadT(); renderNast(); toast('Výchozí prahy obnoveny'); };
+  $('theme').querySelectorAll('button').forEach(b => b.onclick = () => themeSet(b.dataset.v));
+  $('nsync').onclick = doSync;
+}
 
-// ── GENERIC CHART BUILDER ────────────────────────────────────────
-function buildMetricChart(canvasId, slice, field, zones, yLabel, yMin, yMax, avgDays, allHistory, invertZones) {
-  // invertZones: true = lower is better (HR, Resp), false = higher is better (BB)
-  function getColor(v) {
-    if(v===null||v===undefined) return '#5a6e82';
-    if(invertZones) {
-      if(v <= zones.z1) return '#00d4aa';
-      if(v <= zones.z2) return '#ffb547';
-      return '#ff5f6d';
-    } else {
-      if(v >= zones.z2) return '#00d4aa';
-      if(v >= zones.z1) return '#ffb547';
-      return '#ff5f6d';
-    }
+// ══════════ START ══════════
+(async function init() {
+  navInit();
+  $('syncBtn').addEventListener('click', doSync);
+  const h = (location.hash || '').slice(1); go(NAV.some(n => n[0] === h) ? h : 'dnes');
+  try { await fetchData(); dataNote(); renderAll(); }
+  catch (e) {
+    note(CLOUD ? esc(e.message || e) : '<b>Lokální server neběží.</b> Hlavní dashboard běží v cloudu (adresa z Apps Scriptu). Offline: dvojklik na <b>Start Garmin Dashboard</b> na ploše.', 'err');
+    $('p-' + PAGE).innerHTML = '<div class="card empty">Data nejsou k dispozici.</div>';
   }
-
-  // Rolling average
-  function rollingAvg(idx) {
-    const targetDate = new Date(slice[idx].date||slice[idx].calendar_date);
-    let vals=[];
-    for(let k=0;k<allHistory.length;k++){
-      const d=new Date(allHistory[k].date||allHistory[k].calendar_date);
-      const diff=Math.round((targetDate-d)/86400000);
-      const v=allHistory[k][field];
-      if(diff>=0&&diff<avgDays&&v&&v>0) vals.push(v);
-    }
-    return vals.length?Math.round(vals.reduce((s,v)=>s+v,0)/vals.length):null;
-  }
-
-  const nullPad=Array(10).fill(null);
-  const labels=[...slice.map(d=>{
-    const dt=new Date(d.date||d.calendar_date);
-    return `${dt.getDate()}.${dt.getMonth()+1}.`;
-  }),...Array(10).fill(null).map((_,i)=>{
-    if(!slice.length)return'';
-    const last=new Date(slice[slice.length-1].date||slice[slice.length-1].calendar_date);
-    last.setDate(last.getDate()+i+1);
-    return `${last.getDate()}.${last.getMonth()+1}.`;
-  })];
-  const vals=[...slice.map(d=>d[field]??null),...nullPad];
-  const avgs=[...slice.map((_,i)=>rollingAvg(i)),...nullPad];
-  const ptColors=[...slice.map(d=>getColor(d[field])),...nullPad];
-
-  const existingChart = Chart.getChart(canvasId);
-  if(existingChart) existingChart.destroy();
-
-  const maxVal = vals.filter(v=>v!==null).reduce((a,b)=>Math.max(a,b||0),0);
-  const autoMax = yMax || Math.ceil((maxVal+5)/5)*5;
-
-  return new Chart(document.getElementById(canvasId), {
-    type:'line',
-    data:{labels,datasets:[
-      {label:`Limit`,data:labels.map(()=>zones.z2),borderColor:'rgba(255,95,109,0.55)',borderWidth:1.5,borderDash:[5,5],pointRadius:0,fill:false,order:5},
-      {label:`${avgDays}d průměr`,data:avgs,borderColor:'#a78bfa',borderWidth:2.5,
-       segment:{borderColor:ctx=>{const v=avgs[ctx.p0DataIndex];if(!v)return'transparent';return getColor(v);}},
-       pointRadius:0,tension:0.35,spanGaps:true,fill:false,order:2},
-      {label:yLabel,data:vals,borderColor:'rgba(148,163,184,0.2)',borderWidth:1,
-       pointBackgroundColor:ptColors,pointBorderColor:ptColors,pointRadius:3,
-       pointHoverRadius:6,pointStyle:'circle',tension:0.15,spanGaps:false,fill:false,order:1},
-    ]},
-    options:{
-      responsive:true,maintainAspectRatio:false,
-      interaction:{mode:'index',intersect:false},
-      plugins:{
-        legend:{display:false},
-        tooltip:{
-          backgroundColor:'#0e1219',borderColor:'rgba(255,255,255,0.08)',borderWidth:1,
-          titleColor:'#9aaabb',bodyColor:'#e8edf5',padding:12,
-          titleFont:{family:'JetBrains Mono',size:13},bodyFont:{family:'JetBrains Mono',size:14},
-          callbacks:{
-            label:(ctx)=>{
-              if(ctx.datasetIndex===2&&ctx.raw!==null) return ` ${yLabel}: ${ctx.raw}`;
-              if(ctx.datasetIndex===1&&ctx.raw!==null) return ` ${avgDays}d průměr: ${ctx.raw}`;
-              return null;
-            }
-          },
-          filter:(item)=>item.datasetIndex>=1&&item.raw!==null
-        },
-        zoom:{
-          pan:{enabled:true,mode:'x',threshold:5},
-          zoom:{wheel:{enabled:true,speed:0.06},pinch:{enabled:true},mode:'x'},
-          limits:{x:{minRange:7}}
-        }
-      },
-      scales:{
-        x:{ticks:{color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'},maxRotation:40,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,0.04)'}},
-        y:{min:yMin,
-           max:(ctx)=>{const d=ctx.chart.data.datasets[2]?.data?.filter(v=>v!==null&&v>0)||[];return d.length?Math.ceil((Math.max(...d)+5)/5)*5:autoMax;},
-           title:{display:true,text:yLabel,color:'#9ab4c8',font:{size:13,family:'JetBrains Mono'}},
-           ticks:{color:'#9ab4c8',font:{size:13},stepSize:5},
-           grid:{color:'rgba(255,255,255,0.05)'}}
-      },
-      onHover:(e,el)=>{e.native.target.style.cursor=el.length?'crosshair':'grab';}
-    }
-  });
-}
-
-function buildStatsBox(elId, slice, field, unit, label, zones, invertZones) {
-  const vals=slice.map(d=>d[field]).filter(v=>v!==null&&v!==undefined&&v>0);
-  if(!vals.length)return;
-  const avg=Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
-  const mx=Math.max(...vals), mn=Math.min(...vals);
-  function getColor(v){
-    if(invertZones){return v<=zones.z1?'#00d4aa':v<=zones.z2?'#ffb547':'#ff5f6d';}
-    return v>=zones.z2?'#00d4aa':v>=zones.z1?'#ffb547':'#ff5f6d';
-  }
-  const green=slice.filter(d=>d[field]&&(invertZones?d[field]<=zones.z1:d[field]>=zones.z2)).length;
-  const red=slice.filter(d=>d[field]&&(invertZones?d[field]>zones.z2:d[field]<zones.z1)).length;
-  const stats=[
-    {lbl:`Průměr`,val:avg,unit,sub:`za ${slice.length} dní`,color:'#e8edf5'},
-    {lbl:'Maximum',val:mx,unit,sub:'v období',color:invertZones?getColor(mx):'#00d4aa'},
-    {lbl:'Minimum',val:mn,unit,sub:'v období',color:invertZones?'#00d4aa':getColor(mn)},
-    {lbl:'Dny normál',val:green,unit:'d',sub:`${Math.round(green/slice.length*100)}% dnů`,color:'#00d4aa'},
-    {lbl:'Dny alarm',val:red,unit:'d',sub:`z ${slice.length}`,color:red>10?'#ff5f6d':'#7a8899'},
-    {lbl:'Posl. hodnota',val:slice[slice.length-1]?.[field]??'—',unit,sub:'dnes',color:slice[slice.length-1]?.[field]?getColor(slice[slice.length-1][field]):'#7a8899'},
-  ];
-  document.getElementById(elId).innerHTML=stats.map(s=>`
-    <div class="vst-stat"><div class="vst-stat-lbl">${s.lbl}</div>
-    <div class="vst-stat-val" style="color:${s.color}">${s.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${s.unit}</span></div>
-    <div class="vst-stat-sub">${s.sub}</div></div>`).join('');
-}
-
-// ── KLIDOVÝ TF ────────────────────────────────────────────────────
-let hrChart=null, hrCurrentDays=180;
-let hrZ1=54, hrZ2=57, hrAvgDays=7;
-
-function hrLoadZones(){
-  try{const s=stGet('garmin_hr_zones');if(s){const p=JSON.parse(s);hrZ1=p.z1||54;hrZ2=p.z2||57;hrAvgDays=p.avgDays||7;}}catch(e){}
-  const e1=document.getElementById('hrZ1Edit'),e2=document.getElementById('hrZ2Edit'),ea=document.getElementById('hrAvgDaysEdit'),el=document.getElementById('hrZ2Label');
-  if(e1)e1.textContent=hrZ1;if(e2)e2.textContent=hrZ2;if(ea)ea.textContent=hrAvgDays;if(el)el.textContent=hrZ2;
-}
-function hrZoneSave(){
-  const v1=parseFloat(document.getElementById('hrZ1Edit')?.textContent||hrZ1);
-  const v2=parseFloat(document.getElementById('hrZ2Edit')?.textContent||hrZ2);
-  const va=parseInt(document.getElementById('hrAvgDaysEdit')?.textContent||hrAvgDays);
-  if(!isNaN(v1))hrZ1=v1;if(!isNaN(v2))hrZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)hrAvgDays=va;
-  const el=document.getElementById('hrZ2Label');if(el)el.textContent=hrZ2;
-  stSet('garmin_hr_zones',JSON.stringify({z1:hrZ1,z2:hrZ2,avgDays:hrAvgDays}));
-  if(DATA)renderHR();
-}
-function hrSetRange(days,el){hrCurrentDays=days;document.querySelectorAll('#tab-hr .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderHR();}
-function renderHR(){
-  hrLoadZones();
-  const all=DATA.nights||[];
-  if(!all.length)return;
-  const slice=hrCurrentDays===0?all:all.slice(-hrCurrentDays);
-  if(slice.length){document.getElementById('hrDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
-  buildStatsBox('hrStats',slice,'hr','bpm','Klidový TF',{z1:hrZ1,z2:hrZ2},true);
-  hrChart=buildMetricChart('cHR',slice,'hr',{z1:hrZ1,z2:hrZ2},'bpm',35,80,hrAvgDays,all,true);
-}
-
-// ── BODY BATTERY ─────────────────────────────────────────────────
-let bbChart=null, bbCurrentDays=180;
-let bbZ1=35, bbZ2=50, bbAvgDays=7;
-
-function bbLoadZones(){
-  try{const s=stGet('garmin_bb_zones');if(s){const p=JSON.parse(s);bbZ1=p.z1||35;bbZ2=p.z2||50;bbAvgDays=p.avgDays||7;}}catch(e){}
-  const e1=document.getElementById('bbZ1Edit'),e2=document.getElementById('bbZ2Edit'),ea=document.getElementById('bbAvgDaysEdit'),el=document.getElementById('bbZ2Label');
-  if(e1)e1.textContent=bbZ1;if(e2)e2.textContent=bbZ2;if(ea)ea.textContent=bbAvgDays;if(el)el.textContent=bbZ2;
-}
-function bbZoneSave(){
-  const v1=parseFloat(document.getElementById('bbZ1Edit')?.textContent||bbZ1);
-  const v2=parseFloat(document.getElementById('bbZ2Edit')?.textContent||bbZ2);
-  const va=parseInt(document.getElementById('bbAvgDaysEdit')?.textContent||bbAvgDays);
-  if(!isNaN(v1))bbZ1=v1;if(!isNaN(v2))bbZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)bbAvgDays=va;
-  const el=document.getElementById('bbZ2Label');if(el)el.textContent=bbZ2;
-  stSet('garmin_bb_zones',JSON.stringify({z1:bbZ1,z2:bbZ2,avgDays:bbAvgDays}));
-  if(DATA)renderBB();
-}
-function bbSetRange(days,el){bbCurrentDays=days;document.querySelectorAll('#tab-bb .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderBB();}
-function renderBB(){
-  bbLoadZones();
-  const all=DATA.nights||[];
-  if(!all.length)return;
-  const slice=bbCurrentDays===0?all:all.slice(-bbCurrentDays);
-  if(slice.length){document.getElementById('bbDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
-  buildStatsBox('bbStats',slice,'bb','','Body Battery',{z1:bbZ1,z2:bbZ2},false);
-  bbChart=buildMetricChart('cBB',slice,'bb',{z1:bbZ1,z2:bbZ2},'Body Battery',0,100,bbAvgDays,all,false);
-}
-
-// ── DÝCHÁNÍ ───────────────────────────────────────────────────────
-let respChart=null, respCurrentDays=180;
-let respZ1=16, respZ2=19, respAvgDays=7;
-
-function respLoadZones(){
-  try{const s=stGet('garmin_resp_zones');if(s){const p=JSON.parse(s);respZ1=p.z1||16;respZ2=p.z2||19;respAvgDays=p.avgDays||7;}}catch(e){}
-  const e1=document.getElementById('respZ1Edit'),e2=document.getElementById('respZ2Edit'),ea=document.getElementById('respAvgDaysEdit'),el=document.getElementById('respZ2Label');
-  if(e1)e1.textContent=respZ1;if(e2)e2.textContent=respZ2;if(ea)ea.textContent=respAvgDays;if(el)el.textContent=respZ2;
-}
-function respZoneSave(){
-  const v1=parseFloat(document.getElementById('respZ1Edit')?.textContent||respZ1);
-  const v2=parseFloat(document.getElementById('respZ2Edit')?.textContent||respZ2);
-  const va=parseInt(document.getElementById('respAvgDaysEdit')?.textContent||respAvgDays);
-  if(!isNaN(v1))respZ1=v1;if(!isNaN(v2))respZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)respAvgDays=va;
-  const el=document.getElementById('respZ2Label');if(el)el.textContent=respZ2;
-  stSet('garmin_resp_zones',JSON.stringify({z1:respZ1,z2:respZ2,avgDays:respAvgDays}));
-  if(DATA)renderResp();
-}
-function respSetRange(days,el){respCurrentDays=days;document.querySelectorAll('#tab-resp .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderResp();}
-function renderResp(){
-  respLoadZones();
-  const all=DATA.nights||[];
-  if(!all.length)return;
-  const slice=respCurrentDays===0?all:all.slice(-respCurrentDays);
-  if(slice.length){document.getElementById('respDateRange').textContent=`${slice[0].date||slice[0].calendar_date||''} → ${slice[slice.length-1].date||slice[slice.length-1].calendar_date||''}`;}
-  buildStatsBox('respStats',slice,'resp','brpm','Dýchání',{z1:respZ1,z2:respZ2},true);
-  respChart=buildMetricChart('cResp',slice,'resp',{z1:respZ1,z2:respZ2},'brpm',8,30,respAvgDays,all,true);
-}
-
-
-// ── SPÁNEK — ANALÝZA ─────────────────────────────────────────────
-let sleepCharts = {};
-let sleepCurrentDays = 180;
-
-function sleepSetRange(days, el) {
-  sleepCurrentDays = days;
-  document.querySelectorAll('#tab-sleep .vst-range-btn').forEach(b => b.classList.remove('active'));
-  if(el) el.classList.add('active');
-  renderSleep();
-}
-
-function sleepResetZoom() {
-  Object.values(sleepCharts).forEach(c => { try { c.resetZoom(); } catch(e) {} });
-}
-
-function sleepGetColor(score) {
-  if(!score) return '#5a6e82';
-  if(score >= 80) return '#00d4aa';
-  if(score >= 60) return '#fbbf24';
-  return '#ff5f6d';
-}
-
-function getChartDefaults() {
-  return {
-    responsive: true, maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#0e1219', borderColor: 'rgba(255,255,255,0.08)',
-        borderWidth: 1, titleColor: '#9aaabb', bodyColor: '#e8edf5', padding: 11,
-        titleFont: { family: 'JetBrains Mono', size: 12 },
-        bodyFont: { family: 'JetBrains Mono', size: 13 }
-      },
-      zoom: {
-        pan: { enabled: true, mode: 'x', threshold: 5 },
-        zoom: { wheel: { enabled: true, speed: 0.06 }, pinch: { enabled: true }, mode: 'x' },
-        limits: { x: { minRange: 7 } }
-      }
-    },
-    scales: {
-      x: { ticks: { color: '#8faabb', font: { size: 12, family: 'JetBrains Mono' }, maxRotation: 40, autoSkip: true, maxTicksLimit: 18 }, grid: { color: 'rgba(255,255,255,0.04)' } }
-    }
-  };
-}
-
-function makeSleepLabels(slice) {
-  const labels = slice.map(d => {
-    const dt = new Date(d.date || d.calendar_date);
-    return `${dt.getDate()}.${dt.getMonth()+1}.`;
-  });
-  // Add 10 empty days
-  const last = slice.length ? new Date(slice[slice.length-1].date || slice[slice.length-1].calendar_date) : new Date();
-  for(let i = 1; i <= 10; i++) {
-    const d = new Date(last); d.setDate(d.getDate() + i);
-    labels.push(`${d.getDate()}.${d.getMonth()+1}.`);
-  }
-  return labels;
-}
-
-function renderSleep() {
-  const all = DATA.nights || [];
-  if(!all.length) return;
-  const slice = sleepCurrentDays === 0 ? all : all.slice(-sleepCurrentDays);
-  if(!slice.length) return;
-
-  const first = slice[0].date || slice[0].calendar_date || '';
-  const last2 = slice[slice.length-1].date || slice[slice.length-1].calendar_date || '';
-  document.getElementById('sleepDateRange').textContent = `${first} → ${last2}`;
-
-  const labels = makeSleepLabels(slice);
-  const pad = Array(10).fill(null);
-
-  // Data arrays
-  const hours    = [...slice.map(d => d.hours || null), ...pad];
-  const score    = [...slice.map(d => d.score || null), ...pad];
-  const deep     = [...slice.map(d => d.deep_min || null), ...pad];
-  const rem      = [...slice.map(d => d.rem_min || null), ...pad];
-  const light    = [...slice.map(d => d.light_min || null), ...pad];
-  const awake    = [...slice.map(d => d.awake_min || null), ...pad];
-  const stress   = [...slice.map(d => d.stress || null), ...pad];
-  const resp     = [...slice.map(d => d.resp || null), ...pad];
-
-  // Percentages
-  const totalMin = slice.map(d => (d.deep_min||0)+(d.rem_min||0)+(d.light_min||0));
-  const deepPct  = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.deep_min/totalMin[i]*100) : null), ...pad];
-  const remPct   = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.rem_min/totalMin[i]*100) : null), ...pad];
-  const lightPct = [...slice.map((d,i) => totalMin[i] > 0 ? Math.round(d.light_min/totalMin[i]*100) : null), ...pad];
-
-  // ── KPI CARDS ──
-  const validHours = slice.filter(d => d.hours > 0).map(d => d.hours);
-  const validDeep  = slice.filter(d => d.deep_min > 0).map(d => d.deep_min);
-  const validRem   = slice.filter(d => d.rem_min > 0).map(d => d.rem_min);
-  const validScore = slice.filter(d => d.score > 0).map(d => d.score);
-  const validTotal = slice.filter(d => totalMin[slice.indexOf(d)] > 0);
-
-  const avgHours = validHours.length ? (validHours.reduce((s,v)=>s+v,0)/validHours.length).toFixed(1) : '—';
-  const avgDeep  = validDeep.length  ? Math.round(validDeep.reduce((s,v)=>s+v,0)/validDeep.length) : '—';
-  const avgRem   = validRem.length   ? Math.round(validRem.reduce((s,v)=>s+v,0)/validRem.length) : '—';
-  const avgScore = validScore.length ? Math.round(validScore.reduce((s,v)=>s+v,0)/validScore.length) : '—';
-  const avgDeepPct = validTotal.length ? Math.round(validTotal.reduce((d,r) => {
-    const t = (r.deep_min||0)+(r.rem_min||0)+(r.light_min||0);
-    return d + (t > 0 ? r.deep_min/t*100 : 0);
-  }, 0)/validTotal.length) : '—';
-  const avgRemPct = validTotal.length ? Math.round(validTotal.reduce((d,r) => {
-    const t = (r.deep_min||0)+(r.rem_min||0)+(r.light_min||0);
-    return d + (t > 0 ? r.rem_min/t*100 : 0);
-  }, 0)/validTotal.length) : '—';
-  const daysOk7h = slice.filter(d => d.hours >= 7).length;
-  const deepOk   = slice.filter(d => {
-    const t = (d.deep_min||0)+(d.rem_min||0)+(d.light_min||0);
-    const pct = t > 0 ? d.deep_min/t*100 : 0;
-    return pct >= 13;
-  }).length;
-
-  function kpiColor(val, good, warn) { return val >= good ? '#00d4aa' : val >= warn ? '#fbbf24' : '#ff5f6d'; }
-  function kpiColorLow(val, bad, warn) { return val <= bad ? '#ff5f6d' : val <= warn ? '#fbbf24' : '#00d4aa'; }
-
-  const kpis = [
-    { lbl:'Průměrná délka', val:avgHours, unit:'h', sub:'norma: 7–9h', col: typeof avgHours === 'string' ? '#7a8899' : kpiColor(parseFloat(avgHours),7,6) },
-    { lbl:'Průměrné skóre', val:avgScore, unit:'', sub:'dobrý: ≥ 70', col: typeof avgScore === 'string' ? '#7a8899' : kpiColor(avgScore,70,50) },
-    { lbl:'Hluboký průměr', val:`${avgDeep}min`, unit:'', sub:`${avgDeepPct}% · norma: 13–23%`, col: typeof avgDeepPct === 'string' ? '#60a5fa' : kpiColor(avgDeepPct,13,10) },
-    { lbl:'REM průměr', val:`${avgRem}min`, unit:'', sub:`${avgRemPct}% · norma: 20–25%`, col: typeof avgRemPct === 'string' ? '#a78bfa' : kpiColor(avgRemPct,20,15) },
-    { lbl:'Dny ≥ 7h', val:daysOk7h, unit:'d', sub:`z ${slice.length} nocí`, col: kpiColor(daysOk7h/slice.length*100,70,50) },
-    { lbl:'Dny hluboký OK', val:deepOk, unit:'d', sub:`${Math.round(deepOk/slice.length*100)}% nocí`, col: kpiColor(deepOk/slice.length*100,70,50) },
-  ];
-
-  document.getElementById('sleepKPI').innerHTML = kpis.map(k => `
-    <div class="vst-stat">
-      <div class="vst-stat-lbl">${k.lbl}</div>
-      <div class="vst-stat-val" style="color:${k.col}">${k.val}<span style="font-size:13px;color:#5a6e82;margin-left:2px;">${k.unit}</span></div>
-      <div class="vst-stat-sub">${k.sub}</div>
-    </div>`).join('');
-
-  const cd = getChartDefaults();
-
-  // ── CHART 1: Duration + Score ──
-  if(sleepCharts.dur) { sleepCharts.dur.destroy(); }
-  sleepCharts.dur = new Chart(document.getElementById('cSleepDuration'), {
-    type: 'bar',
-    data: { labels, datasets: [
-      { type: 'bar', label: 'Délka (h)', data: hours,
-        backgroundColor: hours.map(v => !v ? 'transparent' : v >= 7 ? 'rgba(96,165,250,0.55)' : v >= 6 ? 'rgba(251,191,36,0.5)' : 'rgba(248,113,113,0.5)'),
-        borderRadius: 3, barPercentage: 0.65, yAxisID: 'y' },
-      { type: 'line', label: 'Skóre', data: score,
-        borderColor: '#34d399', borderWidth: 2.5, pointRadius: score.map((v,i) => i >= slice.length ? 0 : 3),
-        pointBackgroundColor: score.map(v => sleepGetColor(v)),
-        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y2' },
-      { type: 'line', label: '7h ref', data: labels.map(() => 7),
-        borderColor: 'rgba(251,191,36,0.5)', borderDash: [4,4], borderWidth: 1.5, pointRadius: 0, yAxisID: 'y' },
-    ]},
-    options: { ...cd, scales: { x: cd.scales.x,
-      y: { min: 0, max: 12, title: { display: true, text: 'hodiny', color: '#60a5fa', font: { size: 11 } }, ticks: { color: '#60a5fa', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-      y2: { position: 'right', min: 0, max: 100, title: { display: true, text: 'skóre', color: '#34d399', font: { size: 11 } }, ticks: { color: '#34d399', font: { size: 11 } }, grid: { display: false } }
-    }}
-  });
-
-  // ── CHART 2: Sleep Stages absolute minutes (stacked bar) ──
-  if(sleepCharts.stages) { sleepCharts.stages.destroy(); }
-  sleepCharts.stages = new Chart(document.getElementById('cSleepStages'), {
-    type: 'bar',
-    data: { labels, datasets: [
-      { label: 'Hluboký (N3)', data: deep, backgroundColor: 'rgba(96,165,250,0.65)', borderColor: '#60a5fa', borderWidth: 0.5, borderRadius: 0, stack: 'sleep', barPercentage: 0.75 },
-      { label: 'REM', data: rem, backgroundColor: 'rgba(167,139,250,0.65)', borderColor: '#a78bfa', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
-      { label: 'Lehký', data: light, backgroundColor: 'rgba(52,211,153,0.35)', borderColor: '#34d399', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
-      { label: 'Bdění', data: awake, backgroundColor: 'rgba(251,146,60,0.5)', borderColor: '#fb923c', borderWidth: 0.5, stack: 'sleep', barPercentage: 0.75 },
-    ]},
-    options: { ...cd, scales: { x: cd.scales.x,
-      y: { stacked: true, min: 0, title: { display: true, text: 'minuty', color: '#8faabb', font: { size: 11 } }, ticks: { color: '#8faabb', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
-    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
-      callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw} min` }
-    }}}
-  });
-
-  // ── CHART 3: Stage percentages + reference bands ──
-  if(sleepCharts.pct) { sleepCharts.pct.destroy(); }
-  sleepCharts.pct = new Chart(document.getElementById('cSleepPct'), {
-    type: 'line',
-    data: { labels, datasets: [
-      // Reference bands as filled areas
-      { label: 'Norma hluboký horní', data: labels.map(() => 23), borderColor: 'transparent', backgroundColor: 'rgba(96,165,250,0.08)', fill: '+1', pointRadius: 0, yAxisID: 'y' },
-      { label: 'Norma hluboký dolní', data: labels.map(() => 13), borderColor: 'rgba(96,165,250,0.2)', borderDash: [2,3], borderWidth: 1, backgroundColor: 'rgba(96,165,250,0.08)', fill: false, pointRadius: 0, yAxisID: 'y' },
-      { label: 'Norma REM horní', data: labels.map(() => 25), borderColor: 'transparent', backgroundColor: 'rgba(167,139,250,0.08)', fill: '+1', pointRadius: 0, yAxisID: 'y' },
-      { label: 'Norma REM dolní', data: labels.map(() => 20), borderColor: 'rgba(167,139,250,0.2)', borderDash: [2,3], borderWidth: 1, fill: false, pointRadius: 0, yAxisID: 'y' },
-      // Actual lines
-      { label: 'Hluboký %', data: deepPct, borderColor: '#60a5fa', borderWidth: 2.5,
-        pointBackgroundColor: deepPct.map(v => !v ? 'transparent' : v >= 13 ? '#60a5fa' : '#ff5f6d'),
-        pointRadius: deepPct.map((v,i) => i >= slice.length ? 0 : (v < 13 ? 5 : 3)),
-        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
-      { label: 'REM %', data: remPct, borderColor: '#a78bfa', borderWidth: 2.5,
-        pointBackgroundColor: remPct.map(v => !v ? 'transparent' : v >= 20 ? '#a78bfa' : '#fbbf24'),
-        pointRadius: remPct.map((v,i) => i >= slice.length ? 0 : (v < 20 ? 5 : 3)),
-        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
-    ]},
-    options: { ...cd, scales: { x: cd.scales.x,
-      y: { min: 0, max: 50, title: { display: true, text: '%', color: '#8faabb', font: { size: 11 } }, ticks: { color: '#8faabb', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
-    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
-      filter: item => item.datasetIndex >= 4,
-      callbacks: { label: ctx => ctx.raw !== null ? ` ${ctx.dataset.label}: ${ctx.raw}%` : null }
-    }}}
-  });
-
-  // ── CHART 4: Stress + Respiration ──
-  if(sleepCharts.stress) { sleepCharts.stress.destroy(); }
-  sleepCharts.stress = new Chart(document.getElementById('cSleepStress'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Alarm 19 brpm', data: labels.map(() => 19), borderColor: 'rgba(248,113,113,0.5)', borderDash: [4,4], borderWidth: 1.5, pointRadius: 0, yAxisID: 'y2' },
-      { label: 'Stres', data: stress, borderColor: '#f97316', borderWidth: 2,
-        pointBackgroundColor: stress.map(v => !v ? 'transparent' : v > 50 ? '#ff5f6d' : v > 30 ? '#fbbf24' : '#f97316'),
-        pointRadius: stress.map((v,i) => i >= slice.length ? 0 : (v > 50 ? 5 : 3)),
-        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y' },
-      { label: 'Dýchání', data: resp, borderColor: '#818cf8', borderWidth: 2,
-        pointBackgroundColor: resp.map(v => !v ? 'transparent' : v > 19 ? '#ff5f6d' : v > 16 ? '#fbbf24' : '#818cf8'),
-        pointRadius: resp.map((v,i) => i >= slice.length ? 0 : (v > 19 ? 6 : 3)),
-        tension: 0.3, spanGaps: true, fill: false, yAxisID: 'y2' },
-    ]},
-    options: { ...cd, scales: { x: cd.scales.x,
-      y: { min: 0, max: 100, title: { display: true, text: 'Stres', color: '#f97316', font: { size: 11 } }, ticks: { color: '#f97316', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-      y2: { position: 'right', min: 8, title: { display: true, text: 'brpm', color: '#818cf8', font: { size: 11 } }, ticks: { color: '#818cf8', font: { size: 11 } }, grid: { display: false },
-        max: ctx => { const d=ctx.chart.data.datasets[2]?.data?.filter(v=>v!==null&&v>0)||[]; return d.length ? Math.ceil((Math.max(...d)+3)/5)*5 : 30; }
-      }
-    }, plugins: { ...cd.plugins, tooltip: { ...cd.plugins.tooltip,
-      filter: item => item.datasetIndex >= 1 && item.raw !== null
-    }}}
-  });
-}
+})();
 
 </script>
 </body>

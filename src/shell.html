@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Garmin Health</title>
+<meta name="apple-mobile-web-app-title" content="Garmin Health">
+<!-- Design systém převzatý z EdgePilot (Tradelog, design 2.0): tokeny v :root, Inter s tabulkovými číslicemi, boční panel na PC,
+     spodní lišta na telefonu, KPI dlaždice, štítky. Motiv (břidlice / grafit) se nastaví před vykreslením, ať nebliká. -->
+<script>try { if (localStorage.getItem('gh_theme') === 'graphite') document.documentElement.setAttribute('data-theme', 'graphite'); } catch (e) {}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" media="print" onload="this.media='all'">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg:#121A27; --bg2:#182233; --bg3:#1E2839; --bg4:#243045; --bg5:#2D3A50;
+  --border:rgba(255,255,255,.09); --border2:rgba(255,255,255,.15); --grid:rgba(255,255,255,.07);
+  --text:#EEF2F8; --text2:#A9B4C6; --text3:#8995AB;
+  --green:#00C17D; --green-bg:rgba(0,193,125,.12);
+  --red:#FF5A65; --red-bg:rgba(255,90,101,.12);
+  --amber:#F2C94C; --amber-bg:rgba(242,201,76,.12);
+  --crit:#FF7A1A; --crit-bg:rgba(255,122,26,.14);
+  --blue:#4D9EFF; --blue-bg:rgba(77,158,255,.12); --blue-hi:#6AADFF;
+  --purple:#9B7CF8; --purple-bg:rgba(155,124,248,.12);
+  --teal:#2DD4BF; --teal-bg:rgba(45,212,191,.12);
+  --on-fill:#FFFFFF; --ink:#0B0E14;
+  --s-deep:#4C6FFF; --s-rem:#B07CF8; --s-light:#5EB8FF; --s-awake:#F2C94C;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --fs-kpi:26px; --fs-h1:20px; --fs-h2:15px; --fs-md:14px; --fs-sm:12px; --fs-xs:11px; --fs-lbl:11px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+  --r-sm:6px; --r-md:8px; --r-lg:12px;
+  --hdr-h:52px; --sn-w:216px; --bnav-h:58px;
+}
+:root[data-theme="graphite"] { --bg:#1D1A16; --bg2:#25211C; --bg3:#2D2822; --bg4:#363029; --bg5:#413A32; --text:#F3EFE8; --text2:#BDB5A9; --text3:#A0968A; }
+*{margin:0;padding:0;box-sizing:border-box;}
+html{color-scheme:dark;-webkit-text-size-adjust:100%;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:var(--fs-md);line-height:1.5;min-height:100vh;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1,"lnum" 1;}
+button{font:inherit;color:inherit;}
+:where(input:not([type=checkbox]),select,textarea){background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-radius:var(--r-sm);padding:6px 10px;font:inherit;font-size:var(--fs-md);outline:none;min-width:0;}
+:where(input,select,textarea):focus-visible{border-color:var(--blue);}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+::selection{background:rgba(77,158,255,.3);}
+
+/* ── hlavička ── */
+.hdr{position:sticky;top:0;z-index:100;height:var(--hdr-h);display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-5);background:var(--bg2);border-bottom:1px solid var(--border);}
+.logo{display:flex;align-items:center;gap:10px;min-width:0;}
+.logo-mark{width:28px;height:28px;flex:none;border-radius:7px;background:linear-gradient(135deg,var(--teal),var(--blue));display:flex;align-items:center;justify-content:center;color:var(--on-fill);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);}
+.logo-mark svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+.logo-text{font-weight:700;letter-spacing:-.2px;white-space:nowrap;}.logo-text span{font-weight:500;color:var(--blue);}
+.hdr-sp{flex:1 1 auto;}
+.chip-age{font-size:var(--fs-xs);color:var(--text3);white-space:nowrap;}
+.chip-age.stale{color:var(--amber);}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 14px;border-radius:var(--r-md);border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:var(--fs-sm);font-weight:500;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap;}
+.btn:hover{background:var(--bg4);}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:var(--on-fill);}
+.btn-primary:hover{background:var(--blue-hi);}
+.btn:disabled{opacity:.6;cursor:wait;}
+.btn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.btn.loading svg{animation:spin 1s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.btn-ghost{background:transparent;border-color:transparent;color:var(--text2);}
+.btn-ghost:hover{background:var(--bg3);color:var(--text);}
+
+/* ── navigace: boční panel (≥ 1100 px), pás nahoře (761–1099 px), spodní lišta (≤ 760 px) ── */
+#sidenav{display:none;}
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding:0 var(--sp-4);background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:var(--hdr-h);z-index:90;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{flex:none;display:flex;align-items:center;gap:6px;padding:12px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--text2);font-size:var(--fs-md);cursor:pointer;}
+.tab svg,.sn-i svg,.bnav-i svg{width:17px;height:17px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.tab.active{color:var(--text);border-bottom-color:var(--blue);}
+.bnav{display:none;}
+@media(min-width:1100px){
+  .tabs{display:none;}
+  #sidenav{display:flex;flex-direction:column;position:fixed;left:0;top:var(--hdr-h);bottom:0;width:var(--sn-w);background:var(--bg2);border-right:1px solid var(--border);padding:var(--sp-3) var(--sp-2);gap:2px;}
+  main{margin-left:var(--sn-w);}
+  .sn-gl{font-size:var(--fs-lbl);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;padding:var(--sp-3) 10px var(--sp-1);}
+  .sn-i{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:7px 10px;border:0;border-radius:var(--r-md);background:transparent;color:var(--text2);font-size:var(--fs-md);text-align:left;cursor:pointer;}
+  .sn-i:hover{background:var(--bg3);color:var(--text);}
+  .sn-i svg{color:var(--text3);}
+  .sn-i.active{background:var(--blue-bg);color:var(--text);box-shadow:inset 3px 0 0 var(--blue);}
+  .sn-i.active svg,.sn-i:hover svg{color:var(--blue);}
+  .sn-foot{margin-top:auto;padding:var(--sp-3) 10px;font-size:var(--fs-xs);color:var(--text3);line-height:1.6;}
+}
+@media(max-width:760px){
+  .tabs{display:none;}
+  .hdr{padding:0 var(--sp-3);}
+  .logo-text span{display:none;}
+  body{padding-bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px));}
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:300;height:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px));padding:0 var(--sp-1) env(safe-area-inset-bottom,0px);background:var(--bg2);border-top:1px solid var(--border2);box-shadow:0 -6px 18px rgba(0,0,0,.35);}
+  .bnav-i{flex:1 1 0;min-width:0;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;background:none;color:var(--text3);font-size:var(--fs-xs);font-weight:500;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+  .bnav-i svg{width:22px;height:22px;}
+  .bnav-i.active{color:var(--blue);}
+}
+
+/* ── obsah ── */
+main{padding:var(--sp-5);max-width:1400px;}
+@media(min-width:1100px){main{max-width:calc(1400px + var(--sn-w));padding:var(--sp-5) var(--sp-6);}}
+@media(max-width:760px){main{padding:var(--sp-4) var(--sp-3);}}
+.page{display:none;}.page.active{display:block;}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--sp-3);flex-wrap:wrap;margin-bottom:var(--sp-4);}
+.page-t{font-size:var(--fs-h1);font-weight:700;letter-spacing:-.01em;}
+.page-s{font-size:var(--fs-sm);color:var(--text3);margin-top:2px;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:var(--sp-4);min-width:0;}
+.card+.card,.grid+.card,.card+.grid,.grid+.grid{margin-top:var(--sp-4);}
+.grid>.card{margin-top:0;}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap;margin-bottom:var(--sp-3);}
+.card-t{font-size:var(--fs-h2);font-weight:600;}
+.card-s{font-size:var(--fs-sm);color:var(--text3);}
+.lbl{font-size:var(--fs-lbl);color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+.muted{color:var(--text3);}.t2{color:var(--text2);}.sm{font-size:var(--fs-sm);}.xs{font-size:var(--fs-xs);}
+.grid{display:grid;gap:var(--sp-4);}
+.g-hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);}
+.g-kpi{grid-template-columns:repeat(3,minmax(0,1fr));}
+.g-2{grid-template-columns:repeat(2,minmax(0,1fr));}
+@media(max-width:1000px){.g-hero,.g-2{grid-template-columns:minmax(0,1fr);}}
+@media(max-width:760px){.g-kpi{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--sp-3);}.card{padding:var(--sp-3);}}
+a.lnk,button.lnk{color:var(--blue);background:none;border:0;cursor:pointer;font-size:var(--fs-sm);padding:0;text-decoration:none;}
+a.lnk:hover,button.lnk:hover{text-decoration:underline;}
+
+/* štítky stavu (I-129 EdgePilot): JEDNAT = plná oranžová, SLEDOVAT = žlutý obrys, OK = neutrální; zelená / červená jen lepší / horší */
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-xs);font-weight:600;line-height:1.5;padding:1px 8px;border-radius:999px;border:1px solid var(--border2);white-space:nowrap;letter-spacing:.02em;}
+.pill-crit{background:var(--crit);color:var(--ink);border-color:var(--crit);}
+.pill-amber{color:var(--amber);border-color:var(--amber);}
+.pill-ok{background:var(--bg4);color:var(--text2);}
+.pill-good{background:var(--green-bg);color:var(--green);border-color:rgba(0,193,125,.3);}
+.pill-bad{background:var(--red-bg);color:var(--red);border-color:rgba(255,90,101,.3);}
+.pill-info{background:var(--blue-bg);color:var(--blue);border-color:rgba(77,158,255,.3);}
+
+/* ── Dnes: připravenost ── */
+.hero{display:flex;gap:var(--sp-5);align-items:center;}
+.ring{position:relative;width:132px;height:132px;flex:none;}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg);}
+.ring-v{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.ring-n{font-size:36px;font-weight:700;line-height:1;letter-spacing:-.02em;}
+.ring-u{font-size:var(--fs-xs);color:var(--text3);margin-top:4px;}
+.hero-l{font-size:var(--fs-h2);font-weight:700;letter-spacing:.02em;}
+.hero-d{color:var(--text2);margin-top:2px;}
+.comp{display:grid;grid-template-columns:auto 1fr auto;gap:6px var(--sp-3);align-items:center;margin-top:var(--sp-3);font-size:var(--fs-sm);}
+.bar{height:6px;border-radius:3px;background:var(--bg4);overflow:hidden;}
+.bar>i{display:block;height:100%;border-radius:3px;}
+@media(max-width:760px){.hero{gap:var(--sp-4);}.ring{width:104px;height:104px;}.ring-n{font-size:30px;}}
+.alerts{display:flex;flex-direction:column;gap:var(--sp-2);}
+.alert{display:flex;gap:var(--sp-3);align-items:flex-start;padding:var(--sp-3);border-radius:var(--r-md);background:var(--bg3);border-left:3px solid var(--border2);font-size:var(--fs-sm);}
+.alert b{display:block;font-size:var(--fs-md);font-weight:600;}
+.alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
+
+/* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.kpi{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.kpi-top{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);}
+.kpi-v{font-size:var(--fs-kpi);font-weight:600;line-height:1.2;letter-spacing:-.01em;}
+.kpi-v small{font-size:var(--fs-sm);font-weight:500;color:var(--text3);margin-left:3px;}
+.kpi-s{font-size:var(--fs-xs);color:var(--text3);line-height:1.45;}
+.spark{width:100%;height:36px;display:block;margin-top:6px;}
+@media(max-width:760px){.kpi-v{font-size:22px;}.kpi-top .pill{display:none;}}
+
+/* ── segmentové přepínače a čipy ── */
+.seg{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);}
+.seg button{border:0;background:none;color:var(--text2);padding:6px 12px;border-radius:var(--r-sm);font-size:var(--fs-sm);cursor:pointer;min-height:30px;}
+.seg button.on{background:var(--bg5);color:var(--text);font-weight:600;}
+.seg-scroll{display:flex;overflow-x:auto;scrollbar-width:none;max-width:100%;}
+.seg-scroll::-webkit-scrollbar{display:none;}
+.seg-scroll button{flex:none;}
+.chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-size:var(--fs-sm);cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+.chip:hover{border-color:var(--border2);color:var(--text);}
+.chip.on{background:var(--blue-bg);border-color:var(--blue);color:var(--text);}
+.chip .cnt{display:inline-flex;align-items:center;gap:4px;}
+.chip .cnt button{width:24px;height:24px;border-radius:50%;border:1px solid var(--border2);background:var(--bg4);cursor:pointer;line-height:1;font-size:var(--fs-md);}
+.chip .cnt b{min-width:14px;text-align:center;}
+.chip.auto{border-style:dashed;cursor:default;}
+@media(max-width:760px){.chip{min-height:40px;}}
+
+/* ── Trendy ── */
+.chart-box{position:relative;height:340px;}
+@media(max-width:760px){.chart-box{height:260px;}}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--sp-3);margin-top:var(--sp-4);}
+.stat{background:var(--bg3);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);}
+.stat b{display:block;font-size:var(--fs-h2);font-weight:600;}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.zones{display:flex;flex-wrap:wrap;gap:var(--sp-3);align-items:center;font-size:var(--fs-sm);color:var(--text2);margin-top:var(--sp-3);}
+.zones input{width:64px;text-align:center;}
+.legend{display:flex;flex-wrap:wrap;gap:var(--sp-3);font-size:var(--fs-xs);color:var(--text2);}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}
+
+/* ── Deník ── */
+.daynav{display:flex;align-items:center;gap:var(--sp-2);}
+.daynav .btn{min-width:38px;padding:6px 10px;}
+.daynav-t{font-weight:600;min-width:150px;text-align:center;}
+.grp+.grp{margin-top:var(--sp-4);}
+.grp .lbl{margin-bottom:var(--sp-2);}
+.meals{display:flex;flex-direction:column;gap:var(--sp-2);}
+.meal{display:grid;grid-template-columns:110px 92px minmax(0,1fr) auto;gap:var(--sp-2);align-items:center;}
+.meal select,.meal input{width:100%;}
+.meal-w{grid-column:3;}
+/* telefon: druh + čas + odebrat na prvním řádku, popis jídla přes celou šířku pod nimi (16 px = iOS nezvětšuje stránku při psaní) */
+@media(max-width:760px){.meal{grid-template-columns:minmax(0,1fr) 110px auto;padding-bottom:var(--sp-2);border-bottom:1px solid var(--grid);}.meal-w{grid-column:1 / -1;order:4;}.meal input,.meal select,textarea{font-size:16px;}}
+textarea{width:100%;min-height:72px;resize:vertical;}
+.save-st{font-size:var(--fs-xs);color:var(--text3);}
+.save-st.err{color:var(--crit);}
+
+/* ── Vlivy ── */
+.inf{display:grid;grid-template-columns:minmax(120px,1.1fr) minmax(0,2fr) auto;gap:var(--sp-2) var(--sp-3);align-items:center;padding:var(--sp-2) 0;border-bottom:1px solid var(--grid);}
+.inf:last-child{border-bottom:0;}
+.inf-n{font-weight:500;min-width:0;}
+.inf-n small{display:block;font-size:var(--fs-xs);color:var(--text3);font-weight:400;}
+.dbar{position:relative;height:18px;}
+.dbar::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--border2);}
+.dbar>i{position:absolute;top:3px;height:12px;border-radius:3px;}
+.inf-v{text-align:right;font-weight:600;white-space:nowrap;}
+.inf-v small{display:block;font-weight:400;}
+@media(max-width:760px){.inf{grid-template-columns:minmax(0,1fr) auto;}.inf .dbar{grid-column:1 / -1;order:3;}}
+
+/* ── Nastavení ── */
+table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+th{font-size:var(--fs-lbl);text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;text-align:left;padding:var(--sp-2);border-bottom:1px solid var(--border);}
+td{padding:var(--sp-2);border-bottom:1px solid var(--grid);vertical-align:middle;}
+td input{width:76px;text-align:center;}
+.tbl-wrap{overflow-x:auto;}
+.list-ed{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;}
+.list-ed .chip{cursor:default;}
+.list-ed .chip button{border:0;background:none;color:var(--text3);cursor:pointer;font-size:var(--fs-md);line-height:1;}
+.row-add{display:flex;gap:var(--sp-2);margin-top:var(--sp-3);flex-wrap:wrap;}
+.row-add input{flex:1 1 180px;}
+
+#note{display:none;margin-bottom:var(--sp-4);}
+#note.on{display:flex;}
+.empty{padding:var(--sp-5) var(--sp-3);text-align:center;color:var(--text2);}
+.toast{position:fixed;left:50%;bottom:var(--sp-5);transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm);z-index:400;opacity:0;pointer-events:none;transition:opacity .2s;}
+.toast.on{opacity:1;}
+@media(max-width:760px){.toast{bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px) + var(--sp-3));}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 4 10 2-5h6"/></svg></div>
+    <div class="logo-text">Garmin <span>Health</span></div>
+  </div>
+  <div class="hdr-sp"></div>
+  <span class="chip-age" id="age">—</span>
+  <button class="btn btn-primary" id="syncBtn" title="Stáhnout nová data z Garminu"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg><span>Sync</span></button>
+</header>
+<nav class="tabs" id="tabs" aria-label="Sekce"></nav>
+<nav id="sidenav" aria-label="Sekce"></nav>
+<main>
+  <div class="card" id="note" role="status"></div>
+  <section class="page" id="p-dnes"></section>
+  <section class="page" id="p-trendy"></section>
+  <section class="page" id="p-denik"></section>
+  <section class="page" id="p-vlivy"></section>
+  <section class="page" id="p-nast"></section>
+</main>
+<nav class="bnav" id="bnav" aria-label="Sekce"></nav>
+<div class="toast" id="toast"></div>
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>

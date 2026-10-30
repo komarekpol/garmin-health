@@ -30,9 +30,19 @@ Dashboard zdraví a regenerace z hodinek Garmin (HRV, klidová TF, Body Battery,
 ## Offline (volitelné, PC)
 `local/` + zástupce **Start Garmin Dashboard**: stáhne data do lokální databáze (garmin-givemydata) a otevře dashboard s lokálním serverem. Prahy sdílí s cloudem přes Disk.
 
+## Co umí
+- **Dnes**: odhad připravenosti, upozornění, HRV, TF, Body Battery, spánek, stres, fitness věk, rychlý zápis do deníku a co nejvíc ovlivňuje HRV.
+- **Trendy**: grafy s pásmy, klouzavým průměrem a baseline HRV.
+- **Deník**: štítky (alkohol, káva, pozdní večeře, stres, otužování, sauna, meditace, nemoc…), jídla s časem, doplňky, poznámka; aktivity z Garminu doplní samy.
+- **Vlivy**: co mění HRV, spánek, klidovou TF a Body Battery další ráno (srovnání s vlastním průměrem, síla důkazu).
+
+## Vývoj
+Stránka se sestavuje ze `src/` příkazem `python3 tools/build.py`.
+
 ## Testy
 ```
 npm install
+python3 tools/build.py
 node tests/t_gas_sync.js
 node tests/t_dashboard.js
 python3 tests/test_local.py

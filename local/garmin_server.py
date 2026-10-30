@@ -17,7 +17,10 @@ from garmin_data import DB_PATH, load_data
 # Prahy a zóny dashboardu: stejný soubor, který čte a zapisuje Apps Script (Disk pro počítače ho synchronizuje) → stejné všude
 SETTINGS_DIR = Path(os.environ.get("GARMIN_SETTINGS_DIR") or r"G:\Můj disk\Garmin Data")
 SETTINGS_PATH = SETTINGS_DIR / "garmin-settings.json"
-SETTINGS_KEYS = ("garmin_thresholds", "garmin_vst_zones", "garmin_hr_zones", "garmin_bb_zones", "garmin_resp_zones")
+SETTINGS_KEYS = ("garmin_thresholds", "garmin_vst_zones", "garmin_hr_zones", "garmin_bb_zones", "garmin_resp_zones", "garmin_ui")
+# Deník: stejný soubor jako Apps Script (garmin-journal.json); stejné limity
+JOURNAL_PATH = SETTINGS_DIR / "garmin-journal.json"
+JOURNAL_DAY_MAX, JOURNAL_CFG_MAX, JOURNAL_MAX = 6000, 20000, 2_000_000
 SETTINGS_MAX = 50_000
 
 
@@ -41,6 +44,32 @@ def settings_write(inp):
         f.write(json.dumps(cur, ensure_ascii=False))
     os.replace(tmp, SETTINGS_PATH)
     return cur["_at"]
+
+def atomic_write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix="." + path.stem + "-", suffix=".tmp", dir=str(path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def journal_read():
+    if not JOURNAL_PATH.exists():
+        return {"v": 1, "days": {}, "cfg": {}}
+    j = json.loads(JOURNAL_PATH.read_text(encoding="utf-8"))   # nečitelný soubor = chyba, nikdy tiché přepsání
+    j.setdefault("days", {}); j.setdefault("cfg", {})
+    return j
+
+
+def journal_write(fn):
+    j = journal_read(); fn(j)
+    j["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    t = json.dumps(j, ensure_ascii=False)
+    if len(t) > JOURNAL_MAX:
+        raise ValueError(f"deník má {len(t)} znaků (limit {JOURNAL_MAX}) — neuloženo")
+    atomic_write(JOURNAL_PATH, t)
+    return j["at"]
+
 
 HERE = Path(__file__).parent
 DASHBOARD_PATH = HERE / "garmin-dashboard.html"
@@ -74,22 +103,40 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if self.path != "/settings":
+        if self.path not in ("/settings", "/journal", "/journal-cfg"):
             self.send_response(404); self.end_headers(); return
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            if n > SETTINGS_MAX:
-                raise ValueError(f"nastavení je větší než {SETTINGS_MAX} znaků")
+            lim = {"/settings": SETTINGS_MAX, "/journal": JOURNAL_DAY_MAX + 100, "/journal-cfg": JOURNAL_CFG_MAX}[self.path]
+            if n > lim:
+                raise ValueError(f"požadavek je větší než {lim} znaků — neuloženo")
             inp = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
             if not isinstance(inp, dict):
                 raise ValueError("čekám objekt")
-            self.send_json({"ok": True, "at": settings_write(inp)})
+            if self.path == "/settings":
+                self.send_json({"ok": True, "at": settings_write(inp)})
+            elif self.path == "/journal-cfg":
+                self.send_json({"ok": True, "at": journal_write(lambda j: j.__setitem__("cfg", inp))})
+            else:
+                d, day = str(inp.get("date") or ""), inp.get("day")
+                if len(d) != 10 or d[4] != "-" or d[7] != "-":
+                    raise ValueError("neplatné datum")
+                def upd(j):
+                    if not day or not [k for k in day if k != "at"]:
+                        j["days"].pop(d, None)
+                    else:
+                        day["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds"); j["days"][d] = day
+                self.send_json({"ok": True, "at": journal_write(upd)})
         except Exception as e:
             self.send_json({"ok": False, "error": str(e)})
 
     def do_GET(self):
         if self.path == "/settings":
             self.send_json(settings_read())
+
+        elif self.path == "/journal":
+            try: self.send_json({"ok": True, "journal": journal_read()})
+            except Exception as e: self.send_json({"ok": False, "error": str(e)})
 
         elif self.path == "/data":
             data = load_data()

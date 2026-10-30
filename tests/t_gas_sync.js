@@ -51,7 +51,16 @@ function api(url, opt) {
         bodyBatteryActivityEvent: [{ eventType: 'SLEEP', durationInMilliseconds: 28e6, bodyBatteryImpact: 42 }] }; }));
   }
   if (p.startsWith('/fitnessage-service/fitnessage/v2/')) return res(200, { chronologicalAge: 50, fitnessAge: 44.4, achievableFitnessAge: 41 });
-  if (p === '/activitylist-service/activities/search/activities') return res(200, [{ activityName: 'Běh', activityType: { typeKey: 'running' }, startTimeLocal: TODAY + ' 07:00:00', duration: 3600, distance: 10000, averageHR: 145, activityTrainingLoad: 120 }]);
+  if (p === '/activitylist-service/activities/search/activities') {
+    // každý 3. den běh, každý 5. otužování (název „Cold Plunge“), dnes ráno běh; nejnovější první, stránkování start / limit
+    const from = q.startDate || add(TODAY, -400), to = q.endDate || TODAY, all = [];
+    range(from, to).filter(has).reverse().forEach(d => {
+      if (d === TODAY || idx(d) % 3 === 0) all.push({ activityName: 'Běh', activityType: { typeKey: 'running' }, startTimeLocal: d + ' 07:00:00', duration: 3600, distance: 10000, averageHR: 145, activityTrainingLoad: 120, aerobicTrainingEffect: 3.4 });
+      if (idx(d) % 5 === 0) all.push({ activityName: 'Cold Plunge | 15.0°C', activityType: { typeKey: 'other' }, startTimeLocal: d + ' 06:30:00', duration: 180, distance: 0, averageHR: 72, activityTrainingLoad: 0.06 });
+    });
+    API.actQ = (API.actQ || 0) + 1;
+    return res(200, all.slice(+q.start || 0, (+q.start || 0) + (+q.limit || 20)));
+  }
   return res(404, '');
 }
 // dny, které má Garmin (hodinky synchronizované) — test „nesynchronizované hodinky“ posune hranici
@@ -129,7 +138,10 @@ ok('7denní průměr klidové TF dopočten', data.daily.avg_resting_heart_rate_7
 ok('změna BB ve spánku z události SLEEP', data.sleep_latest.body_battery_change === 42 && data.nights.at(-1).bb_change === 42, data.sleep_latest.body_battery_change);
 ok('klidová TF u spánku z denního souhrnu', data.sleep_latest.resting_heart_rate > 0 && data.nights.at(-1).hr > 0);
 ok('HRV baseline (lowUpper / balancedUpper)', data.hrv.baseline_low === 25 && data.hrv.baseline_upper === 35);
-ok('fitness věk + aktivita', data.fitness.fitness_age === 44.4 && data.last_activity.activity_name === 'Běh' && data.last_activity.distance_km === 10);
+ok('fitness věk + aktivita', data.fitness.fitness_age === 44.4 && data.last_activity.activity_name === 'Běh' && data.last_activity.distance_km === 10, JSON.stringify(data.last_activity));
+ok('kompaktní dny ~210 s HRV, spánkem, TF, BB, stresem', data.days.length >= 200 && data.days.length <= 212 && data.days.at(-2).hrv > 0 && data.days.at(-2).sc > 0 && data.days.at(-2).rhr > 0 && data.days.at(-2).st === 31, data.days.length + ' ' + JSON.stringify(data.days.at(-2)));
+{ const withRun = data.days.filter(d => d.a.some(a => a.k === 'running')).length, withCold = data.days.filter(d => d.a.some(a => /cold/i.test(a.n))).length;
+  ok('aktivity po dnech (běh, otužování) i přes stránkování po 100', withRun >= 65 && withCold >= 38 && data.days.at(-1).a[0].h === 7 && data.days.at(-1).a[0].te === 3.4, withRun + ' / ' + withCold); }
 ok('readiness prázdná (API ji nemá) → stránka odhadne', Object.keys(data.readiness).length === 0);
 ok('vzorky odpovědí uloženy jednou', !!G.file('garmin-api-vzorky.json') && !!G.props.SAMPLES_DONE);
 ok('velikost dat < 2 MB', Buffer.byteLength(G.file('garmin-data.json').content) < 2e6, Buffer.byteLength(G.file('garmin-data.json').content));
@@ -188,6 +200,29 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   ok('po dokončení jsou denní souhrny za celou dobu', d2.daily.resting_heart_rate > 0 && Object.keys(JSON.parse(G2.file('garmin-hist.json').content).days).filter(k => JSON.parse(G2.file('garmin-hist.json').content).days[k].d).length >= 200);
 }
 
+// deník: uložení dne, čtení přes ghGet, smazání, limity, špatný klíč
+{
+  const day = { t: { alk: 2, kava_pozde: 1 }, m: [{ s: 'vecere', h: '21:30', w: 'pizza' }], sup: ['mg'], med: 10, n: 'test' };
+  let r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify(day)));
+  ok('deník: uložení dne', r.ok, JSON.stringify(r));
+  let g2 = JSON.parse(G.env.ghGet('k1'));
+  ok('deník: ghGet vrací záznam dne', g2.journal && g2.journal.days[TODAY] && g2.journal.days[TODAY].t.alk === 2 && g2.journal.days[TODAY].m[0].w === 'pizza');
+  r = JSON.parse(G.env.ghJournalCfg('k1', JSON.stringify({ sup: [{ id: 'mg', l: 'Hořčík' }] })));
+  ok('deník: nastavení (doplňky)', r.ok && JSON.parse(G.env.ghGet('k1')).journal.cfg.sup[0].l === 'Hořčík');
+  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({})));
+  ok('deník: prázdný den = smazání', r.ok && !JSON.parse(G.env.ghGet('k1')).journal.days[TODAY]);
+  ok('deník: špatný klíč odmítnut', !JSON.parse(G.env.ghJournalSet('x', TODAY, '{}')).ok);
+  ok('deník: neplatné datum odmítnuto', !JSON.parse(G.env.ghJournalSet('k1', '2026-1-1', '{}')).ok);
+  ok('deník: příliš velký den odmítnut', !JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify({ n: 'x'.repeat(7000) }))).ok);
+  G.env.ghJournalSet('k1', add(TODAY, -1), JSON.stringify(day));
+  // nečitelný soubor deníku = chyba, ne tiché přepsání
+  const jf = G.file('garmin-journal.json'), keep = jf.content; jf.content = '{rozbité';
+  r = JSON.parse(G.env.ghJournalSet('k1', TODAY, JSON.stringify(day)));
+  ok('deník: poškozený soubor se nepřepíše', !r.ok && jf.content === '{rozbité', JSON.stringify(r));
+  jf.content = keep;
+}
+
 fs.writeFileSync(path.join(OUT, 'sample-api.json'), G.file('garmin-data.json').content);
+fs.writeFileSync(path.join(OUT, 'sample-journal.json'), G.file('garmin-journal.json').content);
 console.log(fails ? `\n${fails} FAIL` : '\nvše OK');
 process.exit(fails ? 1 : 0);

@@ -21,7 +21,12 @@ const HEALTH_FILE = 'garmin-health-stav.json';            // stav částí syst�
 const SETTINGS_MAX_ = 50000;                               // prahy + zóny dnes ~1 tis. znaků
 const DATA_MAX_ = 8000000;                                 // google.script.run a stránka; export dnes ~0,1–0,2 MB
 const STALE_H_ = 30;                                       // data starší = sync z Garminu neběží (klíč, výpadek) → e-mail 1× denně
-const KEEP_KEYS_ = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 'garmin_bb_zones', 'garmin_resp_zones'];
+const KEEP_KEYS_ = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 'garmin_bb_zones', 'garmin_resp_zones', 'garmin_ui'];
+// Deník (jídlo, pití, štítky, doplňky, meditace, poznámka) — Garmin Data/garmin-journal.json { v, days: { RRRR-MM-DD: den }, cfg }
+const JOURNAL_FILE = 'garmin-journal.json';
+const JOURNAL_DAY_MAX_ = 6000;      // jeden den (štítky + jídla + poznámka) — běžně ~0,3 kB
+const JOURNAL_CFG_MAX_ = 20000;     // vlastní štítky a doplňky
+const JOURNAL_MAX_ = 2000000;       // celý soubor (~0,3 kB / den ≈ 0,1 MB / rok) — nad limit se nezapíše a stránka to řekne
 
 function props_() { return PropertiesService.getScriptProperties(); }
 function cfg_() { return { key: props_().getProperty('SYNC_KEY') || '' }; }
@@ -101,6 +106,7 @@ function ghSync(key) {
 function apiData_() {
   const d = dataRead_();
   d.settings = settingsRead_();
+  try { d.journal = journalRead_(); } catch (e) { d.journalErr = String(e.message || e); }
   if (d.ok) d.stale = d.ageH > STALE_H_;
   return d;
 }
@@ -115,6 +121,50 @@ function ghSet(key, json) {
     cur._at = new Date().toISOString();
     writeFile_(SETTINGS_FILE, JSON.stringify(cur), MimeType.PLAIN_TEXT);
     out = { ok: true, at: cur._at };
+  } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
+  return JSON.stringify(out);
+}
+
+// ── 📓 Deník ──
+function journalRead_() {
+  const f = fileIn_(JOURNAL_FILE);
+  if (!f) return { v: 1, days: {}, cfg: {} };
+  const j = JSON.parse(f.getBlob().getDataAsString('UTF-8'));   // nečitelný soubor = chyba (stránka ji ukáže), nikdy tiché přepsání
+  j.days = j.days || {}; j.cfg = j.cfg || {};
+  return j;
+}
+function journalWrite_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) throw new Error('Deník právě ukládá jiné zařízení — zkus za chvíli');
+  try {
+    const j = journalRead_(); fn(j); j.at = new Date().toISOString();
+    const t = JSON.stringify(j);
+    if (t.length > JOURNAL_MAX_) throw new Error('Deník má ' + t.length + ' znaků (limit ' + JOURNAL_MAX_ + ') — neuloženo');
+    writeFile_(JOURNAL_FILE, t, MimeType.PLAIN_TEXT);
+    return j.at;
+  } finally { lock.releaseLock(); }
+}
+// uložení jednoho dne (null / prázdný den = smazání záznamu dne)
+function ghJournalSet(key, date, dayJson) {
+  let out;
+  try {
+    if (!keyOk_(key)) throw new Error('Neplatný klíč');
+    if (!isYmd_(String(date || '')) || String(date).length !== 10) throw new Error('Neplatné datum');
+    if (typeof dayJson !== 'string' || dayJson.length > JOURNAL_DAY_MAX_) throw new Error('Záznam dne je větší než ' + JOURNAL_DAY_MAX_ + ' znaků — neuloženo');
+    const day = JSON.parse(dayJson);
+    const at = journalWrite_(j => { if (!day || typeof day !== 'object' || !Object.keys(day).filter(k => k !== 'at').length) delete j.days[date]; else { day.at = new Date().toISOString(); j.days[date] = day; } });
+    out = { ok: true, at: at };
+  } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
+  return JSON.stringify(out);
+}
+// vlastní štítky a seznam doplňků
+function ghJournalCfg(key, cfgJson) {
+  let out;
+  try {
+    if (!keyOk_(key)) throw new Error('Neplatný klíč');
+    if (typeof cfgJson !== 'string' || cfgJson.length > JOURNAL_CFG_MAX_) throw new Error('Nastavení deníku je větší než ' + JOURNAL_CFG_MAX_ + ' znaků — neuloženo');
+    const cfg = JSON.parse(cfgJson);
+    out = { ok: true, at: journalWrite_(j => { j.cfg = cfg || {}; }) };
   } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
   return JSON.stringify(out);
 }
@@ -407,6 +457,13 @@ function bbOf_(o) {
   }
   return out;
 }
+// aktivita do deníku vlivů (kompaktně): n název, k typ, h hodina začátku, m minuty, l zátěž, te aerobní efekt
+function actMini_(a) {
+  const st = String(a.startTimeLocal || ''), t = a.activityType || {};
+  return { n: String(a.activityName || '').slice(0, 60), k: t.typeKey || null, h: st.length >= 13 ? +st.slice(11, 13) : null,
+    m: a.duration != null ? Math.round(a.duration / 60) : null, l: a.activityTrainingLoad != null ? Math.round(a.activityTrainingLoad) : null,
+    te: a.aerobicTrainingEffect != null ? Math.round(a.aerobicTrainingEffect * 10) / 10 : null };
+}
 function actOf_(a) {
   if (!a) return {};
   const t = a.activityType || {};
@@ -475,9 +532,20 @@ function syncGarmin_(opt) {
         let wake = null; if (b.pts && s.sleep_end_gmt) { const before = b.pts.filter(q => q[0] <= s.sleep_end_gmt); if (before.length) wake = before[before.length - 1][1]; }
         histPut_(H, dd, 'd', { body_battery_highest: d.body_battery_highest ?? b.highest, body_battery_lowest: d.body_battery_lowest ?? b.lowest,
           body_battery_most_recent: d.body_battery_most_recent ?? b.most_recent, body_battery_at_wake: d.body_battery_at_wake ?? wake, sleep_bb_change: b.sleep_change }); })));
-    if (bf && okD.every(Boolean)) bf.day = today;
     step('fitness věk', () => { const j = gpGet_('/fitnessage-service/fitnessage/v2/' + today, null, ctx); if (j) H.fit = { calendar_date: today, chronological_age: num_(pick_(j, ['chronologicalAge'])), fitness_age: num_(pick_(j, ['fitnessAge', 'achievableFitnessAge'])) }; });
-    step('aktivita', () => { const j = listOf_(gpGet_('/activitylist-service/activities/search/activities', { start: 0, limit: 1 }, ctx)); if (j[0]) H.act = actOf_(j[0]); });
+    // aktivity za období (pro deník vlivů po dnech) — stránkování po 100, nejnovější první
+    okD.push(step('aktivity', () => {
+      const byDay = {}; let all = [];
+      for (let pg = 0; pg < 10; pg++) {
+        const j = listOf_(gpGet_('/activitylist-service/activities/search/activities', { start: pg * 100, limit: 100, startDate: fromD, endDate: today }, ctx)).filter(a => a && a.startTimeLocal);
+        all = all.concat(j); if (j.length < 100) break;
+      }
+      all.forEach(a => { const dd = String(a.startTimeLocal).slice(0, 10); (byDay[dd] = byDay[dd] || []).push(actMini_(a)); });
+      for (let dd = fromD; dd <= today; dd = addDays_(dd, 1)) { if (byDay[dd]) (H.days[dd] = H.days[dd] || {}).a = byDay[dd]; else if (H.days[dd]) delete H.days[dd].a; }
+      if (all[0]) H.act = actOf_(all[0]);
+      else if (!H.act) { const j = listOf_(gpGet_('/activitylist-service/activities/search/activities', { start: 0, limit: 1 }, ctx)); if (j[0]) H.act = actOf_(j[0]); }
+    }));
+    if (bf && okD.every(Boolean)) bf.day = today;
 
     // úklid a zápis
     const keepFrom = addDays_(today, -HIST_KEEP_DAYS_);
@@ -525,7 +593,13 @@ function buildData_(H) {
   return { v: 1, source: 'garmin-personal-api', exported_at: new Date().toISOString(), updated_at: Utilities.formatDate(new Date(), 'Europe/Prague', 'HH:mm:ss'),
     date: dD || dS || ymd_(new Date()), daily: daily, hrv: hrv, sleep_latest: sleep,
     readiness: {}, training_status: {},   // Personal API je nevrací (training readiness / status „not found“) — stránka připravenost odhadne sama
-    fitness: H.fit || {}, nights: nights, hrv_history: hrv_history, last_activity: H.act || {} };
+    fitness: H.fit || {}, nights: nights, hrv_history: hrv_history, last_activity: H.act || {},
+    // kompaktní dny pro Trendy a Vlivy: d datum, hrv, sc skóre spánku, sh hodiny spánku, rhr klidová TF, bb BB při probuzení,
+    // st průměrný stres dne, stp kroky, rs dýchání, a aktivity dne
+    days: ds.filter(d => d >= addDays_(ymd_(new Date()), -DAY_BACK_DAYS_)).map(d => { const x = H.days[d], dd = x.d || {}, s = x.s || {}, h = x.h || {};
+      return { d: d, hrv: h.last_night_avg ?? null, sc: s.sleep_score_overall ?? null, sh: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null,
+        rhr: dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, st: dd.average_stress_level ?? null, stp: dd.total_steps ?? null,
+        rs: dd.avg_waking_respiration ?? null, a: x.a || [] }; }) };
 }
 
 // Připomínka vypršení klíče: od 30 dní předem 1× týdně e-mail (datum vypršení zadává Pavel do GARMIN_KEY_EXP)
