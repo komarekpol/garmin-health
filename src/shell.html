@@ -145,6 +145,10 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.brief+.grid{margin-top:var(--sp-4);}
+.br{display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--fs-md);line-height:1.5;padding:3px 0;}
+.br-i{font-size:var(--fs-xs);width:14px;flex:none;}.br-up .br-i{color:var(--green);}.br-down .br-i{color:var(--red);}.br-eq .br-i{color:var(--text3);}
+.br-h{color:var(--text2);}
 .gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
 .gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
 .gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}

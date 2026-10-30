@@ -145,6 +145,10 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .alert.a-crit{border-left-color:var(--crit);}.alert.a-warn{border-left-color:var(--amber);}.alert.a-ok{border-left-color:var(--green);}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
+.brief+.grid{margin-top:var(--sp-4);}
+.br{display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--fs-md);line-height:1.5;padding:3px 0;}
+.br-i{font-size:var(--fs-xs);width:14px;flex:none;}.br-up .br-i{color:var(--green);}.br-down .br-i{color:var(--red);}.br-eq .br-i{color:var(--text3);}
+.br-h{color:var(--text2);}
 .gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
 .gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
 .gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}
@@ -648,6 +652,50 @@ function gaugesHtml(v) {
     + `<div class="gc-a">${g.a7 != null ? `<span class="g7">7d ${g.a7}</span>` : ''}${g.a14 != null ? `<span class="g14">14d ${g.a14}</span>` : ''}</div></div>`).join('');
 }
 
+// ── Krátce: co se zlepšuje / zhoršuje (tento týden vs minulý), série dní a vliv včerejška z deníku — jen z čísel, žádné domýšlení ──
+const BRIEF_M = [
+  { k: 'hrv', l: 'HRV', u: 'ms', b: 1, thr: 2, d: 0 }, { k: 'rhr', l: 'klidová TF', u: 'bpm', b: -1, thr: 1.5, d: 1 },
+  { k: 'sc', l: 'skóre spánku', u: 'b.', b: 1, thr: 3, d: 0 }, { k: 'bb', l: 'Body Battery ráno', u: '', b: 1, thr: 5, d: 0 },
+  { k: 'sh', l: 'délka spánku', u: 'h', b: 1, thr: 0.33, d: 1 }, { k: 'st', l: 'stres', u: '', b: -1, thr: 3, d: 0 },
+];
+function briefOf() {
+  const ref = (DATA && DATA.date) || TODAY(), win = (k, from, n) => { const v = []; for (let i = from; i < from + n; i++) { const x = BYD[addD(ref, -i)]; if (x && num(x[k]) != null) v.push(num(x[k])); } return v; };
+  const up = [], down = [], same = [];
+  BRIEF_M.forEach(m => {
+    const a = win(m.k, 0, 7), p = win(m.k, 7, 7); if (a.length < 4 || p.length < 4) return;
+    const diff = avg(a) - avg(p), r = { m: m, now: avg(a), diff: diff };
+    if (Math.abs(diff) < m.thr) same.push(r); else (diff * m.b > 0 ? up : down).push(r);
+  });
+  const rank = (x, y) => Math.abs(y.diff) / y.m.thr - Math.abs(x.diff) / x.m.thr; up.sort(rank); down.sort(rank);
+  const fv = (v, m) => m.k === 'sh' ? hm(v) : fmt(v, m.d) + (m.u ? ' ' + m.u : ''), fd = (v, m) => m.k === 'sh' ? (v > 0 ? '+' : '−') + Math.round(Math.abs(v) * 60) + ' min' : sgn(v, m.d) + (m.u ? ' ' + m.u : '');
+  const item = r => `<b>${esc(r.m.l)}</b> ${esc(fv(r.now, r.m))} (${esc(fd(r.diff, r.m))})`;
+  const out = [];
+  if (up.length) out.push({ k: 'up', h: 'Zlepšuje se', t: up.slice(0, 3).map(item).join(', ') });
+  if (down.length) out.push({ k: 'down', h: 'Zhoršuje se', t: down.slice(0, 3).map(item).join(', ') });
+  if ((up.length || down.length) && same.length) out.push({ k: 'eq', h: 'Beze změny', t: same.map(r => esc(r.m.l)).join(', ') });
+  if (!up.length && !down.length && same.length) out.push({ k: 'eq', h: 'Stabilní týden', t: 'Žádná z hlavních hodnot se proti minulému týdnu výrazně nezměnila.' });
+  // série: HRV klesá / TF roste aspoň 3 rána po sobě
+  const streak = (k, dir) => { let n = 0; for (let i = 0; i < 10; i++) { const a = BYD[addD(ref, -i)], b = BYD[addD(ref, -i - 1)]; if (!a || !b || num(a[k]) == null || num(b[k]) == null || (num(a[k]) - num(b[k])) * dir <= 0) break; n++; } return n; };
+  const sH = streak('hrv', -1), sR = streak('rhr', 1), sHu = streak('hrv', 1);
+  if (sH >= 3) out.push({ k: 'down', h: 'Série', t: `HRV klesá <b>${sH}. ráno po sobě</b> — zvaž lehčí den a víc spánku.` });
+  else if (sR >= 3) out.push({ k: 'down', h: 'Série', t: `Klidová TF roste <b>${sR}. ráno po sobě</b> — může jít o únavu nebo nástup nemoci.` });
+  else if (sHu >= 3) out.push({ k: 'up', h: 'Série', t: `HRV roste <b>${sHu}. ráno po sobě</b>.` });
+  // včerejšek z deníku: faktory s průkazným vlivem na HRV, které včera platily
+  try {
+    if (DAYS.length > 20) {
+      const y = addD(ref, -1), inf = influence('hrv').ok.filter(r => Math.abs(r.t) >= 2 && r.n1 >= 8 && r.f.f(y) === 1 && !(r.f.id === 't:alk2'));
+      if (inf.length) out.push({ k: inf[0].good ? 'up' : 'down', h: 'Včera', t: inf.slice(0, 2).map(r => `<b>${esc(r.f.l)}</b> — u tebe v průměru ${esc(sgn(r.e, 0))} ms HRV další ráno`).join('; ') + '.' });
+    }
+  } catch (e) {}
+  return out;
+}
+function briefHtml() {
+  const b = briefOf(); if (!b.length) return '';
+  const ic = { up: '▲', down: '▼', eq: '■' };
+  return `<div class="card brief"><div class="card-h"><div class="card-t">Krátce</div><span class="card-s">7 dní vs předchozích 7</span></div>`
+    + b.map(x => `<div class="br br-${x.k}"><span class="br-i" aria-hidden="true">${ic[x.k]}</span><div><span class="br-h">${esc(x.h)}:</span> ${x.t}</div></div>`).join('') + '</div>';
+}
+
 // ── Dnes ──
 function renderDnes() {
   const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
@@ -677,6 +725,7 @@ function renderDnes() {
   const lastAct = a.activity_name ? `<div class="sm t2" style="margin-top:var(--sp-3)">Poslední aktivita: <b>${esc(a.activity_name)}</b> · ${esc(dShort(String(a.start_time_local || '').slice(0, 10)))}${a.duration_min ? ' · ' + fmt(a.duration_min) + ' min' : ''}${a.avg_hr ? ' · Ø TF ' + fmt(a.avg_hr) : ''}</div>` : '';
   $('p-dnes').innerHTML = `
   <div class="page-head"><div><div class="page-t">${esc(cap(dLong(TODAY())))}</div><div class="page-s">Data za ${esc(dShort(DATA.date))} · ${esc(ageText())}</div></div></div>
+  ${briefHtml()}
   <div class="grid g-hero">
     <div class="card"><div class="hero">${ring(sc, rcol)}<div style="min-width:0;flex:1">
       <div class="lbl">${R.est ? 'Připravenost (odhad)' : 'Training Readiness'}</div>
