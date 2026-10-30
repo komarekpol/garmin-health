@@ -8,8 +8,8 @@ const API = 'http://localhost:8765';
 const CLOUD = window.__GH_CLOUD__ || null;
 const ST_KEYS = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 'garmin_bb_zones', 'garmin_resp_zones', 'garmin_ui'];
 const STALE_H = 30;
-let DATA = null, META = null, JR = { days: {}, cfg: {} }, DAYS = [], BYD = {}, PAGE = 'dnes';
-const UI = { trend: 'hrv', range: 30, out: 'hrv', jday: null };
+let DATA = null, META = null, JR = { days: {}, cfg: {}, food: {} }, DAYS = [], BYD = {}, PAGE = 'dnes';
+const UI = { trend: 'hrv', range: 30, out: 'hrv', jday: null, fmeal: null, fq: '', fed: null, fnew: '' };
 
 // ── drobnosti ──
 const $ = id => document.getElementById(id);
@@ -117,7 +117,7 @@ async function fetchData() {
 function migrateLocal(st) { ST_KEYS.forEach(k => { if (!(k in st)) { let v = null; try { v = localStorage.getItem(k); } catch (e) {} if (v != null) stQueue(k, v); } }); }
 function take(r, src) {
   stApply(r.settings);
-  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {} };
+  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {}, food: r.journal.food || {} };
   if (!r.ok || !r.data) throw new Error(r.error || 'Data se nepodařilo načíst');
   if (r.data.error) throw new Error(r.data.error);
   DATA = r.data;
@@ -215,12 +215,13 @@ const MEAL_S = [['sn', 'Snídaně'], ['ob', 'Oběd'], ['ve', 'Večeře'], ['sv',
 const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id === id) return t; const c = (JR.cfg.tags || []).find(x => x.id === id); return c ? { id: c.id, l: c.l } : null; };
 const jDay = d => JR.days[d] || null;
 function jEdit(d) { const j = JR.days[d] ? JSON.parse(JSON.stringify(JR.days[d])) : {}; j.t = j.t || {}; j.m = j.m || []; j.sup = j.sup || []; return j; }
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(m => m.w || m.h) && !(j.sup || []).length && !(j.n || '').trim(); }
+const mealHas = m => m && (m.w || m.h || (m.it || []).length);
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.n || '').trim() && j.kg == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
   Object.keys(j.t).forEach(k => { if (!(j.t[k] > 0)) delete j.t[k]; });
-  j.m = (j.m || []).filter(m => m.w || m.h);
+  j.m = (j.m || []).filter(mealHas);
   if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;
   jStatus('Ukládám…');
   clearTimeout(jSaveT[d] && jSaveT[d].t); jSaveT[d] = { _pending: true, t: setTimeout(() => { jSaveT[d]._pending = false; jFlush(d); }, 700) };
@@ -287,6 +288,19 @@ function factors() {
   gF('g:med', 'Meditace / dech (Garmin + deník)', d => acts(d).some(a => /medit|breath|dech/i.test((a.n || '') + ' ' + (a.k || ''))) || tg(d, 'med') === 1 || tg(d, 'dech') === 1);
   gF('g:steps', 'Kroky ≥ 10 000', d => (BYD[d].stp || 0) >= 10000);
   gF('g:stress', 'Stresový den (Ø stres ≥ 40)', d => (BYD[d].st || 0) >= 40);
+  // jídlo z databáze — jen dny s položkami (jinak null); hranice „hodně / málo“ = horní / dolní čtvrtina tvých vlastních dnů, nebo cíl
+  const ND = {}; Object.keys(JR.days).forEach(d => { const n = nutDay(d); if (n) ND[d] = n; });
+  const nds = Object.values(ND), q = (k, p) => { const v = nds.map(x => x[k]).sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * p))] : null; };
+  const G = goals(), kHi = q('k', .75), kLo = q('k', .25), pLo = G.p ? G.p * .8 : q('p', .25);
+  const nF = (id, l, fn) => F.push({ id: id, l: l, g: 'Jídlo', src: 'jídlo', f: d => ND[d] ? (fn(ND[d], d) ? 1 : 0) : null });
+  if (nds.length) {
+    nF('n:khi', `Hodně kalorií (≥ ${fmt(Math.round(kHi))} kcal)`, n => n.k >= kHi);
+    nF('n:klo', `Málo kalorií (≤ ${fmt(Math.round(kLo))} kcal)`, n => n.k <= kLo);
+    nF('n:plo', `Málo bílkovin (< ${fmt(Math.round(pLo))} g)`, n => n.p < pLo);
+    nF('n:ceve', 'Sacharidy hlavně večer (≥ 50 % po 18 h)', n => n.c > 0 && n.eveC >= n.c * .5);
+    nF('n:late', 'Po 20 h aspoň 500 kcal', n => n.late >= 500);
+    nF('n:def', 'Deficit ≥ 500 kcal proti Garminu', (n, d) => BYD[d] && num(BYD[d].kc) != null && n.k <= num(BYD[d].kc) - 500);
+  }
   return F;
 }
 function influence(ok) {
@@ -323,16 +337,19 @@ const IC = {
   trendy: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
   denik: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/>',
   vlivy: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  jidlo: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5a2 2 0 0 0 2 2M11 3v5a2 2 0 0 1-2 2"/><path d="M17 21V3c-2 1-3 3.5-3 7 0 1.6 1.3 3 3 3"/>',
   inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+// telefon: spodní lišta bez Inovací (jsou ve Víc = Nastavení, odznak se ukáže na Víc)
+const BNAV_SKIP = ['inov'];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 function navInit() {
   $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}<span class="nb" data-nb="${k}"></span></button>`).join('');
   $('sidenav').innerHTML = '<div class="sn-gl">Garmin Health</div>' + NAV.map(([k, l]) => `<button class="sn-i" data-p="${k}">${svgI(k)}<span>${l}</span><span class="nb" data-nb="${k}"></span></button>`).join('')
     + '<div class="sn-foot" id="snfoot"></div>';
-  $('bnav').innerHTML = NAV.map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span><span class="nb" data-nb="${k}"></span></button>`).join('');
+  $('bnav').innerHTML = NAV.filter(([k]) => !BNAV_SKIP.includes(k)).map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span><span class="nb" data-nb="${k === 'nast' ? 'inov' : k}"></span></button>`).join('');
   document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
 }
 function go(p) {
@@ -349,7 +366,7 @@ function renderAll() {
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {
   if (!DATA) return;
-  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
   catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
@@ -498,7 +515,8 @@ function renderDnes() {
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Deník dnes</div><span class="save-st" id="jst"></span></div>
       <div class="chips" id="quick">${quick}</div>
-      <div style="margin-top:var(--sp-3)"><button class="lnk" data-go="denik">Celý deník — jídla, doplňky, poznámka →</button></div></div>
+      ${nutLine(jt) ? `<div class="sm" style="margin-top:var(--sp-3)">Jídlo: ${nutLine(jt)}</div>` : ''}
+      <div style="margin-top:var(--sp-3);display:flex;gap:var(--sp-4);flex-wrap:wrap"><button class="lnk" data-go="jidlo">Jídlo a váha →</button><button class="lnk" data-go="denik">Celý deník →</button></div></div>
     <div class="card"><div class="card-h"><div class="card-t">Co nejvíc ovlivňuje tvé HRV</div><button class="lnk" data-go="vlivy">Vlivy →</button></div>
       ${inf.ok.length ? infRows(inf.ok, OUT.hrv, 3) : '<div class="muted sm">Zatím žádný výrazný vliv. Vlivy z Garminu (trénink, otužování, kroky, stres) se počítají z historie hned, vlivy z deníku se ukážou po ~2 týdnech zápisů.</div>'}</div>
   </div>
@@ -529,7 +547,6 @@ function bindChips(root, d) {
 function renderDenik() {
   const d = UI.jday || TODAY(), j = jEdit(d), x = BYD[d] || {}, sup = JR.cfg.sup || [], ctags = JR.cfg.tags || [];
   const actsH = (x.a || []).map(a => `<span class="chip auto">${esc(a.n || a.k)}${a.h != null ? ' · ' + a.h + ' h' : ''}${a.m ? ' · ' + a.m + ' min' : ''}${a.l ? ' · zátěž ' + a.l : ''}</span>`).join('');
-  const meals = (j.m.length ? j.m : [{ s: 'sn' }, { s: 'ob' }, { s: 've' }]).map((m, i) => mealRow(m, i)).join('');
   $('p-denik').innerHTML = `
   <div class="page-head"><div><div class="page-t">Deník</div><div class="page-s">Co jíš, piješ a děláš — Vlivy z toho počítají, co tvé HRV a spánek ovlivňuje.</div></div>
     <div class="daynav"><button class="btn" id="jprev" aria-label="Předchozí den">‹</button><div class="daynav-t">${esc(cap(dLong(d)))}</div>
@@ -540,9 +557,9 @@ function renderDenik() {
     <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${j.sup.includes(s.id) ? ' on' : ''}" data-s="${esc(s.id)}">${esc(s.l)}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div></div>
     ${actsH ? `<div class="grp"><div class="lbl">Z Garminu (automaticky)</div><div class="chips">${actsH}</div></div>` : ''}
   </div>
-  <div class="card"><div class="card-h"><div class="card-t">Jídla</div><span class="card-s">Čas pomůže najít vliv pozdního jídla</span></div>
-    <div class="meals" id="jmeals">${meals}</div>
-    <div style="margin-top:var(--sp-3)"><button class="btn" id="jaddm">+ Přidat jídlo</button></div></div>
+  <div class="card"><div class="card-h"><div class="card-t">Jídlo a váha</div><button class="lnk" data-go="jidlo">Upravit v Jídle →</button></div>
+    ${j.m.length ? `<div class="jsum">${j.m.map(m => `<div><span class="lbl">${esc((MEAL_S.find(x => x[0] === m.s) || ['', m.s])[1])}${m.h ? ' · ' + esc(m.h) : ''}</span> ${esc([...(m.it || []).map(it => (foodOf(it.f) || { l: '?' }).l + ' ' + it.g + ' g'), m.w].filter(Boolean).join(', '))}</div>`).join('')}</div>` : '<div class="muted sm">Zatím nic — zapiš v záložce Jídlo nebo nadiktuj Claudovi v chatu.</div>'}
+    ${nutLine(d) ? `<div class="sm" style="margin-top:var(--sp-2)">${nutLine(d)}</div>` : ''}${j.kg != null ? `<div class="sm t2">Váha ${fmt(j.kg, 1)} kg</div>` : ''}</div>
   <div class="card"><div class="card-h"><div class="card-t">Poznámka</div></div>
     <textarea id="jnote" placeholder="Jak se cítíš, co bylo jinak…">${esc(j.n || '')}</textarea></div>`;
   const P = $('p-denik');
@@ -553,15 +570,6 @@ function renderDenik() {
   $('jnext').onclick = () => { if (d < TODAY()) { UI.jday = addD(d, 1); renderDenik(); } };
   if ($('jtoday')) $('jtoday').onclick = () => { UI.jday = null; renderDenik(); };
   $('jnote').addEventListener('input', e => { const jj = jEdit(d); jj.n = e.target.value.slice(0, 2000); jPut(d, jj); });
-  const saveMeals = () => { const jj = jEdit(d); jj.m = [...$('jmeals').querySelectorAll('.meal')].map(r => ({ s: r.querySelector('select').value, h: r.querySelector('input[type=time]').value, w: r.querySelector('input[type=text]').value.slice(0, 200) })); jPut(d, jj); };
-  $('jmeals').addEventListener('input', saveMeals); $('jmeals').addEventListener('change', saveMeals);
-  $('jmeals').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { b.closest('.meal').remove(); saveMeals(); } });
-  $('jaddm').onclick = () => { $('jmeals').insertAdjacentHTML('beforeend', mealRow({ s: 'sv' }, Date.now())); };
-}
-function mealRow(m, i) {
-  return `<div class="meal"><select aria-label="Jídlo">${MEAL_S.map(([k, l]) => `<option value="${k}"${m.s === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`
-    + `<input type="time" value="${esc(m.h || '')}" aria-label="Čas"><input class="meal-w" type="text" value="${esc(m.w || '')}" placeholder="Co jsi jedl / pil" aria-label="Co">`
-    + `<button class="btn btn-ghost" data-rm="${i}" aria-label="Odebrat">✕</button></div>`;
 }
 
 // ── Vlivy ──
@@ -582,7 +590,7 @@ function renderVlivy() {
 }
 
 // ── Trendy ──
-const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres']];
+const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres'], ['kcal', 'Kalorie'], ['makra', 'Makra'], ['kg', 'Váha']];
 const RANGES = [[14, '14 d'], [30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Vše']];
 let CH = null;
 function renderTrendy() {
@@ -594,7 +602,7 @@ function renderTrendy() {
     <div class="seg" id="trng">${RANGES.map(([v, l]) => `<button data-v="${v}" class="${v === UI.range ? 'on' : ''}">${l}</button>`).join('')}</div></div>
   <div class="seg seg-scroll" id="tmet" style="margin-bottom:var(--sp-4)">${TR.map(([k, l]) => `<button data-k="${k}" class="${k === m ? 'on' : ''}">${l}</button>`).join('')}</div>
   <div class="card"><div class="card-h"><div class="card-t" id="ttl"></div><div class="legend" id="tleg"></div></div>
-    <div class="chart-box"><canvas id="tch"></canvas></div>${zEd}<div class="stats" id="tst"></div></div>`;
+    <div class="chart-box"><canvas id="tch"></canvas></div>${zEd}<div class="stats" id="tst"></div><div id="twk"></div></div>`;
   $('tmet').querySelectorAll('button').forEach(b => b.onclick = () => { UI.trend = b.dataset.k; renderTrendy(); });
   $('trng').querySelectorAll('button').forEach(b => b.onclick = () => { UI.range = +b.dataset.v; renderTrendy(); });
   if (z) ['z1', 'z2', 'za'].forEach(id => $(id).addEventListener('change', () => { const nz = { z1: +$('z1').value || z.z1, z2: +$('z2').value || z.z2, avgDays: Math.max(1, Math.min(60, +$('za').value || z.avgDays)) }; zoneSave(m, nz); drawTrend(); }));
@@ -610,7 +618,42 @@ function drawTrend() {
     plugins: { legend: { display: false }, tooltip: { backgroundColor: tok('--bg4'), borderColor: tok('--border2'), borderWidth: 1, titleColor: tok('--text'), bodyColor: tok('--text2'), padding: 10, titleFont: font, bodyFont: font } },
     scales: { x: { ticks: { color: t3, font, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: grid } }, y: { ticks: { color: t3, font }, grid: { color: grid } } } };
   let title = '', leg = '';
-  if (m === 'sleep') {
+  $('twk').innerHTML = '';
+  if (m === 'kcal' || m === 'makra' || m === 'kg') {
+    // dny podle kalendáře (i bez dat z Garminu), aby se jídlo a váha nepropadly
+    const n = UI.range || Math.max(30, Object.keys(JR.days).length ? Math.round((Date.parse(TODAY()) - Date.parse(Object.keys(JR.days).sort()[0])) / 864e5) + 1 : 30);
+    const dd = []; for (let i = n - 1; i >= 0; i--) dd.push(addD(TODAY(), -i));
+    const lb = dd.map(dShort), NU = dd.map(nutDay), G = goals(), pr = rows.length > 90 ? 0 : 2;
+    let ds;
+    if (m === 'kcal') {
+      title = 'Kalorie — snědeno vs spáleno (Garmin)';
+      ds = [{ type: 'bar', label: 'Snědeno', data: NU.map(x => x ? Math.round(x.k) : null), backgroundColor: tok('--blue'), borderRadius: 2 },
+        { type: 'line', label: 'Spáleno', data: dd.map(d => BYD[d] ? num(BYD[d].kc) : null), borderColor: tok('--text2'), pointRadius: pr, borderWidth: 1.6, tension: .25, spanGaps: true }];
+      if (G.k) ds.push({ type: 'line', label: 'Cíl', data: dd.map(() => G.k), borderColor: tok('--amber'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 });
+      leg = `<span><i style="background:${tok('--blue')}"></i>Snědeno</span><span><i style="background:${tok('--text2')}"></i>Spáleno (Garmin)</span>` + (G.k ? `<span><i style="background:${tok('--amber')}"></i>Cíl</span>` : '');
+    } else if (m === 'makra') {
+      title = 'Makroživiny — gramy za den';
+      ds = [['p', 'Bílkoviny', '--blue'], ['f', 'Tuky', '--purple'], ['c', 'Sacharidy', '--teal']].map(([k, l, c]) => ({ type: 'bar', label: l + ' (g)', data: NU.map(x => x ? Math.round(x[k]) : null), backgroundColor: tok(c), stack: 'm', borderRadius: 2 }));
+      leg = [['Bílkoviny', '--blue'], ['Tuky', '--purple'], ['Sacharidy', '--teal']].map(([l, c]) => `<span><i style="background:${tok(c)}"></i>${l}</span>`).join('');
+    } else {
+      title = 'Váha';
+      const kv = dd.map(kgOf), roll = kv.map((_, i) => { const a = kv.slice(Math.max(0, i - 6), i + 1).filter(v => v != null); return a.length ? Math.round(avg(a) * 10) / 10 : null; });
+      ds = [{ type: 'line', label: 'Váha (kg)', data: kv, borderColor: tok('--blue'), backgroundColor: tok('--blue'), pointRadius: 3, borderWidth: 1.4, spanGaps: true, tension: .2 },
+        { type: 'line', label: 'Ø 7 d', data: roll, borderColor: tok('--text2'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.6, spanGaps: true, tension: .3 }];
+      leg = `<span><i style="background:${tok('--blue')}"></i>Váha</span><span><i style="background:${tok('--text2')}"></i>Ø 7 dní</span>`;
+    }
+    CH = new Chart($('tch'), { data: { labels: lb, datasets: ds }, options: { ...base, scales: { x: { ...base.scales.x, stacked: m === 'makra' }, y: { ...base.scales.y, stacked: m === 'makra', beginAtZero: m !== 'kg' } } } });
+    const logged = NU.filter(Boolean), kvs = dd.map(kgOf).filter(v => v != null), burn = dd.map((d, i) => NU[i] && BYD[d] && num(BYD[d].kc) != null ? NU[i].k - num(BYD[d].kc) : null).filter(v => v != null);
+    $('tst').innerHTML = m === 'kg' ? stat('Poslední', kvs.length ? fmt(kvs[kvs.length - 1], 1) + ' kg' : '—') + stat('Min', kvs.length ? fmt(Math.min(...kvs), 1) : '—') + stat('Max', kvs.length ? fmt(Math.max(...kvs), 1) : '—') + stat('Změna za období', kvs.length > 1 ? sgn(kvs[kvs.length - 1] - kvs[0], 1) + ' kg' : '—') + stat('Vážení', fmt(kvs.length))
+      : stat('Dny se zápisem', fmt(logged.length)) + stat('Ø kcal', kc(logged.length ? avg(logged.map(x => x.k)) : null)) + stat('Ø B / T / S', logged.length ? ['p', 'f', 'c'].map(k => fmt(Math.round(avg(logged.map(x => x[k]))))).join(' / ') + ' g' : '—') + stat('Ø bilance', burn.length ? sgn(Math.round(avg(burn)), 0) + ' kcal' : '—');
+    // po týdnech (po–ne), nejnovější nahoře
+    const wk = {}; dd.forEach((d, i) => { const dt = new Date(d + 'T12:00:00'), mo = addD(d, -((dt.getDay() + 6) % 7)); const w = wk[mo] = wk[mo] || { n: [], kg: [], b: [] };
+      if (NU[i]) w.n.push(NU[i]); if (kgOf(d) != null) w.kg.push(kgOf(d)); if (NU[i] && BYD[d] && num(BYD[d].kc) != null) w.b.push(NU[i].k - num(BYD[d].kc)); });
+    const wks = Object.keys(wk).sort().reverse().slice(0, 8).filter(k => wk[k].n.length || wk[k].kg.length);
+    if (wks.length) $('twk').innerHTML = `<div class="lbl wk">Po týdnech (Ø ze dnů se zápisem)</div><div class="tbl-wrap"><table data-nogrid><thead><tr><th>Týden od</th><th>Dny</th><th>kcal</th><th>B</th><th>T</th><th>S</th><th>Bilance</th><th>Váha</th></tr></thead><tbody>`
+      + wks.map(k => { const w = wk[k], a = f => w.n.length ? fmt(Math.round(avg(w.n.map(f)))) : '—';
+        return `<tr><td>${esc(dShort(k))}</td><td>${w.n.length}</td><td>${a(x => x.k)}</td><td>${a(x => x.p)}</td><td>${a(x => x.f)}</td><td>${a(x => x.c)}</td><td>${w.b.length ? sgn(Math.round(avg(w.b)), 0) : '—'}</td><td>${w.kg.length ? fmt(avg(w.kg), 1) : '—'}</td></tr>`; }).join('') + '</tbody></table></div>';
+  } else if (m === 'sleep') {
     title = 'Spánek — fáze a skóre';
     const H = k => rows.map(x => x[k] != null ? Math.round(x[k] / 6) / 10 : null);
     const ds = [['deep', 'Hluboký', '--s-deep'], ['rem', 'REM', '--s-rem'], ['light', 'Lehký', '--s-light'], ['awake', 'Bdění', '--s-awake']]
@@ -719,6 +762,8 @@ function renderNast() {
   const sup = JR.cfg.sup || [], tags = JR.cfg.tags || [], theme = document.documentElement.getAttribute('data-theme') === 'graphite' ? 'graphite' : 'slate';
   $('p-nast').innerHTML = `
   <div class="page-head"><div><div class="page-t">Nastavení</div><div class="page-s">Ukládá se na Google Disk — platí na PC, iPadu i iPhonu.</div></div></div>
+  <div class="card inov-link"><div class="card-h"><div class="card-t">Inovace</div><button class="lnk" data-go="inov">Otevřít →</button></div>
+    <div class="sm t2">${inovOpen().length ? inovOpen().length + ' návrhů čeká na tvůj hlas.' : 'Vše odhlasováno — nové návrhy přijdou v neděli.'}</div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Doplňky a léky</div><span class="card-s">zobrazí se v Deníku</span></div>
       <div class="list-ed" id="lsup">${sup.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
@@ -747,6 +792,7 @@ function renderNast() {
   $('treset').onclick = () => { stDel('garmin_thresholds'); T = loadT(); renderNast(); toast('Výchozí prahy obnoveny'); };
   $('theme').querySelectorAll('button').forEach(b => b.onclick = () => themeSet(b.dataset.v));
   $('nsync').onclick = doSync;
+  $('p-nast').querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
 }
 
 // ══════════ START ══════════

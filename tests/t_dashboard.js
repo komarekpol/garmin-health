@@ -17,13 +17,18 @@ const html = fs.readFileSync(path.join(ROOT, 'garmin-dashboard.html'), 'utf8');
 
 // známý vliv: každý 4. den z posledních 120 alkohol (2 skl.) → HRV dalšího rána −8 ms; každý 5. den hořčík bez vlivu
 const add = (s, n) => { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const journal = { v: 1, days: {}, cfg: { sup: [{ id: 'mg', l: 'Hořčík' }], tags: [{ id: 'masaz', l: 'Masáž' }] } };
+const journal = { v: 1, days: {}, cfg: { sup: [{ id: 'mg', l: 'Hořčík' }], tags: [{ id: 'masaz', l: 'Masáž' }], goal: { k: 2400, p: 130 } },
+  food: { ovesna_kase: { l: 'Ovesná kaše', por: 300, porL: 'miska', k: 110, p: 4.5, f: 2.8, c: 16, src: 'https://www.kaloricketabulky.cz/' },
+    kure_ryze: { l: 'Kuře s rýží', por: 400, porL: 'talíř', k: 150, p: 12, f: 3, c: 18 }, pivo: { l: 'Pivo 10°', por: 500, porL: 'půllitr', k: 37, p: 0.3, f: 0, c: 3.1 } } };
 const byD = {}; sample.days.forEach(x => { byD[x.d] = x; });
 sample.days.slice(-121, -1).forEach((x, i) => {
   const j = { t: {}, sup: [], m: [] };
   if (i % 4 === 0) { j.t.alk = 2; const n = byD[add(x.d, 1)]; if (n && n.hrv != null) n.hrv -= 8; }
   if (i % 5 === 0) j.sup.push('mg');
   if (i % 3 === 0) j.m.push({ s: 've', h: '19:00', w: 'večeře' });
+  // posledních 60 dní jídlo z databáze (kaše + oběd, ve dny s alkoholem i pivo pozdě večer) a váha
+  if (i >= 60) { j.m.push({ s: 'sn', h: '07:00', w: '', it: [{ f: 'ovesna_kase', g: 300 }] }, { s: 'ob', h: '12:30', w: '', it: [{ f: 'kure_ryze', g: 400 + (i % 3) * 100 }] });
+    if (j.t.alk) j.m.push({ s: 've', h: '21:00', w: '', it: [{ f: 'pivo', g: 1000 }] }); if (i % 2 === 0) j.kg = 82 - (i - 60) * 0.02; }
   j.n = 'den ' + i; journal.days[x.d] = j;
 });
 
@@ -37,7 +42,7 @@ async function routes(ctx) {
 let fails = 0;
 const ok = (name, cond, info) => { console.log((cond ? 'OK   ' : 'FAIL ') + name + (cond || info == null ? '' : ' — ' + info)); if (!cond) fails++; };
 const watch = page => { const errs = []; page.on('pageerror', e => errs.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|net::/.test(m.text())) errs.push(m.text()); }); return errs; };
-const PAGES = ['dnes', 'trendy', 'denik', 'vlivy', 'inov', 'nast'];
+const PAGES = ['dnes', 'trendy', 'denik', 'jidlo', 'vlivy', 'inov', 'nast'];
 
 async function cloud(browser, opt) {
   const settings = { garmin_thresholds: JSON.stringify({ hrv_ok: { val: 31 } }) };
@@ -47,6 +52,7 @@ async function cloud(browser, opt) {
     + 'window.google={script:{run:(function mk(ok,fail){return new Proxy({},{get:(t,k)=>k==="withSuccessHandler"?(f=>mk(f,fail)):k==="withFailureHandler"?(f=>mk(ok,f)):'
     + '(...a)=>setTimeout(()=>{window.__CALLS__.push([k].concat(a));if(k==="ghGet")ok(JSON.stringify(window.__REPLY__));else if(k==="ghSync")ok(JSON.stringify(Object.assign({},window.__REPLY__,{sync:{ok:true,calls:7,errs:[]}})));'
     + 'else if(k==="ghJournalSet"&&window.__CONFLICT__)ok(JSON.stringify({ok:false,conflict:true,day:window.__CONFLICT__}));'
+    + 'else if(k==="ghFoodSet")ok(JSON.stringify({ok:true,food:a[2]==null?null:JSON.parse(a[2])}));'
     + 'else if(k==="ghSet"||k==="ghJournalSet"||k==="ghJournalCfg")ok(JSON.stringify({ok:true}));else fail(new Error("?"+k));},20)})})()}};</script>';
   const page_ = gsCtx.wrapScripts_(html).replace(/<head[^>]*>/i, m => m + inj);
   const ctx = await browser.newContext({ viewport: opt.vp || { width: 1400, height: 1000 } });
@@ -117,15 +123,50 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('Deník: skupiny štítků a doplněk z nastavení', /Jídlo a pití/i.test(await txt(page, '#p-denik')) && /Hořčík/.test(await txt(page, '#p-denik')) && /Masáž/.test(await txt(page, '#p-denik')));
       ok('Deník: aktivity z Garminu', /Běh/.test(await txt(page, '#p-denik')));
       await page.click('#p-denik [data-t="alk"] [data-a="+"]'); await page.click('#p-denik [data-t="alk"] [data-a="+"]');
-      await page.fill('#jmeals .meal:nth-child(3) input[type=time]', '21:15'); await page.fill('#jmeals .meal:nth-child(3) input[type=text]', 'těstoviny');
       await page.click('#jsup [data-s="mg"]');
       await page.fill('#jnote', 'unavený'); await page.waitForTimeout(1000);
       js = await calls(page, 'ghJournalSet'); const lastDay = JSON.parse(js[js.length - 1][3]);
-      ok('Deník: alkohol 2, jídlo s časem, doplněk a poznámka se uloží', lastDay.t.alk === 2 && lastDay.m.some(m => m.h === '21:15' && m.w === 'těstoviny') && lastDay.sup.includes('mg') && lastDay.n === 'unavený', JSON.stringify(lastDay));
+      ok('Deník: alkohol 2, doplněk a poznámka se uloží', lastDay.t.alk === 2 && lastDay.sup.includes('mg') && lastDay.n === 'unavený', JSON.stringify(lastDay));
       ok('Deník: stav „Uloženo“', /Uloženo/.test(await txt(page, '#jst')));
       await page.click('#jprev'); await page.waitForTimeout(150);
       ok('Deník: předchozí den ukáže uložený záznam', /^den \d+$/.test(await page.$eval('#jnote', e => e.value)), await page.$eval('#jnote', e => e.value));
       await page.screenshot({ path: path.join(OUT, 'd-denik.png'), fullPage: true });
+      ok('Deník: souhrn jídla a váhy z databáze', /Ovesná kaše 300 g/.test(await txt(page, '#p-denik')) && /kcal · B/.test(await txt(page, '#p-denik')), (await txt(page, '#p-denik')).slice(-300));
+      // Jídlo
+      await go(page, 'jidlo');
+      const yd = await page.evaluate(() => addD(TODAY(), -2)), nd = await page.evaluate(d => nutDay(d), yd), jd = journal.days[yd];
+      const exp = jd.m.reduce((a, m) => a + (m.it || []).reduce((b, it) => b + journal.food[it.f].k * it.g / 100, 0), 0);
+      ok('Jídlo: součet kcal dne = Σ gramy × kcal / 100 g', nd && Math.abs(nd.k - exp) < 0.01, JSON.stringify(nd) + ' vs ' + exp);
+      ok('Jídlo: 4 dlaždice + cíl, bilance, databáze', (await page.$$('#p-jidlo .nt')).length === 4 && /cíl 2\s?400 kcal/.test(await txt(page, '#p-jidlo')) && /Databáze jídel\s*3/.test(await txt(page, '#p-jidlo')), (await txt(page, '#p-jidlo')).slice(0, 300));
+      await page.click('#fprev'); await page.click('#fprev'); await page.waitForTimeout(150);
+      ok('Jídlo: bilance s Garminem (spálené kcal) u dne s daty', /Spáleno \(Garmin\)/i.test(await txt(page, '#p-jidlo')) && /Deficit|Přebytek/i.test(await txt(page, '#p-jidlo')), (await txt(page, '#p-jidlo')).slice(0, 400));
+      await page.click('#ftoday'); await page.waitForTimeout(150);
+      await page.click('#ftgt [data-v="ob"]'); await page.click('#fquick [data-qf="kure_ryze"]'); await page.waitForTimeout(900);
+      let jl2 = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Jídlo: klepnutí na časté jídlo přidá porci do Oběda', jl2.m.some(m => m.s === 'ob' && m.it && m.it.some(i => i.f === 'kure_ryze' && i.g === 400)), JSON.stringify(jl2.m));
+      await page.fill('#fmeals .fit input', '250'); await page.dispatchEvent('#fmeals .fit input', 'change'); await page.waitForTimeout(900);
+      jl2 = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Jídlo: změna gramů', jl2.m.some(m => m.it && m.it.some(i => i.g === 250)), JSON.stringify(jl2.m));
+      await page.fill('#fkg', '81,6'.replace(',', '.')); await page.dispatchEvent('#fkg', 'change'); await page.waitForTimeout(900);
+      jl2 = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Jídlo: váha se uloží', jl2.kg === 81.6, JSON.stringify(jl2));
+      await page.fill('[data-goal="f"]', '80'); await page.dispatchEvent('[data-goal="f"]', 'change'); await page.waitForTimeout(300);
+      const cg = (await calls(page, 'ghJournalCfg')).pop();
+      ok('Jídlo: cíl tuků → ghJournalCfg', cg && JSON.parse(cg[2]).goal.f === 80 && JSON.parse(cg[2]).goal.k === 2400);
+      await page.fill('#fsearch', 'Tvaroh'); await page.click('#fadd'); await page.waitForTimeout(200);
+      ok('Jídlo: neznámé jídlo otevře formulář s názvem', await page.$eval('[data-ff="l"]', e => e.value) === 'Tvaroh');
+      await page.fill('[data-ff="por"]', '250'); await page.fill('[data-ff="k"]', '72'); await page.fill('[data-ff="p"]', '12'); await page.click('#fsave'); await page.waitForTimeout(300);
+      const fs1 = (await calls(page, 'ghFoodSet')).pop();
+      ok('Jídlo: nové jídlo → ghFoodSet (id bez diakritiky)', fs1 && fs1[2] === 'tvaroh' && JSON.parse(fs1[3]).k === 72 && await page.evaluate(() => !!JR.food.tvaroh));
+      await page.screenshot({ path: path.join(OUT, 'd-jidlo.png'), fullPage: true });
+      // Trendy jídla
+      await go(page, 'trendy');
+      for (const k of ['kcal', 'makra', 'kg']) { await page.click(`#tmet [data-k="${k}"]`); await page.waitForTimeout(150);
+        ok(`Trendy: ${k} — graf s daty + týdenní tabulka`, await page.evaluate(() => CH.data.datasets[0].data.some(v => v != null)) && /Po týdnech/i.test(await txt(page, '#twk')), await page.evaluate(() => JSON.stringify(CH.data.datasets[0].data.slice(-5))) + (await txt(page, '#twk')).slice(0, 80)); }
+      await page.screenshot({ path: path.join(OUT, 'd-trendy-kcal.png'), fullPage: true });
+      await page.click('#tmet [data-k="hrv"]');
+      const nf = await page.evaluate(() => factors().filter(f => f.g === 'Jídlo').map(f => f.id));
+      ok('Vlivy: faktory z jídla', nf.includes('n:khi') && nf.includes('n:late') && nf.includes('n:def'), JSON.stringify(nf));
       // Vlivy
       await go(page, 'vlivy');
       const inf = await page.evaluate(() => influence('hrv').ok.map(r => [r.f.id, Math.round(r.e * 10) / 10, Math.round(r.t * 10) / 10, r.n1]));
@@ -159,7 +200,7 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('Nastavení: práh se uloží', th && JSON.parse(th.garmin_thresholds).hr_warn.val === 58);
       await page.fill('#nsup', 'Vitamín D3'); await page.click('#asup'); await page.waitForTimeout(200);
       const cf = await calls(page, 'ghJournalCfg');
-      ok('Nastavení: nový doplněk → ghJournalCfg', cf.length === 1 && JSON.parse(cf[0][2]).sup.some(s => s.l === 'Vitamín D3' && s.id === 'vitamin_d3'), JSON.stringify(cf));
+      ok('Nastavení: nový doplněk → ghJournalCfg', cf.length >= 1 && JSON.parse(cf[cf.length - 1][2]).sup.some(s => s.l === 'Vitamín D3' && s.id === 'vitamin_d3'), JSON.stringify(cf));
       await page.screenshot({ path: path.join(OUT, 'd-nast.png'), fullPage: true });
       await page.click('#theme [data-v="graphite"]'); await page.waitForTimeout(150);
       ok('Nastavení: motiv Grafit', await page.evaluate(() => document.documentElement.getAttribute('data-theme')) === 'graphite');
@@ -172,7 +213,8 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       const { ctx, page, errs } = await cloud(browser, { vp: { width: 390, height: 844 } });
       ok('telefon: spodní lišta, bez boční a horní', await page.$eval('#bnav', e => getComputedStyle(e).display === 'flex') && await page.$eval('#tabs', e => getComputedStyle(e).display === 'none') && await page.$eval('#sidenav', e => getComputedStyle(e).display === 'none'));
       for (const p of PAGES) {
-        await page.click(`#bnav [data-p="${p}"]`); await page.waitForTimeout(250);
+        if (await page.$(`#bnav [data-p="${p}"]`)) await page.click(`#bnav [data-p="${p}"]`); else await page.evaluate(x => go(x), p);
+        await page.waitForTimeout(250);
         const w = await page.evaluate(() => document.documentElement.scrollWidth);
         ok(`telefon: ${p} se vejde na šířku (390 px)`, w <= 390, w + ' px');
         await page.screenshot({ path: path.join(OUT, `m-${p}.png`), fullPage: true });

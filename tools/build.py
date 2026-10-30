@@ -1,10 +1,10 @@
-"""Sestaví garmin-dashboard.html (jeden soubor, který Apps Script načítá z GitHubu) ze src/shell.html + src/inovace.js + src/app.js.
+"""Sestaví garmin-dashboard.html (jeden soubor, který Apps Script načítá z GitHubu) ze src/shell.html + src/inovace.js + src/jidlo.js + src/app.js.
 Spuštění: python3 tools/build.py   (testy ověřují, že garmin-dashboard.html odpovídá zdrojům)"""
 from pathlib import Path
 import sys
 ROOT = Path(__file__).resolve().parent.parent
 shell = (ROOT / "src/shell.html").read_text(encoding="utf-8")
-app = (ROOT / "src/inovace.js").read_text(encoding="utf-8").rstrip() + "\n\n" + (ROOT / "src/app.js").read_text(encoding="utf-8")
+app = "\n\n".join((ROOT / f).read_text(encoding="utf-8").rstrip() for f in ("src/inovace.js", "src/jidlo.js", "src/app.js"))
 if shell.count("/*__APP__*/") != 1:
     sys.exit("src/shell.html musí obsahovat právě jeden /*__APP__*/")
 if "</script" in app.lower():

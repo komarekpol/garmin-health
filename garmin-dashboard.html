@@ -160,6 +160,26 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .iv-no summary{cursor:pointer;list-style:none;}.iv-no[open] summary{margin-bottom:var(--sp-3);}
 .pods{margin-top:var(--sp-3);}.pod{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:var(--sp-2) 0;border-top:1px solid var(--grid);}
 @media(max-width:760px){.bnav-i span:not(.nb){font-size:10px;}.iv-b{flex:1;min-width:0;min-height:44px;}}
+.g-nut{grid-template-columns:repeat(4,minmax(0,1fr));}.g-nut>.card{margin-top:0;}
+.nbar{height:6px;border-radius:3px;background:var(--bg4);margin-top:var(--sp-2);overflow:hidden;}.nbar i{display:block;height:100%;background:var(--blue);border-radius:3px;}
+.bal{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--sp-3);}.bal>div{display:flex;flex-direction:column;gap:2px;}.bal b{font-size:var(--fs-h2);font-weight:600;}
+.ebar{display:flex;height:10px;border-radius:5px;overflow:hidden;margin-top:var(--sp-1);background:var(--bg4);}.ebar i{display:block;height:100%;}
+.kgrow{display:flex;align-items:center;gap:var(--sp-3);}.kgrow input{width:110px;}
+.fmeals{margin-top:var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-3);}
+.fmeal{border:1px solid var(--grid);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);}
+.fmeal-h{display:grid;grid-template-columns:110px 92px minmax(0,1fr) auto auto;gap:var(--sp-2);align-items:center;}.fmeal-h select,.fmeal-h input{width:100%;}
+.fit{display:grid;grid-template-columns:minmax(0,1fr) 72px auto 80px auto;gap:var(--sp-2);align-items:center;padding:4px 0;border-top:1px solid var(--grid);margin-top:4px;}.fit input{width:100%;text-align:right;}
+.fit-k{font-size:var(--fs-sm);color:var(--text2);text-align:right;white-space:nowrap;}
+#fquick .chip small{margin-left:4px;}
+.fform{border:1px solid var(--border2);border-radius:var(--r-md);padding:var(--sp-3);margin-bottom:var(--sp-3);background:var(--bg3);}
+.fform-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-3);}.fform-g label{display:flex;flex-direction:column;gap:4px;}.fform-g input{width:100%;}
+.fform-a{display:flex;gap:var(--sp-2);margin-top:var(--sp-3);}
+.goals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--sp-3);}.goals label{display:flex;flex-direction:column;gap:4px;}.goals input{width:100%;}
+.jsum{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-sm);}
+.wk{margin-top:var(--sp-3);}
+@media(max-width:1099px){.g-nut{grid-template-columns:repeat(2,minmax(0,1fr));}.fform-g,.goals{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:760px){.fmeal-h{grid-template-columns:minmax(0,1fr) 100px auto;}.fmeal-w{grid-column:1 / -1;order:4;}.fmeal-h .fit-k{display:none;}
+  .fit{grid-template-columns:minmax(0,1fr) 64px 70px auto;}.fit .xs{display:none;}.fit input,.fmeal-h input,.fmeal-h select,.kgrow input,.fform input,.goals input{font-size:16px;}.bal b{font-size:var(--fs-md);}}
 .gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
 .gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
 .gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}
@@ -270,6 +290,7 @@ td input{width:76px;text-align:center;}
   <section class="page" id="p-dnes"></section>
   <section class="page" id="p-trendy"></section>
   <section class="page" id="p-denik"></section>
+  <section class="page" id="p-jidlo"></section>
   <section class="page" id="p-vlivy"></section>
   <section class="page" id="p-inov"></section>
   <section class="page" id="p-nast"></section>
@@ -314,6 +335,174 @@ const INOV = [
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
 
+// ══════════ JÍDLO — databáze jídel, kalorie a makroživiny, váha (Pavel 30.10.2026) ══════════
+// Databáze JR.food { id: { l, por g, porL, k kcal / 100 g, p bílkoviny, f tuky, c sacharidy (g / 100 g), src, at } } — hodnoty dohledává Claude
+// (kaloricketabulky.cz / USDA, zdroj v src), Pavel je opravuje. Jídlo dne: day.m[].it [{ f: id, g: gramy }], váha day.kg, cíle JR.cfg.goal { k, p, f, c }.
+const NUT = [['k', 'Kalorie', 'kcal', 0], ['p', 'Bílkoviny', 'g', 0], ['f', 'Tuky', 'g', 0], ['c', 'Sacharidy', 'g', 0]];
+const MEAL_BY_H = h => h < 10 ? 'sn' : h < 15 ? 'ob' : h < 18 ? 'sv' : 've';
+const nowHM = () => { const n = new Date(); return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0'); };
+const foodOf = id => (JR.food || {})[id] || null;
+const itemNut = it => { const f = foodOf(it.f); if (!f) return null; const q = (+it.g || 0) / 100; return { k: (f.k || 0) * q, p: (f.p || 0) * q, f: (f.f || 0) * q, c: (f.c || 0) * q }; };
+// součty dne z položek databáze (null = ten den žádné položky — Vlivy ho pak nepočítají)
+function nutDay(d) {
+  const j = JR.days[d]; if (!j || !(j.m || []).some(m => (m.it || []).length)) return null;
+  const s = { k: 0, p: 0, f: 0, c: 0, n: 0, late: 0, eveC: 0, unk: 0 };
+  (j.m || []).forEach(m => (m.it || []).forEach(it => { const v = itemNut(it); if (!v) { s.unk++; return; } s.n++;
+    ['k', 'p', 'f', 'c'].forEach(k => { s[k] += v[k]; });
+    if ((m.h || '') >= '20:00') s.late += v.k;
+    if (m.s === 've' || (m.h || '') >= '18:00') s.eveC += v.c; }));
+  return s;
+}
+const goals = () => (JR.cfg && JR.cfg.goal) || {};
+function foodUse(days) {
+  const u = {}, from = addD(TODAY(), -(days || 120));
+  Object.keys(JR.days).forEach(d => { if (d < from) return; (JR.days[d].m || []).forEach(m => (m.it || []).forEach(it => { u[it.f] = (u[it.f] || 0) + 1; })); });
+  return u;
+}
+const kgOf = d => { const j = JR.days[d]; return j && j.kg != null ? +j.kg : null; };
+function kgSeries(n) { const out = []; for (let i = n - 1; i >= 0; i--) { const d = addD(TODAY(), -i); out.push(kgOf(d)); } return out; }
+function lastKg() { const ks = Object.keys(JR.days).filter(d => JR.days[d].kg != null).sort(); return ks.length ? { d: ks[ks.length - 1], kg: +JR.days[ks[ks.length - 1]].kg } : null; }
+const kc = v => v == null ? '—' : fmt(Math.round(v));
+const g1 = v => v == null ? '—' : fmt(Math.round(v));
+
+async function foodSave(id, obj) {
+  try {
+    const r = CLOUD ? await gsRun('ghFoodSet', CLOUD.key, id, obj == null ? null : JSON.stringify(obj))
+      : await (await fetch(`${API}/food`, { method: 'POST', body: JSON.stringify({ id: id, food: obj }), headers: { 'Content-Type': 'text/plain' } })).json();
+    if (!r.ok) throw new Error(r.error || 'neznámá chyba');
+    JR.food = JR.food || {}; if (obj == null) delete JR.food[id]; else JR.food[id] = r.food || Object.assign({}, obj);
+    toast(obj == null ? 'Jídlo smazáno' : 'Jídlo uloženo'); return true;
+  } catch (e) { toast('Neuloženo: ' + (e.message || e)); return false; }
+}
+const foodIdOf = l => String(l || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40);
+
+// ── souhrn pro Dnes a Deník (jeden řádek) ──
+function nutLine(d) {
+  const N = nutDay(d), G = goals(); if (!N) return '';
+  return `<b>${kc(N.k)}</b>${G.k ? ' / ' + kc(G.k) : ''} kcal · B ${g1(N.p)} g · T ${g1(N.f)} g · S ${g1(N.c)} g`;
+}
+
+// ── záložka Jídlo ──
+function renderJidlo() {
+  const d = UI.jday || TODAY(), j = jEdit(d), N = nutDay(d), G = goals(), x = BYD[d] || {}, use = foodUse(120);
+  const tgt = UI.fmeal || MEAL_BY_H(new Date().getHours());
+  const top = Object.keys(JR.food || {}).sort((a, b) => (use[b] || 0) - (use[a] || 0) || (JR.food[a].l > JR.food[b].l ? 1 : -1)).slice(0, 12);
+  const tiles = NUT.map(([k, l, u]) => { const v = N ? N[k] : null, gl = G[k] || null, pct = v != null && gl ? Math.min(100, v / gl * 100) : null;
+    const over = k === 'k' && gl && v > gl * 1.1, low = k === 'p' && gl && v != null && d < TODAY() && v < gl * 0.8;
+    return `<div class="card nt"><div class="kpi-top"><span class="lbl">${l}</span>${over ? pill('nad cílem', 'amber') : low ? pill('málo', 'amber') : ''}</div>
+      <div class="kpi-v">${v == null ? '—' : fmt(Math.round(v))}<small>${u}</small></div><div class="kpi-s">${gl ? 'cíl ' + fmt(gl) + ' ' + u : 'cíl nenastaven'}</div>
+      <div class="nbar"><i style="width:${pct == null ? 0 : pct}%"></i></div></div>`; }).join('');
+  const burn = num(x.kc), bal = N && burn != null ? N.k - burn : null;
+  const en = N ? [['B', N.p * 4, '--blue'], ['T', N.f * 9, '--purple'], ['S', N.c * 4, '--teal']] : [], enT = en.reduce((a, e) => a + e[1], 0) || 1;
+  const meals = j.m.map((m, i) => mealBlock(m, i)).join('') || '<div class="muted sm">Zatím nic. Klepni na jídlo nahoře nebo „+ Jídlo“.</div>';
+  const lk = lastKg(), ks = kgSeries(90), k7 = (() => { const v = kgSeries(7).filter(v => v != null); return v.length ? avg(v) : null; })();
+  const k30 = (() => { const a = kgSeries(37).slice(0, 7).filter(v => v != null); return a.length && k7 != null ? k7 - avg(a) : null; })();
+  $('p-jidlo').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Jídlo</div><div class="page-s">Kalorie a makroživiny z tvé databáze jídel. Nadiktuj Claudovi v chatu, co jsi jedl — doplní to sem.</div></div>
+    <div class="daynav"><button class="btn" id="fprev" aria-label="Předchozí den">‹</button><div class="daynav-t">${esc(cap(dLong(d)))}</div>
+    <button class="btn" id="fnext" aria-label="Další den" ${d >= TODAY() ? 'disabled' : ''}>›</button>${d !== TODAY() ? '<button class="btn btn-ghost" id="ftoday">Dnes</button>' : ''}</div></div>
+  <div class="grid g-nut">${tiles}</div>
+  <div class="grid g-2">
+    <div class="card"><div class="card-h"><div class="card-t">Bilance s Garminem</div><span class="save-st" id="jst"></span></div>
+      ${burn == null ? '<div class="muted sm">Spálené kalorie z hodinek pro tento den zatím nejsou (doplní se po syncu).</div>' : `<div class="bal">
+        <div><span class="lbl">Snědeno</span><b>${N ? kc(N.k) : '—'}</b></div><div><span class="lbl">Spáleno (Garmin)</span><b>${kc(burn)}</b><small class="xs muted">aktivní ${kc(num(x.ka))}</small></div>
+        <div><span class="lbl">${bal == null ? 'Rozdíl' : bal < 0 ? 'Deficit' : 'Přebytek'}</span><b>${bal == null ? '—' : fmt(Math.abs(Math.round(bal)))}</b></div></div>`}
+      ${N ? `<div class="lbl" style="margin-top:var(--sp-3)">Energie z makroživin</div><div class="ebar">${en.map(e => `<i style="width:${(e[1] / enT * 100).toFixed(1)}%;background:${tok(e[2])}" title="${e[0]}"></i>`).join('')}</div>
+        <div class="legend">${en.map(e => `<span><i style="background:${tok(e[2])}"></i>${e[0] === 'B' ? 'Bílkoviny' : e[0] === 'T' ? 'Tuky' : 'Sacharidy'} ${fmt(Math.round(e[1] / enT * 100))} %</span>`).join('')}</div>` : ''}
+      ${N && N.unk ? `<div class="xs" style="color:var(--amber);margin-top:var(--sp-2)">${N.unk} položek odkazuje na jídlo, které v databázi už není.</div>` : ''}</div>
+    <div class="card"><div class="card-h"><div class="card-t">Váha</div><span class="card-s">${lk ? 'poslední ' + esc(dShort(lk.d)) : 'zatím žádná'}</span></div>
+      <div class="kgrow"><label class="lbl" for="fkg">Váha ${esc(dShort(d))}</label><input type="number" id="fkg" step="0.1" min="30" max="250" inputmode="decimal" value="${j.kg != null ? j.kg : ''}" placeholder="kg"></div>
+      <div class="sm t2" style="margin-top:var(--sp-2)">Ø 7 dní ${k7 == null ? '—' : fmt(k7, 1) + ' kg'}${k30 != null ? ' · za měsíc ' + sgn(k30, 1) + ' kg' : ''}</div>${spark(ks, tok('--blue'))}</div>
+  </div>
+  <div class="card"><div class="card-h"><div class="card-t">Jídla dne</div><button class="btn" id="faddm">+ Jídlo</button></div>
+    <div class="lbl">Přidat do</div><div class="seg" id="ftgt">${MEAL_S.map(([k, l]) => `<button data-v="${k}" class="${k === tgt ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="chips" id="fquick" style="margin-top:var(--sp-3)">${top.length ? top.map(id => `<button type="button" class="chip" data-qf="${esc(id)}">${esc(JR.food[id].l)}<small class="muted">${esc(JR.food[id].porL || fmt(JR.food[id].por) + ' g')}</small></button>`).join('') : '<span class="muted sm">Databáze je prázdná — přidej jídla dole nebo je nadiktuj Claudovi.</span>'}</div>
+    <div class="row-add" style="margin-top:var(--sp-3)"><input id="fsearch" list="fdl" placeholder="Hledat v databázi…" autocomplete="off"><button class="btn" id="fadd">Přidat</button></div>
+    <datalist id="fdl">${Object.keys(JR.food || {}).map(id => `<option value="${esc(JR.food[id].l)}">`).join('')}</datalist>
+    <div class="fmeals" id="fmeals">${meals}</div></div>
+  ${foodDbHtml(use)}
+  <div class="card"><div class="card-h"><div class="card-t">Denní cíle</div><span class="card-s">prázdné = bez cíle</span></div>
+    <div class="goals">${NUT.map(([k, l, u]) => `<label><span class="lbl">${l}</span><input type="number" min="0" step="1" data-goal="${k}" value="${G[k] || ''}" placeholder="${u}"></label>`).join('')}</div>
+    <div class="xs muted" style="margin-top:var(--sp-2)">Orientační — cíle nastavuješ ty${lk ? `; při ${fmt(lk.kg, 1)} kg je 1,6 g bílkovin / kg ≈ ${fmt(Math.round(lk.kg * 1.6))} g` : ''}.</div></div>`;
+  bindJidlo(d);
+}
+function mealBlock(m, i) {
+  const items = (m.it || []).map((it, k) => { const f = foodOf(it.f), v = itemNut(it);
+    return `<div class="fit" data-k="${k}"><span class="fit-n">${f ? esc(f.l) : '<i class="muted">neznámé jídlo</i>'}</span>
+      <input type="number" min="1" max="3000" step="1" inputmode="numeric" value="${it.g}" aria-label="Gramy"><span class="xs muted">g</span>
+      <span class="fit-k">${v ? kc(v.k) + ' kcal' : '—'}</span><button class="btn btn-ghost" data-rmi="${k}" aria-label="Odebrat položku">✕</button></div>`; }).join('');
+  const mk = (m.it || []).reduce((a, it) => { const v = itemNut(it); return a + (v ? v.k : 0); }, 0);
+  return `<div class="fmeal" data-i="${i}"><div class="fmeal-h"><select aria-label="Jídlo">${MEAL_S.map(([k, l]) => `<option value="${k}"${m.s === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    <input type="time" value="${esc(m.h || '')}" aria-label="Čas"><input class="fmeal-w" type="text" value="${esc(m.w || '')}" placeholder="poznámka (volitelně)" aria-label="Poznámka k jídlu">
+    <span class="fit-k">${mk ? kc(mk) + ' kcal' : ''}</span><button class="btn btn-ghost" data-rmm="${i}" aria-label="Odebrat jídlo">✕</button></div>${items}</div>`;
+}
+function foodDbHtml(use) {
+  const q = (UI.fq || '').toLowerCase(), ids = Object.keys(JR.food || {}).filter(id => !q || JR.food[id].l.toLowerCase().includes(q))
+    .sort((a, b) => (use[b] || 0) - (use[a] || 0) || (JR.food[a].l > JR.food[b].l ? 1 : -1));
+  const ed = UI.fed;
+  const form = ed ? foodForm(ed === '+' ? { l: UI.fnew || '', por: 100 } : JR.food[ed] || {}, ed) : '';
+  return `<div class="card" id="fdb"><div class="card-h"><div class="card-t">Databáze jídel <span class="muted">${Object.keys(JR.food || {}).length}</span></div><button class="btn" id="fnew">+ Nové jídlo</button></div>
+    ${form}<div class="row-add"><input id="fq" placeholder="Filtrovat…" value="${esc(UI.fq || '')}" autocomplete="off"></div>
+    ${ids.length ? `<div class="tbl-wrap"><table data-nogrid><thead><tr><th>Jídlo</th><th>Porce</th><th>kcal / 100 g</th><th>B</th><th>T</th><th>S</th><th>Použito</th><th></th></tr></thead><tbody>
+    ${ids.map(id => { const f = JR.food[id]; return `<tr><td>${esc(f.l)}${f.src ? `<div class="xs muted">${/^https?:/.test(f.src) ? `<a class="lnk" href="${esc(f.src)}" target="_blank" rel="noopener">zdroj</a>` : esc(f.src)}</div>` : ''}</td>
+      <td>${esc(f.porL ? f.porL + ' · ' : '')}${fmt(f.por)} g</td><td>${fmt(f.k)}</td><td>${fmt(f.p, 1)}</td><td>${fmt(f.f, 1)}</td><td>${fmt(f.c, 1)}</td><td>${use[id] || 0}×</td>
+      <td><button class="btn btn-ghost" data-fed="${esc(id)}">Upravit</button></td></tr>`; }).join('')}</tbody></table></div>` : '<div class="muted sm">Nic nenalezeno.</div>'}</div>`;
+}
+function foodForm(f, id) {
+  const fld = (k, l, step) => `<label><span class="lbl">${l}</span><input type="${k === 'l' || k === 'porL' || k === 'src' ? 'text' : 'number'}" ${step ? `step="${step}" min="0"` : ''} data-ff="${k}" value="${esc(f[k] != null ? f[k] : '')}"></label>`;
+  return `<div class="fform"><div class="fform-g">${fld('l', 'Název')}${fld('porL', 'Porce (popis)')}${fld('por', 'Porce (g)', '1')}${fld('k', 'kcal / 100 g', '1')}
+    ${fld('p', 'Bílkoviny / 100 g', '0.1')}${fld('f', 'Tuky / 100 g', '0.1')}${fld('c', 'Sacharidy / 100 g', '0.1')}${fld('src', 'Zdroj (odkaz / etiketa)')}</div>
+    <div class="fform-a"><button class="btn btn-primary" id="fsave">Uložit</button><button class="btn btn-ghost" id="fcancel">Zrušit</button>${id !== '+' ? '<button class="btn btn-ghost" id="fdel" style="margin-left:auto">Smazat</button>' : ''}</div></div>`;
+}
+function bindJidlo(d) {
+  const P = $('p-jidlo');
+  $('fprev').onclick = () => { UI.jday = addD(d, -1); renderJidlo(); };
+  $('fnext').onclick = () => { if (d < TODAY()) { UI.jday = addD(d, 1); renderJidlo(); } };
+  if ($('ftoday')) $('ftoday').onclick = () => { UI.jday = null; renderJidlo(); };
+  $('ftgt').querySelectorAll('button').forEach(b => b.onclick = () => { UI.fmeal = b.dataset.v; $('ftgt').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); });
+  const addFood = id => { const f = foodOf(id); if (!f) return; const jj = jEdit(d), s = UI.fmeal || MEAL_BY_H(new Date().getHours());
+    let m = jj.m.filter(x => x.s === s).pop();
+    if (!m) { m = { s: s, h: d === TODAY() ? nowHM() : '', w: '' }; jj.m.push(m); }
+    (m.it = m.it || []).push({ f: id, g: Math.round(f.por || 100) }); jPut(d, jj); renderJidlo(); };
+  P.querySelectorAll('[data-qf]').forEach(b => b.onclick = () => addFood(b.dataset.qf));
+  const search = () => { const v = $('fsearch').value.trim(); if (!v) return; const id = Object.keys(JR.food || {}).find(k => JR.food[k].l.toLowerCase() === v.toLowerCase());
+    if (id) addFood(id); else { UI.fed = '+'; UI.fnew = v; renderJidlo(); const el = $('fdb'); if (el) el.scrollIntoView({ block: 'start' }); toast('„' + v + '“ v databázi není — doplň hodnoty'); } };
+  $('fadd').onclick = search; $('fsearch').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  $('fsearch').addEventListener('change', () => { const v = $('fsearch').value.trim(); if (Object.keys(JR.food || {}).some(k => JR.food[k].l.toLowerCase() === v.toLowerCase())) search(); });
+  $('faddm').onclick = () => { const jj = jEdit(d); jj.m.push({ s: UI.fmeal || MEAL_BY_H(new Date().getHours()), h: d === TODAY() ? nowHM() : '', w: '' }); jPut(d, jj); renderJidlo(); };
+  // úpravy jídel dne
+  const M = $('fmeals');
+  M.addEventListener('change', e => { const mb = e.target.closest('.fmeal'); if (!mb) return; const i = +mb.dataset.i, jj = jEdit(d), m = jj.m[i]; if (!m) return;
+    const fi = e.target.closest('.fit');
+    if (fi) { const g = Math.round(+e.target.value); if (g > 0 && g <= 3000) m.it[+fi.dataset.k].g = g; else { e.target.value = m.it[+fi.dataset.k].g; return; } }
+    else { m.s = mb.querySelector('select').value; m.h = mb.querySelector('input[type=time]').value; m.w = mb.querySelector('.fmeal-w').value.slice(0, 200); }
+    jPut(d, jj); if (fi) renderJidlo(); });
+  M.addEventListener('click', e => { const b = e.target.closest('[data-rmi],[data-rmm]'); if (!b) return; const mb = b.closest('.fmeal'), i = +mb.dataset.i, jj = jEdit(d);
+    if (b.dataset.rmm != null) jj.m.splice(i, 1); else jj.m[i].it.splice(+b.dataset.rmi, 1);
+    jPut(d, jj); renderJidlo(); });
+  // váha
+  $('fkg').addEventListener('change', e => { const v = parseFloat(String(e.target.value).replace(',', '.')), jj = jEdit(d);
+    if (e.target.value === '') delete jj.kg; else if (v >= 30 && v <= 250) jj.kg = Math.round(v * 10) / 10; else { toast('Váha mimo rozsah 30–250 kg'); return; }
+    jPut(d, jj); });
+  // cíle
+  P.querySelectorAll('[data-goal]').forEach(i => i.addEventListener('change', () => { const g = Object.assign({}, goals()), v = Math.round(+i.value);
+    if (i.value === '' || !(v > 0)) delete g[i.dataset.goal]; else g[i.dataset.goal] = v; JR.cfg.goal = g; jCfgSave(); renderJidlo(); }));
+  // databáze
+  $('fq').addEventListener('input', e => { UI.fq = e.target.value; const pos = e.target.selectionStart; renderJidlo(); const q = $('fq'); q.focus(); try { q.setSelectionRange(pos, pos); } catch (er) {} });
+  $('fnew').onclick = () => { UI.fed = '+'; UI.fnew = ''; renderJidlo(); };
+  P.querySelectorAll('[data-fed]').forEach(b => b.onclick = () => { UI.fed = b.dataset.fed; renderJidlo(); $('fdb').scrollIntoView({ block: 'start' }); });
+  if ($('fsave')) {
+    $('fcancel').onclick = () => { UI.fed = null; renderJidlo(); };
+    $('fsave').onclick = async () => { const o = {}; P.querySelectorAll('[data-ff]').forEach(i => { const k = i.dataset.ff; o[k] = i.type === 'number' ? (i.value === '' ? null : +i.value) : i.value.trim(); });
+      if (!o.l || o.k == null) { toast('Vyplň aspoň název a kcal / 100 g'); return; }
+      const id = UI.fed === '+' ? foodIdOf(o.l) : UI.fed;
+      if (!id) { toast('Neplatný název'); return; }
+      if (UI.fed === '+' && JR.food && JR.food[id]) { toast('Jídlo „' + JR.food[id].l + '“ už v databázi je'); return; }
+      if (await foodSave(id, o)) { UI.fed = null; renderJidlo(); } };
+    if ($('fdel')) $('fdel').onclick = async () => { const id = UI.fed; if (await foodSave(id, null)) { UI.fed = null; renderJidlo(); } };
+  }
+}
+
 'use strict';
 // ══════════ GARMIN HEALTH — aplikace (vkládá se do garmin-dashboard.html, viz tools/build.py) ══════════
 // Data: cloud (Apps Script: window.__GH_CLOUD__ → google.script.run ghGet / ghSync / ghSet / ghJournalSet / ghJournalCfg)
@@ -324,8 +513,8 @@ const API = 'http://localhost:8765';
 const CLOUD = window.__GH_CLOUD__ || null;
 const ST_KEYS = ['garmin_thresholds', 'garmin_vst_zones', 'garmin_hr_zones', 'garmin_bb_zones', 'garmin_resp_zones', 'garmin_ui'];
 const STALE_H = 30;
-let DATA = null, META = null, JR = { days: {}, cfg: {} }, DAYS = [], BYD = {}, PAGE = 'dnes';
-const UI = { trend: 'hrv', range: 30, out: 'hrv', jday: null };
+let DATA = null, META = null, JR = { days: {}, cfg: {}, food: {} }, DAYS = [], BYD = {}, PAGE = 'dnes';
+const UI = { trend: 'hrv', range: 30, out: 'hrv', jday: null, fmeal: null, fq: '', fed: null, fnew: '' };
 
 // ── drobnosti ──
 const $ = id => document.getElementById(id);
@@ -433,7 +622,7 @@ async function fetchData() {
 function migrateLocal(st) { ST_KEYS.forEach(k => { if (!(k in st)) { let v = null; try { v = localStorage.getItem(k); } catch (e) {} if (v != null) stQueue(k, v); } }); }
 function take(r, src) {
   stApply(r.settings);
-  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {} };
+  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {}, food: r.journal.food || {} };
   if (!r.ok || !r.data) throw new Error(r.error || 'Data se nepodařilo načíst');
   if (r.data.error) throw new Error(r.data.error);
   DATA = r.data;
@@ -531,12 +720,13 @@ const MEAL_S = [['sn', 'Snídaně'], ['ob', 'Oběd'], ['ve', 'Večeře'], ['sv',
 const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id === id) return t; const c = (JR.cfg.tags || []).find(x => x.id === id); return c ? { id: c.id, l: c.l } : null; };
 const jDay = d => JR.days[d] || null;
 function jEdit(d) { const j = JR.days[d] ? JSON.parse(JSON.stringify(JR.days[d])) : {}; j.t = j.t || {}; j.m = j.m || []; j.sup = j.sup || []; return j; }
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(m => m.w || m.h) && !(j.sup || []).length && !(j.n || '').trim(); }
+const mealHas = m => m && (m.w || m.h || (m.it || []).length);
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.n || '').trim() && j.kg == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
   Object.keys(j.t).forEach(k => { if (!(j.t[k] > 0)) delete j.t[k]; });
-  j.m = (j.m || []).filter(m => m.w || m.h);
+  j.m = (j.m || []).filter(mealHas);
   if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;
   jStatus('Ukládám…');
   clearTimeout(jSaveT[d] && jSaveT[d].t); jSaveT[d] = { _pending: true, t: setTimeout(() => { jSaveT[d]._pending = false; jFlush(d); }, 700) };
@@ -603,6 +793,19 @@ function factors() {
   gF('g:med', 'Meditace / dech (Garmin + deník)', d => acts(d).some(a => /medit|breath|dech/i.test((a.n || '') + ' ' + (a.k || ''))) || tg(d, 'med') === 1 || tg(d, 'dech') === 1);
   gF('g:steps', 'Kroky ≥ 10 000', d => (BYD[d].stp || 0) >= 10000);
   gF('g:stress', 'Stresový den (Ø stres ≥ 40)', d => (BYD[d].st || 0) >= 40);
+  // jídlo z databáze — jen dny s položkami (jinak null); hranice „hodně / málo“ = horní / dolní čtvrtina tvých vlastních dnů, nebo cíl
+  const ND = {}; Object.keys(JR.days).forEach(d => { const n = nutDay(d); if (n) ND[d] = n; });
+  const nds = Object.values(ND), q = (k, p) => { const v = nds.map(x => x[k]).sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * p))] : null; };
+  const G = goals(), kHi = q('k', .75), kLo = q('k', .25), pLo = G.p ? G.p * .8 : q('p', .25);
+  const nF = (id, l, fn) => F.push({ id: id, l: l, g: 'Jídlo', src: 'jídlo', f: d => ND[d] ? (fn(ND[d], d) ? 1 : 0) : null });
+  if (nds.length) {
+    nF('n:khi', `Hodně kalorií (≥ ${fmt(Math.round(kHi))} kcal)`, n => n.k >= kHi);
+    nF('n:klo', `Málo kalorií (≤ ${fmt(Math.round(kLo))} kcal)`, n => n.k <= kLo);
+    nF('n:plo', `Málo bílkovin (< ${fmt(Math.round(pLo))} g)`, n => n.p < pLo);
+    nF('n:ceve', 'Sacharidy hlavně večer (≥ 50 % po 18 h)', n => n.c > 0 && n.eveC >= n.c * .5);
+    nF('n:late', 'Po 20 h aspoň 500 kcal', n => n.late >= 500);
+    nF('n:def', 'Deficit ≥ 500 kcal proti Garminu', (n, d) => BYD[d] && num(BYD[d].kc) != null && n.k <= num(BYD[d].kc) - 500);
+  }
   return F;
 }
 function influence(ok) {
@@ -639,16 +842,19 @@ const IC = {
   trendy: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
   denik: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/>',
   vlivy: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  jidlo: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5a2 2 0 0 0 2 2M11 3v5a2 2 0 0 1-2 2"/><path d="M17 21V3c-2 1-3 3.5-3 7 0 1.6 1.3 3 3 3"/>',
   inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+// telefon: spodní lišta bez Inovací (jsou ve Víc = Nastavení, odznak se ukáže na Víc)
+const BNAV_SKIP = ['inov'];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 function navInit() {
   $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}<span class="nb" data-nb="${k}"></span></button>`).join('');
   $('sidenav').innerHTML = '<div class="sn-gl">Garmin Health</div>' + NAV.map(([k, l]) => `<button class="sn-i" data-p="${k}">${svgI(k)}<span>${l}</span><span class="nb" data-nb="${k}"></span></button>`).join('')
     + '<div class="sn-foot" id="snfoot"></div>';
-  $('bnav').innerHTML = NAV.map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span><span class="nb" data-nb="${k}"></span></button>`).join('');
+  $('bnav').innerHTML = NAV.filter(([k]) => !BNAV_SKIP.includes(k)).map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span><span class="nb" data-nb="${k === 'nast' ? 'inov' : k}"></span></button>`).join('');
   document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
 }
 function go(p) {
@@ -665,7 +871,7 @@ function renderAll() {
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {
   if (!DATA) return;
-  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
   catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
@@ -814,7 +1020,8 @@ function renderDnes() {
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Deník dnes</div><span class="save-st" id="jst"></span></div>
       <div class="chips" id="quick">${quick}</div>
-      <div style="margin-top:var(--sp-3)"><button class="lnk" data-go="denik">Celý deník — jídla, doplňky, poznámka →</button></div></div>
+      ${nutLine(jt) ? `<div class="sm" style="margin-top:var(--sp-3)">Jídlo: ${nutLine(jt)}</div>` : ''}
+      <div style="margin-top:var(--sp-3);display:flex;gap:var(--sp-4);flex-wrap:wrap"><button class="lnk" data-go="jidlo">Jídlo a váha →</button><button class="lnk" data-go="denik">Celý deník →</button></div></div>
     <div class="card"><div class="card-h"><div class="card-t">Co nejvíc ovlivňuje tvé HRV</div><button class="lnk" data-go="vlivy">Vlivy →</button></div>
       ${inf.ok.length ? infRows(inf.ok, OUT.hrv, 3) : '<div class="muted sm">Zatím žádný výrazný vliv. Vlivy z Garminu (trénink, otužování, kroky, stres) se počítají z historie hned, vlivy z deníku se ukážou po ~2 týdnech zápisů.</div>'}</div>
   </div>
@@ -845,7 +1052,6 @@ function bindChips(root, d) {
 function renderDenik() {
   const d = UI.jday || TODAY(), j = jEdit(d), x = BYD[d] || {}, sup = JR.cfg.sup || [], ctags = JR.cfg.tags || [];
   const actsH = (x.a || []).map(a => `<span class="chip auto">${esc(a.n || a.k)}${a.h != null ? ' · ' + a.h + ' h' : ''}${a.m ? ' · ' + a.m + ' min' : ''}${a.l ? ' · zátěž ' + a.l : ''}</span>`).join('');
-  const meals = (j.m.length ? j.m : [{ s: 'sn' }, { s: 'ob' }, { s: 've' }]).map((m, i) => mealRow(m, i)).join('');
   $('p-denik').innerHTML = `
   <div class="page-head"><div><div class="page-t">Deník</div><div class="page-s">Co jíš, piješ a děláš — Vlivy z toho počítají, co tvé HRV a spánek ovlivňuje.</div></div>
     <div class="daynav"><button class="btn" id="jprev" aria-label="Předchozí den">‹</button><div class="daynav-t">${esc(cap(dLong(d)))}</div>
@@ -856,9 +1062,9 @@ function renderDenik() {
     <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${j.sup.includes(s.id) ? ' on' : ''}" data-s="${esc(s.id)}">${esc(s.l)}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div></div>
     ${actsH ? `<div class="grp"><div class="lbl">Z Garminu (automaticky)</div><div class="chips">${actsH}</div></div>` : ''}
   </div>
-  <div class="card"><div class="card-h"><div class="card-t">Jídla</div><span class="card-s">Čas pomůže najít vliv pozdního jídla</span></div>
-    <div class="meals" id="jmeals">${meals}</div>
-    <div style="margin-top:var(--sp-3)"><button class="btn" id="jaddm">+ Přidat jídlo</button></div></div>
+  <div class="card"><div class="card-h"><div class="card-t">Jídlo a váha</div><button class="lnk" data-go="jidlo">Upravit v Jídle →</button></div>
+    ${j.m.length ? `<div class="jsum">${j.m.map(m => `<div><span class="lbl">${esc((MEAL_S.find(x => x[0] === m.s) || ['', m.s])[1])}${m.h ? ' · ' + esc(m.h) : ''}</span> ${esc([...(m.it || []).map(it => (foodOf(it.f) || { l: '?' }).l + ' ' + it.g + ' g'), m.w].filter(Boolean).join(', '))}</div>`).join('')}</div>` : '<div class="muted sm">Zatím nic — zapiš v záložce Jídlo nebo nadiktuj Claudovi v chatu.</div>'}
+    ${nutLine(d) ? `<div class="sm" style="margin-top:var(--sp-2)">${nutLine(d)}</div>` : ''}${j.kg != null ? `<div class="sm t2">Váha ${fmt(j.kg, 1)} kg</div>` : ''}</div>
   <div class="card"><div class="card-h"><div class="card-t">Poznámka</div></div>
     <textarea id="jnote" placeholder="Jak se cítíš, co bylo jinak…">${esc(j.n || '')}</textarea></div>`;
   const P = $('p-denik');
@@ -869,15 +1075,6 @@ function renderDenik() {
   $('jnext').onclick = () => { if (d < TODAY()) { UI.jday = addD(d, 1); renderDenik(); } };
   if ($('jtoday')) $('jtoday').onclick = () => { UI.jday = null; renderDenik(); };
   $('jnote').addEventListener('input', e => { const jj = jEdit(d); jj.n = e.target.value.slice(0, 2000); jPut(d, jj); });
-  const saveMeals = () => { const jj = jEdit(d); jj.m = [...$('jmeals').querySelectorAll('.meal')].map(r => ({ s: r.querySelector('select').value, h: r.querySelector('input[type=time]').value, w: r.querySelector('input[type=text]').value.slice(0, 200) })); jPut(d, jj); };
-  $('jmeals').addEventListener('input', saveMeals); $('jmeals').addEventListener('change', saveMeals);
-  $('jmeals').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { b.closest('.meal').remove(); saveMeals(); } });
-  $('jaddm').onclick = () => { $('jmeals').insertAdjacentHTML('beforeend', mealRow({ s: 'sv' }, Date.now())); };
-}
-function mealRow(m, i) {
-  return `<div class="meal"><select aria-label="Jídlo">${MEAL_S.map(([k, l]) => `<option value="${k}"${m.s === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`
-    + `<input type="time" value="${esc(m.h || '')}" aria-label="Čas"><input class="meal-w" type="text" value="${esc(m.w || '')}" placeholder="Co jsi jedl / pil" aria-label="Co">`
-    + `<button class="btn btn-ghost" data-rm="${i}" aria-label="Odebrat">✕</button></div>`;
 }
 
 // ── Vlivy ──
@@ -898,7 +1095,7 @@ function renderVlivy() {
 }
 
 // ── Trendy ──
-const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres']];
+const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres'], ['kcal', 'Kalorie'], ['makra', 'Makra'], ['kg', 'Váha']];
 const RANGES = [[14, '14 d'], [30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Vše']];
 let CH = null;
 function renderTrendy() {
@@ -910,7 +1107,7 @@ function renderTrendy() {
     <div class="seg" id="trng">${RANGES.map(([v, l]) => `<button data-v="${v}" class="${v === UI.range ? 'on' : ''}">${l}</button>`).join('')}</div></div>
   <div class="seg seg-scroll" id="tmet" style="margin-bottom:var(--sp-4)">${TR.map(([k, l]) => `<button data-k="${k}" class="${k === m ? 'on' : ''}">${l}</button>`).join('')}</div>
   <div class="card"><div class="card-h"><div class="card-t" id="ttl"></div><div class="legend" id="tleg"></div></div>
-    <div class="chart-box"><canvas id="tch"></canvas></div>${zEd}<div class="stats" id="tst"></div></div>`;
+    <div class="chart-box"><canvas id="tch"></canvas></div>${zEd}<div class="stats" id="tst"></div><div id="twk"></div></div>`;
   $('tmet').querySelectorAll('button').forEach(b => b.onclick = () => { UI.trend = b.dataset.k; renderTrendy(); });
   $('trng').querySelectorAll('button').forEach(b => b.onclick = () => { UI.range = +b.dataset.v; renderTrendy(); });
   if (z) ['z1', 'z2', 'za'].forEach(id => $(id).addEventListener('change', () => { const nz = { z1: +$('z1').value || z.z1, z2: +$('z2').value || z.z2, avgDays: Math.max(1, Math.min(60, +$('za').value || z.avgDays)) }; zoneSave(m, nz); drawTrend(); }));
@@ -926,7 +1123,42 @@ function drawTrend() {
     plugins: { legend: { display: false }, tooltip: { backgroundColor: tok('--bg4'), borderColor: tok('--border2'), borderWidth: 1, titleColor: tok('--text'), bodyColor: tok('--text2'), padding: 10, titleFont: font, bodyFont: font } },
     scales: { x: { ticks: { color: t3, font, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: grid } }, y: { ticks: { color: t3, font }, grid: { color: grid } } } };
   let title = '', leg = '';
-  if (m === 'sleep') {
+  $('twk').innerHTML = '';
+  if (m === 'kcal' || m === 'makra' || m === 'kg') {
+    // dny podle kalendáře (i bez dat z Garminu), aby se jídlo a váha nepropadly
+    const n = UI.range || Math.max(30, Object.keys(JR.days).length ? Math.round((Date.parse(TODAY()) - Date.parse(Object.keys(JR.days).sort()[0])) / 864e5) + 1 : 30);
+    const dd = []; for (let i = n - 1; i >= 0; i--) dd.push(addD(TODAY(), -i));
+    const lb = dd.map(dShort), NU = dd.map(nutDay), G = goals(), pr = rows.length > 90 ? 0 : 2;
+    let ds;
+    if (m === 'kcal') {
+      title = 'Kalorie — snědeno vs spáleno (Garmin)';
+      ds = [{ type: 'bar', label: 'Snědeno', data: NU.map(x => x ? Math.round(x.k) : null), backgroundColor: tok('--blue'), borderRadius: 2 },
+        { type: 'line', label: 'Spáleno', data: dd.map(d => BYD[d] ? num(BYD[d].kc) : null), borderColor: tok('--text2'), pointRadius: pr, borderWidth: 1.6, tension: .25, spanGaps: true }];
+      if (G.k) ds.push({ type: 'line', label: 'Cíl', data: dd.map(() => G.k), borderColor: tok('--amber'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.2 });
+      leg = `<span><i style="background:${tok('--blue')}"></i>Snědeno</span><span><i style="background:${tok('--text2')}"></i>Spáleno (Garmin)</span>` + (G.k ? `<span><i style="background:${tok('--amber')}"></i>Cíl</span>` : '');
+    } else if (m === 'makra') {
+      title = 'Makroživiny — gramy za den';
+      ds = [['p', 'Bílkoviny', '--blue'], ['f', 'Tuky', '--purple'], ['c', 'Sacharidy', '--teal']].map(([k, l, c]) => ({ type: 'bar', label: l + ' (g)', data: NU.map(x => x ? Math.round(x[k]) : null), backgroundColor: tok(c), stack: 'm', borderRadius: 2 }));
+      leg = [['Bílkoviny', '--blue'], ['Tuky', '--purple'], ['Sacharidy', '--teal']].map(([l, c]) => `<span><i style="background:${tok(c)}"></i>${l}</span>`).join('');
+    } else {
+      title = 'Váha';
+      const kv = dd.map(kgOf), roll = kv.map((_, i) => { const a = kv.slice(Math.max(0, i - 6), i + 1).filter(v => v != null); return a.length ? Math.round(avg(a) * 10) / 10 : null; });
+      ds = [{ type: 'line', label: 'Váha (kg)', data: kv, borderColor: tok('--blue'), backgroundColor: tok('--blue'), pointRadius: 3, borderWidth: 1.4, spanGaps: true, tension: .2 },
+        { type: 'line', label: 'Ø 7 d', data: roll, borderColor: tok('--text2'), borderDash: [5, 4], pointRadius: 0, borderWidth: 1.6, spanGaps: true, tension: .3 }];
+      leg = `<span><i style="background:${tok('--blue')}"></i>Váha</span><span><i style="background:${tok('--text2')}"></i>Ø 7 dní</span>`;
+    }
+    CH = new Chart($('tch'), { data: { labels: lb, datasets: ds }, options: { ...base, scales: { x: { ...base.scales.x, stacked: m === 'makra' }, y: { ...base.scales.y, stacked: m === 'makra', beginAtZero: m !== 'kg' } } } });
+    const logged = NU.filter(Boolean), kvs = dd.map(kgOf).filter(v => v != null), burn = dd.map((d, i) => NU[i] && BYD[d] && num(BYD[d].kc) != null ? NU[i].k - num(BYD[d].kc) : null).filter(v => v != null);
+    $('tst').innerHTML = m === 'kg' ? stat('Poslední', kvs.length ? fmt(kvs[kvs.length - 1], 1) + ' kg' : '—') + stat('Min', kvs.length ? fmt(Math.min(...kvs), 1) : '—') + stat('Max', kvs.length ? fmt(Math.max(...kvs), 1) : '—') + stat('Změna za období', kvs.length > 1 ? sgn(kvs[kvs.length - 1] - kvs[0], 1) + ' kg' : '—') + stat('Vážení', fmt(kvs.length))
+      : stat('Dny se zápisem', fmt(logged.length)) + stat('Ø kcal', kc(logged.length ? avg(logged.map(x => x.k)) : null)) + stat('Ø B / T / S', logged.length ? ['p', 'f', 'c'].map(k => fmt(Math.round(avg(logged.map(x => x[k]))))).join(' / ') + ' g' : '—') + stat('Ø bilance', burn.length ? sgn(Math.round(avg(burn)), 0) + ' kcal' : '—');
+    // po týdnech (po–ne), nejnovější nahoře
+    const wk = {}; dd.forEach((d, i) => { const dt = new Date(d + 'T12:00:00'), mo = addD(d, -((dt.getDay() + 6) % 7)); const w = wk[mo] = wk[mo] || { n: [], kg: [], b: [] };
+      if (NU[i]) w.n.push(NU[i]); if (kgOf(d) != null) w.kg.push(kgOf(d)); if (NU[i] && BYD[d] && num(BYD[d].kc) != null) w.b.push(NU[i].k - num(BYD[d].kc)); });
+    const wks = Object.keys(wk).sort().reverse().slice(0, 8).filter(k => wk[k].n.length || wk[k].kg.length);
+    if (wks.length) $('twk').innerHTML = `<div class="lbl wk">Po týdnech (Ø ze dnů se zápisem)</div><div class="tbl-wrap"><table data-nogrid><thead><tr><th>Týden od</th><th>Dny</th><th>kcal</th><th>B</th><th>T</th><th>S</th><th>Bilance</th><th>Váha</th></tr></thead><tbody>`
+      + wks.map(k => { const w = wk[k], a = f => w.n.length ? fmt(Math.round(avg(w.n.map(f)))) : '—';
+        return `<tr><td>${esc(dShort(k))}</td><td>${w.n.length}</td><td>${a(x => x.k)}</td><td>${a(x => x.p)}</td><td>${a(x => x.f)}</td><td>${a(x => x.c)}</td><td>${w.b.length ? sgn(Math.round(avg(w.b)), 0) : '—'}</td><td>${w.kg.length ? fmt(avg(w.kg), 1) : '—'}</td></tr>`; }).join('') + '</tbody></table></div>';
+  } else if (m === 'sleep') {
     title = 'Spánek — fáze a skóre';
     const H = k => rows.map(x => x[k] != null ? Math.round(x[k] / 6) / 10 : null);
     const ds = [['deep', 'Hluboký', '--s-deep'], ['rem', 'REM', '--s-rem'], ['light', 'Lehký', '--s-light'], ['awake', 'Bdění', '--s-awake']]
@@ -1035,6 +1267,8 @@ function renderNast() {
   const sup = JR.cfg.sup || [], tags = JR.cfg.tags || [], theme = document.documentElement.getAttribute('data-theme') === 'graphite' ? 'graphite' : 'slate';
   $('p-nast').innerHTML = `
   <div class="page-head"><div><div class="page-t">Nastavení</div><div class="page-s">Ukládá se na Google Disk — platí na PC, iPadu i iPhonu.</div></div></div>
+  <div class="card inov-link"><div class="card-h"><div class="card-t">Inovace</div><button class="lnk" data-go="inov">Otevřít →</button></div>
+    <div class="sm t2">${inovOpen().length ? inovOpen().length + ' návrhů čeká na tvůj hlas.' : 'Vše odhlasováno — nové návrhy přijdou v neděli.'}</div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Doplňky a léky</div><span class="card-s">zobrazí se v Deníku</span></div>
       <div class="list-ed" id="lsup">${sup.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
@@ -1063,6 +1297,7 @@ function renderNast() {
   $('treset').onclick = () => { stDel('garmin_thresholds'); T = loadT(); renderNast(); toast('Výchozí prahy obnoveny'); };
   $('theme').querySelectorAll('button').forEach(b => b.onclick = () => themeSet(b.dataset.v));
   $('nsync').onclick = doSync;
+  $('p-nast').querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
 }
 
 // ══════════ START ══════════

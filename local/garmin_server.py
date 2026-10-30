@@ -103,11 +103,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if self.path not in ("/settings", "/journal", "/journal-cfg"):
+        if self.path not in ("/settings", "/journal", "/journal-cfg", "/food"):
             self.send_response(404); self.end_headers(); return
         try:
             n = int(self.headers.get("Content-Length") or 0)
-            lim = {"/settings": SETTINGS_MAX, "/journal": JOURNAL_DAY_MAX + 100, "/journal-cfg": JOURNAL_CFG_MAX}[self.path]
+            lim = {"/settings": SETTINGS_MAX, "/journal": JOURNAL_DAY_MAX + 100, "/journal-cfg": JOURNAL_CFG_MAX, "/food": 1300}[self.path]
             if n > lim:
                 raise ValueError(f"požadavek je větší než {lim} znaků — neuloženo")
             inp = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
@@ -115,6 +115,20 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("čekám objekt")
             if self.path == "/settings":
                 self.send_json({"ok": True, "at": settings_write(inp)})
+            elif self.path == "/food":
+                fid = "".join(ch for ch in str(inp.get("id") or "").lower() if ch.isalnum() and ch.isascii() or ch == "_")[:40]
+                if not fid:
+                    raise ValueError("neplatné id jídla")
+                food = inp.get("food")
+                def updf(j):
+                    j.setdefault("food", {})
+                    if food is None:
+                        j["food"].pop(fid, None)
+                    else:
+                        if not str(food.get("l") or "").strip() or not isinstance(food.get("k"), (int, float)):
+                            raise ValueError("jídlo bez názvu nebo kcal")
+                        food["at"] = datetime.now(timezone.utc).isoformat(timespec="seconds"); j["food"][fid] = food
+                self.send_json({"ok": True, "at": journal_write(updf)})
             elif self.path == "/journal-cfg":
                 self.send_json({"ok": True, "at": journal_write(lambda j: j.__setitem__("cfg", inp))})
             else:

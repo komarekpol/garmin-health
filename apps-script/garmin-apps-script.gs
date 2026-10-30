@@ -27,6 +27,8 @@ const JOURNAL_FILE = 'garmin-journal.json';
 const JOURNAL_DAY_MAX_ = 6000;      // jeden den (štítky + jídla + poznámka) — běžně ~0,3 kB
 const JOURNAL_CFG_MAX_ = 20000;     // vlastní štítky a doplňky
 const JOURNAL_MAX_ = 2000000;
+const FOOD_FILE_ = 'garmin-jidla.json';   // výtah databáze jídel pro Clauda (chat dohledá id) — jen jídla, bez zdravotních dat
+const FOOD_ITEM_MAX_ = 600, FOOD_N_MAX_ = 800;   // jedno jídlo v databázi / počet jídel (~0,2 kB / jídlo ≈ 160 kB)
 const INBOX_PREFIX_ = 'garmin-denik-vstup';   // schránka deníku: soubory, které zapíše Claude z chatu (konektor Disku umí soubory jen zakládat)
 const INBOX_MAX_ = 20000;           // jeden soubor schránky       // celý soubor (~0,3 kB / den ≈ 0,1 MB / rok) — nad limit se nezapíše a stránka to řekne
 
@@ -176,10 +178,41 @@ function ghJournalCfg(key, cfgJson) {
   return JSON.stringify(out);
 }
 
+// ── 🍽 Databáze jídel (journal.food { id: { l název, por g porce, porL popis porce, k kcal / 100 g, p bílkoviny, f tuky, c sacharidy g / 100 g, src zdroj, at } }) ──
+function foodClean_(o) {
+  const n = v => { const x = Number(v); return isFinite(x) && x >= 0 ? Math.round(x * 10) / 10 : null; };
+  const l = String(o && o.l || '').trim().slice(0, 60); if (!l) throw new Error('jídlo bez názvu');
+  const r = { l: l, por: n(o.por) || 100, porL: String(o.porL || '').slice(0, 30), k: n(o.k), p: n(o.p), f: n(o.f), c: n(o.c), src: String(o.src || '').slice(0, 200), at: new Date().toISOString() };
+  if (r.k == null || r.k > 950 || r.por > 3000) throw new Error('jídlo „' + l + '“: chybí nebo nesmyslné kcal / porce');
+  if (JSON.stringify(r).length > FOOD_ITEM_MAX_) throw new Error('jídlo „' + l + '“ je větší než ' + FOOD_ITEM_MAX_ + ' znaků');
+  return r;
+}
+const foodId_ = v => String(v || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40);
+function foodExtract_(j) { try { writeFile_(FOOD_FILE_, JSON.stringify({ at: new Date().toISOString(), food: j.food || {} }), MimeType.PLAIN_TEXT); } catch (e) { console.warn('foodExtract_: ' + e); } }
+// uložení / smazání jednoho jídla v databázi ze stránky (json = null → smazat)
+function ghFoodSet(key, id, json) {
+  let out;
+  try {
+    if (!keyOk_(key)) throw new Error('Neplatný klíč');
+    const k = foodId_(id); if (!k) throw new Error('Neplatné id jídla');
+    if (json != null && (typeof json !== 'string' || json.length > FOOD_ITEM_MAX_ * 2)) throw new Error('Jídlo je větší než limit — neuloženo');
+    let jj = null;
+    const at = journalWrite_(j => { j.food = j.food || {};
+      if (json == null) delete j.food[k];
+      else { if (!j.food[k] && Object.keys(j.food).length >= FOOD_N_MAX_) throw new Error('Databáze má ' + FOOD_N_MAX_ + ' jídel — neuloženo'); j.food[k] = foodClean_(JSON.parse(json)); }
+      jj = j; });
+    foodExtract_(jj);
+    out = { ok: true, at: at, food: jj.food[k] || null };
+  } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
+  return JSON.stringify(out);
+}
+
 // ── 📥 Schránka deníku (Pavel 30.10.2026: „řeknu přes chat mikrofonem, co jsem jedl a pil, a ty mi aktualizuješ deník“) ──
 // Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
 //   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
-//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku) }] }.
+//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku),
+//   kg: váha (nastaví), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
+//   jídlo s položkami z databáze: m: [{ s, h, w, it: [{ f: id jídla, g: gramy }] }] }] }.
 // Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
 function inboxMerge_() {
   const it = dataFolder_().getFiles(), files = [];
@@ -193,7 +226,9 @@ function inboxMerge_() {
       if (txt.length > INBOX_MAX_) throw new Error('soubor má ' + txt.length + ' znaků (limit ' + INBOX_MAX_ + ')');
       const inp = JSON.parse(txt), items = Array.isArray(inp.items) ? inp.items : [inp];
       items.forEach(x => { if (!x || !isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
-      journalWrite_(j => items.forEach(x => inboxApply_(j, x)));
+      let jj = null, food = false;
+      journalWrite_(j => { items.forEach(x => { if (x.food) food = true; inboxApply_(j, x); }); jj = j; });
+      if (food) foodExtract_(jj);
       f.setTrashed(true); done++;
     } catch (e) {
       errs.push(f.getName() + ': ' + (e.message || e));
@@ -205,11 +240,22 @@ function inboxMerge_() {
 }
 function inboxApply_(j, x) {
   const id = v => String(v || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  j.food = j.food || {};
+  (x.food || []).forEach(o => { const k = foodId_(o && o.id); if (!k) throw new Error('jídlo bez id');
+    if (j.food[k] && !x.foodSet) return;
+    if (!j.food[k] && Object.keys(j.food).length >= FOOD_N_MAX_) throw new Error('databáze jídel je plná (' + FOOD_N_MAX_ + ')');
+    j.food[k] = foodClean_(o); });
   const day = j.days[x.d] || {}; day.t = day.t || {}; day.m = day.m || []; day.sup = day.sup || [];
   Object.keys(x.t || {}).forEach(k => { const v = Number(x.t[k]); if (id(k) && isFinite(v)) { if (v > 0) day.t[id(k)] = Math.min(v, 99); else delete day.t[id(k)]; } });
   Object.keys(x.tadd || {}).forEach(k => { const v = Number(x.tadd[k]); if (id(k) && isFinite(v)) { const r = Math.max(0, Math.min(99, (Number(day.t[id(k)]) || 0) + v)); if (r > 0) day.t[id(k)] = r; else delete day.t[id(k)]; } });
   (x.m || []).forEach(m => { const s = ['sn', 'ob', 've', 'sv'].indexOf(m && m.s) >= 0 ? m.s : 'sv', h = /^\d{2}:\d{2}$/.test(m && m.h || '') ? m.h : '', w = String(m && m.w || '').slice(0, 200);
-    if ((w || h) && !day.m.some(o => o.s === s && o.h === h && o.w === w)) day.m.push({ s: s, h: h, w: w }); });
+    const it = (m && m.it || []).map(i => { const f = foodId_(i && i.f), g = Number(i && i.g);
+      if (!j.food[f]) throw new Error('jídlo „' + (i && i.f) + '“ není v databázi (pošli ho v food)');
+      if (!isFinite(g) || g <= 0 || g > 3000) throw new Error('nesmyslné gramy u „' + f + '“');
+      return { f: f, g: Math.round(g) }; }).slice(0, 30);
+    const o = { s: s, h: h, w: w }; if (it.length) o.it = it;
+    if ((w || h || it.length) && !day.m.some(z => JSON.stringify(z) === JSON.stringify(o))) day.m.push(o); });
+  if (x.kg != null) { const kg = Number(x.kg); if (!isFinite(kg) || kg < 30 || kg > 250) throw new Error('nesmyslná váha ' + x.kg); day.kg = Math.round(kg * 10) / 10; }
   (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });
   if (x.n) day.n = ((day.n ? day.n + ' · ' : '') + String(x.n)).slice(0, 1000);
   [['newSup', 'sup'], ['newTags', 'tags']].forEach(([a, b]) => (x[a] || []).forEach(o => { const k = id(o && o.id), l = String(o && o.l || '').slice(0, 40);
@@ -646,11 +692,11 @@ function buildData_(H) {
     readiness: {}, training_status: {},   // Personal API je nevrací (training readiness / status „not found“) — stránka připravenost odhadne sama
     fitness: H.fit || {}, nights: nights, hrv_history: hrv_history, last_activity: H.act || {},
     // kompaktní dny pro Trendy a Vlivy: d datum, hrv, sc skóre spánku, sh hodiny spánku, rhr klidová TF, bb BB při probuzení,
-    // st průměrný stres dne, stp kroky, rs dýchání, a aktivity dne
+    // st průměrný stres dne, stp kroky, rs dýchání, kc spálené kcal celkem / ka aktivní (Garmin), a aktivity dne
     days: ds.filter(d => d >= addDays_(ymd_(new Date()), -DAY_BACK_DAYS_)).map(d => { const x = H.days[d], dd = x.d || {}, s = x.s || {}, h = x.h || {};
       return { d: d, hrv: h.last_night_avg ?? null, sc: s.sleep_score_overall ?? null, sh: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null,
         rhr: dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, st: dd.average_stress_level ?? null, stp: dd.total_steps ?? null,
-        rs: dd.avg_waking_respiration ?? null, a: x.a || [] }; }) };
+        rs: dd.avg_waking_respiration ?? null, kc: dd.total_kilocalories ?? null, ka: dd.active_kilocalories ?? null, a: x.a || [] }; }) };
 }
 
 // Připomínka vypršení klíče: od 30 dní předem 1× týdně e-mail (datum vypršení zadává Pavel do GARMIN_KEY_EXP)

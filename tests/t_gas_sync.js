@@ -249,6 +249,25 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   const old = Object.assign({}, dy, { at: '2026-01-01T00:00:00.000Z' });
   const rc = JSON.parse(G.env.ghJournalSet('k1', Y, JSON.stringify(old)));
   ok('schránka: stará kopie ze stránky záznam z chatu nepřepíše', !rc.ok && rc.conflict && rc.day.src === 'chat' && rc.day.m.length === 2);
+  // jídla z databáze + váha přes schránku, výtah pro Clauda
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1800.json', JSON.stringify({ v: 1, items: [{ d: Y, kg: 82.4,
+    food: [{ id: 'ovesna_kase', l: 'Ovesná kaše s mlékem', por: 300, porL: 'miska', k: 110, p: 4.5, f: 2.8, c: 16, src: 'https://www.kaloricketabulky.cz/' }],
+    m: [{ s: 'sn', h: '07:10', w: '', it: [{ f: 'ovesna_kase', g: 300 }] }] }] }));
+  let g3 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: nové jídlo do databáze, položka v jídle, váha', g3.journal.food.ovesna_kase && g3.journal.food.ovesna_kase.k === 110 && g3.journal.days[Y].m.some(m => m.it && m.it[0].f === 'ovesna_kase' && m.it[0].g === 300) && g3.journal.days[Y].kg === 82.4, JSON.stringify(g3.journal.days[Y]));
+  ok('schránka: výtah garmin-jidla.json jen s databází', JSON.parse(G.file('garmin-jidla.json').content).food.ovesna_kase.l === 'Ovesná kaše s mlékem' && !/days/.test(G.file('garmin-jidla.json').content));
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1801.json', JSON.stringify({ items: [{ d: Y, food: [{ id: 'ovesna_kase', l: 'Jiná', k: 999 }] }] }));
+  g3 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: existující jídlo se bez foodSet nepřepíše (Pavlovy opravy zůstanou)', g3.journal.food.ovesna_kase.l === 'Ovesná kaše s mlékem', g3.inboxErr);
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1802.json', JSON.stringify({ items: [{ d: Y, m: [{ s: 'ob', it: [{ f: 'neexistuje', g: 100 }] }] }] }));
+  ok('schránka: položka s neznámým jídlem odmítnuta (nic nezapsáno)', /není v databázi/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
+  // databáze ze stránky
+  let fr = JSON.parse(G.env.ghFoodSet('k1', 'rohlik', JSON.stringify({ l: 'Rohlík', por: 43, porL: '1 ks', k: 290, p: 9, f: 4, c: 54 })));
+  ok('jídla: ghFoodSet uloží a vrátí jídlo', fr.ok && fr.food.k === 290 && JSON.parse(G.env.ghGet('k1')).journal.food.rohlik.por === 43, JSON.stringify(fr));
+  ok('jídla: bez kcal / názvu odmítnuto', !JSON.parse(G.env.ghFoodSet('k1', 'x', JSON.stringify({ l: 'X' }))).ok && !JSON.parse(G.env.ghFoodSet('k1', 'y', JSON.stringify({ k: 100 }))).ok);
+  ok('jídla: smazání', JSON.parse(G.env.ghFoodSet('k1', 'rohlik', null)).ok && !JSON.parse(G.env.ghGet('k1')).journal.food.rohlik);
+  ok('jídla: špatný klíč odmítnut', !JSON.parse(G.env.ghFoodSet('x', 'a', JSON.stringify({ l: 'A', k: 1 }))).ok);
+  ok('Garmin: spálené kcal v days', JSON.parse(G.file('garmin-data.json').content).days.some(x => x.kc > 0), JSON.stringify(JSON.parse(G.file('garmin-data.json').content).days.slice(-1)));
 }
 
 fs.writeFileSync(path.join(OUT, 'sample-api.json'), G.file('garmin-data.json').content);
