@@ -338,12 +338,13 @@ const IC = {
   denik: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/>',
   vlivy: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
   jidlo: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5a2 2 0 0 0 2 2M11 3v5a2 2 0 0 1-2 2"/><path d="M17 21V3c-2 1-3 3.5-3 7 0 1.6 1.3 3 3 3"/>',
+  beh: '<circle cx="14.5" cy="4" r="2"/><path d="M7 21l3.5-6 3 2.5V22M6 11.5l3.5-3.5 4 1 2.5 3.5 3 1"/><path d="M10.5 15l1.5-5"/>',
   inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
-// telefon: spodní lišta bez Inovací (jsou ve Víc = Nastavení, odznak se ukáže na Víc)
-const BNAV_SKIP = ['inov'];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['beh', 'Běh'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+// telefon: spodní lišta max 6 položek (dotyk ≥ 44 px na 390 px) — Vlivy a Inovace jsou ve Víc (= Nastavení), odznak Inovací se ukáže na Víc
+const BNAV_SKIP = ['vlivy', 'inov'];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 function navInit() {
   $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}<span class="nb" data-nb="${k}"></span></button>`).join('');
@@ -366,7 +367,7 @@ function renderAll() {
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {
   if (!DATA) return;
-  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, beh: renderBeh, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
   catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
@@ -762,8 +763,11 @@ function renderNast() {
   const sup = JR.cfg.sup || [], tags = JR.cfg.tags || [], theme = document.documentElement.getAttribute('data-theme') === 'graphite' ? 'graphite' : 'slate';
   $('p-nast').innerHTML = `
   <div class="page-head"><div><div class="page-t">Nastavení</div><div class="page-s">Ukládá se na Google Disk — platí na PC, iPadu i iPhonu.</div></div></div>
-  <div class="card inov-link"><div class="card-h"><div class="card-t">Inovace</div><button class="lnk" data-go="inov">Otevřít →</button></div>
-    <div class="sm t2">${inovOpen().length ? inovOpen().length + ' návrhů čeká na tvůj hlas.' : 'Vše odhlasováno — nové návrhy přijdou v neděli.'}</div></div>
+  <div class="grid g-2 inov-link">
+    <div class="card"><div class="card-h"><div class="card-t">Vlivy</div><button class="lnk" data-go="vlivy">Otevřít →</button></div>
+      <div class="sm t2">Co nejvíc mění tvé HRV, spánek, klidovou TF a Body Battery.</div></div>
+    <div class="card"><div class="card-h"><div class="card-t">Inovace</div><button class="lnk" data-go="inov">Otevřít →</button></div>
+      <div class="sm t2">${inovOpen().length ? inovOpen().length + ' návrhů čeká na tvůj hlas.' : 'Vše odhlasováno — nové návrhy přijdou v neděli.'}</div></div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Doplňky a léky</div><span class="card-s">zobrazí se v Deníku</span></div>
       <div class="list-ed" id="lsup">${sup.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>

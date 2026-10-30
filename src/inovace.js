@@ -29,7 +29,8 @@ const INOV = [
   { id: 'I-006', d: '2026-10-30', t: 'Běh: doporučení na dnešek',
     co: 'Ráno jedna věta: volno / lehký běh / normální / můžeš přitlačit — podle regenerace i toho, kolik jsi naběhal.',
     jak: 'Spojí odhad připravenosti s tréninkovou zátěží posledních 7 dní proti průměru 4 týdnů (z aktivit Garminu). Krok k osobnímu trenérovi běhu.',
-    vypl: 0, zdroj: 'vlastní nápad (cíl projektu: osobní trenér běhu)', url: '', st: 'navrh' },
+    vypl: 0, zdroj: 'vlastní nápad (cíl projektu: osobní trenér běhu); pásmo zátěže 0,8–1,3 (Gabbett 2016, The training—injury prevention paradox)', url: 'https://www.iat.uni-leipzig.de/datenbanken/iks/dfb/Record/4040728', st: 'zavedeno', done: '2026-10-30',
+    why: 'Záložka Běh nahoře „Dnes“: runAdvice() v src/beh.js = odhad připravenosti + zátěž 7 dní vs Ø 28 dní (loadRatio)' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};

@@ -557,9 +557,23 @@ function bbOf_(o) {
 // aktivita do deníku vlivů (kompaktně): n název, k typ, h hodina začátku, m minuty, l zátěž, te aerobní efekt
 function actMini_(a) {
   const st = String(a.startTimeLocal || ''), t = a.activityType || {};
-  return { n: String(a.activityName || '').slice(0, 60), k: t.typeKey || null, h: st.length >= 13 ? +st.slice(11, 13) : null,
+  const o = { n: String(a.activityName || '').slice(0, 60), k: t.typeKey || null, h: st.length >= 13 ? +st.slice(11, 13) : null,
     m: a.duration != null ? Math.round(a.duration / 60) : null, l: a.activityTrainingLoad != null ? Math.round(a.activityTrainingLoad) : null,
     te: a.aerobicTrainingEffect != null ? Math.round(a.aerobicTrainingEffect * 10) / 10 : null };
+  // běžecké a další údaje (záložka Běh) — jen pole nejvyšší úrovně odpovědi (názvy Garmin Connect, víc variant), jen když existují, ať historie neroste
+  const v = keys => { for (const k of keys) { const x = num_(a[k]); if (x != null) return x; } return null; };
+  const put = (k, x, d) => { if (x != null && isFinite(x)) { const p = Math.pow(10, d || 0); o[k] = Math.round(x * p) / p; } };
+  const dist = v(['distance']); if (dist > 0) put('km', dist / 1000, 2);
+  put('s', v(['duration'])); put('mv', v(['movingDuration']));
+  put('hr', v(['averageHR', 'averageHeartRate', 'avgHr'])); put('hrx', v(['maxHR', 'maxHeartRate', 'maxHr']));
+  const sp = v(['averageSpeed', 'avgSpeed']); if (sp > 0) put('sp', sp, 3);
+  put('el', v(['elevationGain', 'totalElevationGain']));
+  put('cad', v(['averageRunningCadenceInStepsPerMinute', 'avgRunningCadenceInStepsPerMinute', 'averageRunCadence']));
+  put('str', v(['avgStrideLength', 'averageStrideLength']));
+  put('tea', v(['anaerobicTrainingEffect']), 1); put('vo2', v(['vO2MaxValue', 'vo2MaxValue']), 1);
+  if (a.activityId != null) o.id = String(a.activityId).slice(0, 20);
+  if (st.length >= 16) o.t = st.slice(11, 16);
+  return o;
 }
 function actOf_(a) {
   if (!a) return {};

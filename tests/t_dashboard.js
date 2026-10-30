@@ -42,7 +42,7 @@ async function routes(ctx) {
 let fails = 0;
 const ok = (name, cond, info) => { console.log((cond ? 'OK   ' : 'FAIL ') + name + (cond || info == null ? '' : ' — ' + info)); if (!cond) fails++; };
 const watch = page => { const errs = []; page.on('pageerror', e => errs.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|net::/.test(m.text())) errs.push(m.text()); }); return errs; };
-const PAGES = ['dnes', 'trendy', 'denik', 'jidlo', 'vlivy', 'inov', 'nast'];
+const PAGES = ['dnes', 'trendy', 'denik', 'jidlo', 'beh', 'vlivy', 'inov', 'nast'];
 
 async function cloud(browser, opt) {
   const settings = { garmin_thresholds: JSON.stringify({ hrv_ok: { val: 31 } }) };
@@ -179,11 +179,24 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('Vlivy: přepínání výsledků bez chyb', /Body Battery ráno ráno po dni/.test(await txt(page, '#p-vlivy')));
       await page.click('#vout [data-k="hrv"]');
       await page.screenshot({ path: path.join(OUT, 'd-vlivy.png'), fullPage: true });
+      // Běh
+      await go(page, 'beh');
+      const bt = await txt(page, '#p-beh'), nRuns = await page.evaluate(() => runsAll().length);
+      ok('Běh: doporučení na dnešek, 6 KPI, grafy km a efektivity', /Dnes/i.test(bt) && (await page.$$('#p-beh .kpi')).length === 6 && await page.evaluate(() => !!CHB && CHB.data.datasets[0].data.some(v => v > 0) && !!CHE && CHE.data.datasets[0].data.length > 3), bt.slice(0, 300));
+      ok('Běh: seznam běhů z Garminu (running / trail / pás)', nRuns > 20 && (await page.$$('#blist .run')).length === 20 && /trail/.test(bt) && /pás/.test(bt), nRuns);
+      const r0 = await page.evaluate(() => runsAll()[0]);
+      ok('Běh: tempo = 1000 / rychlost (min/km)', await page.evaluate(r => paceF(paceS(r)), r0) === (() => { const s = 1000 / r0.sp, m = Math.floor(s / 60), x = Math.round(s - m * 60); return m + ':' + String(x).padStart(2, '0'); })(), JSON.stringify(r0));
+      await page.click('#blist .run'); await page.waitForTimeout(100);
+      ok('Běh: rozbalení detailu (kadence, převýšení, TE)', await page.$eval('#blist .run', e => e.classList.contains('open') && getComputedStyle(e.querySelector('.run-d')).display === 'grid' && /Kadence/i.test(e.innerText) && /166/.test(e.innerText)));
+      await page.click('#bmore'); await page.waitForTimeout(150);
+      ok('Běh: další běhy', (await page.$$('#blist .run')).length > 20);
+      ok('Běh: I-006 zavedeno', await page.evaluate(() => INOV.find(x => x.id === 'I-006').st === 'zavedeno'));
+      await page.screenshot({ path: path.join(OUT, 'd-beh.png'), fullPage: true });
       // Inovace
       const nb0 = await page.$eval('#sidenav [data-nb="inov"]', e => +e.textContent || 0);
       await go(page, 'inov');
-      const nIv = (await page.$$('#p-inov .iv')).length;
-      ok('Inovace: návrhy k hlasování + odznak', nIv >= 3 && nb0 === nIv, nb0 + ' / ' + nIv);
+      const nIv = await page.evaluate(() => inovOpen().length);
+      ok('Inovace: návrhy k hlasování + odznak', nIv >= 3 && nb0 === nIv && (await page.$$('#p-inov .iv-vote')).length === nIv, nb0 + ' / ' + nIv);
       const id1 = await page.$eval('#p-inov .iv', e => e.dataset.id);
       await page.click(`#p-inov .iv[data-id="${id1}"] [data-vote="ano"]`); await page.waitForTimeout(700);
       const ui1 = (await calls(page, 'ghSet')).map(c => JSON.parse(c[2])).filter(o => o.garmin_ui).pop();

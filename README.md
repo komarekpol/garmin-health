@@ -35,6 +35,7 @@ Dashboard zdraví a regenerace z hodinek Garmin (HRV, klidová TF, Body Battery,
 - **Trendy**: grafy s pásmy, klouzavým průměrem a baseline HRV.
 - **Deník**: štítky (alkohol, káva, pozdní večeře, stres, otužování, sauna, meditace, nemoc…), jídla s časem, doplňky, poznámka; aktivity z Garminu doplní samy.
 - **Jídlo**: databáze jídel (porce + gramy), kalorie a makroživiny proti cílům, bilance se spálenými kaloriemi z Garminu, váha; zápis i hlasem přes Clauda v chatu.
+- **Běh**: doporučení na dnešek (regenerace + zátěž), km po týdnech, tempo, tepovka, efektivita (rychlost ÷ TF), VO2max a seznam běhů s detailem.
 - **Vlivy**: co mění HRV, spánek, klidovou TF a Body Battery další ráno (srovnání s vlastním průměrem, síla důkazu).
 
 ## Vývoj

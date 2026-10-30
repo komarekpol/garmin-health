@@ -55,7 +55,11 @@ function api(url, opt) {
     // každý 3. den běh, každý 5. otužování (název „Cold Plunge“), dnes ráno běh; nejnovější první, stránkování start / limit
     const from = q.startDate || add(TODAY, -400), to = q.endDate || TODAY, all = [];
     range(from, to).filter(has).reverse().forEach(d => {
-      if (d === TODAY || idx(d) % 3 === 0) all.push({ activityName: 'Běh', activityType: { typeKey: 'running' }, startTimeLocal: d + ' 07:00:00', duration: 3600, distance: 10000, averageHR: 145, activityTrainingLoad: 120, aerobicTrainingEffect: 3.4 });
+      if (d === TODAY || idx(d) % 3 === 0) { const i = idx(d), t3 = Math.floor(i / 3), km = d === TODAY ? 10 : 6 + t3 % 7, sp = 2.7 + (t3 % 4) * 0.15, tk = d === TODAY ? 'running' : ['running', 'trail_running', 'treadmill_running'][t3 % 3];
+        all.push({ activityId: 9000000 + i, activityName: tk === 'trail_running' ? 'Olomouc - trail' : 'Běh', activityType: { typeKey: tk, typeId: 1 }, startTimeLocal: d + ' 07:00:00',
+          duration: Math.round(km * 1000 / sp), movingDuration: Math.round(km * 1000 / sp) - 30, distance: km * 1000, averageSpeed: sp, maxSpeed: sp * 1.3,
+          averageHR: 140 + i % 12, maxHR: 168, elevationGain: tk === 'trail_running' ? 210 : 35, averageRunningCadenceInStepsPerMinute: 166.4,
+          avgStrideLength: 101.3, activityTrainingLoad: 120, aerobicTrainingEffect: 3.4, anaerobicTrainingEffect: 0.8, vO2MaxValue: 48 }); }
       if (idx(d) % 5 === 0) all.push({ activityName: 'Cold Plunge | 15.0°C', activityType: { typeKey: 'other' }, startTimeLocal: d + ' 06:30:00', duration: 180, distance: 0, averageHR: 72, activityTrainingLoad: 0.06 });
     });
     API.actQ = (API.actQ || 0) + 1;
@@ -140,7 +144,7 @@ ok('klidová TF u spánku z denního souhrnu', data.sleep_latest.resting_heart_r
 ok('HRV baseline (lowUpper / balancedUpper)', data.hrv.baseline_low === 25 && data.hrv.baseline_upper === 35);
 ok('fitness věk + aktivita', data.fitness.fitness_age === 44.4 && data.last_activity.activity_name === 'Běh' && data.last_activity.distance_km === 10, JSON.stringify(data.last_activity));
 ok('kompaktní dny ~210 s HRV, spánkem, TF, BB, stresem', data.days.length >= 200 && data.days.length <= 212 && data.days.at(-2).hrv > 0 && data.days.at(-2).sc > 0 && data.days.at(-2).rhr > 0 && data.days.at(-2).st === 31, data.days.length + ' ' + JSON.stringify(data.days.at(-2)));
-{ const withRun = data.days.filter(d => d.a.some(a => a.k === 'running')).length, withCold = data.days.filter(d => d.a.some(a => /cold/i.test(a.n))).length;
+{ const withRun = data.days.filter(d => d.a.some(a => /running/.test(a.k))).length, withCold = data.days.filter(d => d.a.some(a => /cold/i.test(a.n))).length;
   ok('aktivity po dnech (běh, otužování) i přes stránkování po 100', withRun >= 65 && withCold >= 38 && data.days.at(-1).a[0].h === 7 && data.days.at(-1).a[0].te === 3.4, withRun + ' / ' + withCold); }
 ok('readiness prázdná (API ji nemá) → stránka odhadne', Object.keys(data.readiness).length === 0);
 ok('vzorky odpovědí uloženy jednou', !!G.file('garmin-api-vzorky.json') && !!G.props.SAMPLES_DONE);
@@ -268,6 +272,12 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   ok('jídla: smazání', JSON.parse(G.env.ghFoodSet('k1', 'rohlik', null)).ok && !JSON.parse(G.env.ghGet('k1')).journal.food.rohlik);
   ok('jídla: špatný klíč odmítnut', !JSON.parse(G.env.ghFoodSet('x', 'a', JSON.stringify({ l: 'A', k: 1 }))).ok);
   ok('Garmin: spálené kcal v days', JSON.parse(G.file('garmin-data.json').content).days.some(x => x.kc > 0), JSON.stringify(JSON.parse(G.file('garmin-data.json').content).days.slice(-1)));
+  { const ds = JSON.parse(G.file('garmin-data.json').content).days, runs = [].concat(...ds.map(x => x.a)).filter(a => /running/.test(a.k || ''));
+    const r = runs[0] || {};
+    ok('Běh: aktivity nesou km, čas, tempo (rychlost), TF, kadenci, převýšení, TE, VO2max, id', runs.length > 20 && r.km > 0 && r.s > 0 && r.sp > 0 && r.hr > 0 && r.hrx > 0 && r.cad === 166 && r.el >= 0 && r.tea === 0.8 && r.vo2 === 48 && r.id && r.t === '07:00', JSON.stringify(r));
+    ok('Běh: typy running / trail / treadmill', ['running', 'trail_running', 'treadmill_running'].every(k => runs.some(a => a.k === k)));
+    const cp = [].concat(...ds.map(x => x.a)).find(a => /Cold/.test(a.n));
+    ok('Běh: neběžecká aktivita bez prázdných polí (distance 0 → bez km)', cp && cp.km == null && cp.cad == null, JSON.stringify(cp)); }
 }
 
 fs.writeFileSync(path.join(OUT, 'sample-api.json'), G.file('garmin-data.json').content);
