@@ -1,217 +1,65 @@
-"""
+r"""
 Garmin Local Server
 ===================
-Cte data primo z garmin.db a servuje je jako JSON na localhost:8765
-Spoustej pres Start Garmin Dashboard.bat nebo primo:
+Čte data z garmin.db (garmin_data.py) a servíruje je jako JSON na localhost:8765.
+Dashboard běží hlavně z Google Apps Scriptu (data z Disku); lokální server zůstává pro práci offline
+a pro tlačítko „Sync Garmin“ na tomto PC.
+Spouštěj přes Start Garmin Dashboard.bat nebo přímo:
   C:\Python314\python.exe garmin_server.py
 """
 
-import sqlite3, json, os, sys, threading, webbrowser, subprocess
+import json, os, sys, tempfile, threading, webbrowser, subprocess
+from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from datetime import datetime, timedelta
 from pathlib import Path
 
-DB_PATH = Path.home() / ".garmin-givemydata" / "garmin.db"
-DASHBOARD_PATH = Path(__file__).parent / "garmin_live_dashboard.html"
-PORT = 8765
+from garmin_data import DB_PATH, load_data
+from garmin_export import EXPORT_DIR
 
-def get_conn():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+# Prahy a zóny dashboardu: stejný soubor, který čte a zapisuje Apps Script (Disk je synchronizuje) → stejné na všech zařízeních
+SETTINGS_PATH = EXPORT_DIR / "garmin-settings.json"
+SETTINGS_KEYS = ("garmin_thresholds", "garmin_vst_zones", "garmin_hr_zones", "garmin_bb_zones", "garmin_resp_zones")
+SETTINGS_MAX = 50_000
 
-def fetch_one(conn, sql, params=()):
+
+def settings_read():
     try:
-        cur = conn.execute(sql, params)
-        row = cur.fetchone()
-        return dict(row) if row else {}
-    except Exception as e:
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
         return {}
 
-def fetch_all(conn, sql, params=()):
-    try:
-        cur = conn.execute(sql, params)
-        return [dict(r) for r in cur.fetchall()]
-    except Exception as e:
-        return []
 
-def load_data():
-    if not DB_PATH.exists():
-        return {"error": f"Databaze nenalezena: {DB_PATH}"}
+def settings_write(inp):
+    cur = settings_read()
+    for k in SETTINGS_KEYS:
+        if k in inp:
+            if inp[k] is None: cur.pop(k, None)
+            else: cur[k] = str(inp[k])[:10_000]
+    cur["_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".garmin-settings-", suffix=".tmp", dir=str(SETTINGS_PATH.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(cur, ensure_ascii=False))
+    os.replace(tmp, SETTINGS_PATH)
+    return cur["_at"]
 
-    conn = get_conn()
-    days_30 = (datetime.now() - timedelta(days=31)).date().isoformat()
+HERE = Path(__file__).parent
+DASHBOARD_PATH = HERE / "garmin-dashboard.html"
+PORT = 8765
 
-    try:
-        # daily_summary - spravne nazvy sloupcu
-        daily = fetch_one(conn, """
-            SELECT calendar_date, total_steps, resting_heart_rate,
-                   avg_resting_heart_rate_7day,
-                   average_stress_level, max_stress_level,
-                   body_battery_highest, body_battery_lowest,
-                   body_battery_most_recent, body_battery_at_wake,
-                   body_battery_during_sleep,
-                   avg_waking_respiration,
-                   total_kilocalories, active_kilocalories
-            FROM daily_summary
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
 
-        # HRV - spravne nazvy sloupcu
-        hrv = fetch_one(conn, """
-            SELECT calendar_date, weekly_avg, last_night_avg,
-                   last_night_5min_high, status,
-                   baseline_low, baseline_upper
-            FROM hrv
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
+def run_sync():
+    # stažení nových dat z Garmin Connect a hned export na Disk (ať je mají i ostatní zařízení)
+    subprocess.run([sys.executable, "-m", "garmin_givemydata"], capture_output=True)
+    subprocess.run([sys.executable, str(HERE / "garmin_export.py")], capture_output=True)
 
-        # Sleep - spravne nazvy sloupcu
-        sleep_latest = fetch_one(conn, """
-            SELECT calendar_date,
-                   ROUND(sleep_time_seconds / 3600.0, 2) AS sleep_hours,
-                   deep_sleep_seconds / 60 AS deep_min,
-                   light_sleep_seconds / 60 AS light_min,
-                   rem_sleep_seconds / 60 AS rem_min,
-                   awake_sleep_seconds / 60 AS awake_min,
-                   average_hr_sleep, resting_heart_rate,
-                   average_respiration, avg_sleep_stress,
-                   body_battery_change, sleep_score_overall,
-                   sleep_score_feedback, sleep_score_insight
-            FROM sleep
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
-
-        # Training readiness - spravne nazvy sloupcu
-        readiness = fetch_one(conn, """
-            SELECT calendar_date, score, level,
-                   hrv_factor_percent, hrv_factor_feedback,
-                   hrv_weekly_average,
-                   sleep_history_factor_percent,
-                   stress_history_factor_percent,
-                   recovery_time_factor_percent,
-                   acwr_factor_percent,
-                   feedback_short, feedback_long
-            FROM training_readiness
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
-
-        # Training status
-        train_status = fetch_one(conn, """
-            SELECT calendar_date, training_status,
-                   acute_load, chronic_load
-            FROM training_status
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
-
-        # Fitness vek
-        fitness = fetch_one(conn, """
-            SELECT calendar_date, chronological_age, fitness_age
-            FROM fitness_age
-            ORDER BY calendar_date DESC LIMIT 1
-        """)
-
-        # Spánek 200 dni pro grafy (vsechny zalozky)
-        nights = fetch_all(conn, """
-            SELECT s.calendar_date,
-                   s.calendar_date AS date,
-                   ROUND(s.sleep_time_seconds / 3600.0, 2) AS hours,
-                   s.sleep_score_overall AS score,
-                   s.resting_heart_rate AS hr,
-                   d.body_battery_at_wake AS bb,
-                   s.body_battery_change AS bb_change,
-                   s.avg_sleep_stress AS stress,
-                   s.average_respiration AS resp,
-                   h.last_night_avg AS hrv,
-                   ROUND(s.deep_sleep_seconds / 60.0) AS deep_min,
-                   ROUND(s.rem_sleep_seconds / 60.0) AS rem_min,
-                   ROUND(s.light_sleep_seconds / 60.0) AS light_min,
-                   ROUND(s.awake_sleep_seconds / 60.0) AS awake_min
-            FROM sleep s
-            LEFT JOIN hrv h ON s.calendar_date = h.calendar_date
-            LEFT JOIN daily_summary d ON s.calendar_date = d.calendar_date
-            WHERE s.calendar_date >= date('now', '-200 days')
-            ORDER BY s.calendar_date ASC
-        """)
-
-        # HRV celá historie pro VST záložku
-        hrv_history_raw = fetch_all(conn, """
-            SELECT h.calendar_date,
-                   h.last_night_avg AS hrv,
-                   h.weekly_avg AS avg7,
-                   h.status,
-                   h.baseline_low,
-                   h.baseline_upper
-            FROM hrv h
-            WHERE h.last_night_avg IS NOT NULL
-            ORDER BY h.calendar_date ASC
-        """)
-
-        conn.close()
-
-        def fmt_label(d):
-            if not d: return ""
-            try:
-                dt = datetime.strptime(d[:10], "%Y-%m-%d")
-                return f"{dt.day}.{dt.month}."
-            except:
-                return d
-
-        for n in nights:
-            cd = n.get("calendar_date", "")
-            n["date"] = cd[:10] if cd else ""
-            n["label"] = fmt_label(cd)
-            # bb is already body_battery_at_wake from query
-
-        # Format HRV history labels
-        hrv_history = []
-        for r2 in hrv_history_raw:
-            d = r2.get("calendar_date", "")
-            hrv_history.append({
-                "date": d[:10] if d else "",
-                "label": fmt_label(d),
-                "hrv": r2.get("hrv"),
-                "avg7": r2.get("avg7"),
-                "status": r2.get("status"),
-                "baseline_low": r2.get("baseline_low"),
-                "baseline_upper": r2.get("baseline_upper"),
-            })
-
-        # Posledni aktivita
-        last_activity = fetch_one(conn if not conn else get_conn(), """
-            SELECT start_time_local, activity_name, activity_type,
-                   ROUND(elapsed_time / 60.0, 1) AS duration_min,
-                   ROUND(distance / 1000.0, 2) AS distance_km,
-                   avg_hr, training_load_value
-            FROM activity
-            ORDER BY start_time_local DESC LIMIT 1
-        """)
-
-        return {
-            "updated_at": datetime.now().strftime("%H:%M:%S"),
-            "date": daily.get("calendar_date", datetime.now().date().isoformat()),
-            "daily": daily,
-            "hrv": hrv,
-            "sleep_latest": sleep_latest,
-            "readiness": readiness,
-            "training_status": train_status,
-            "fitness": fitness,
-            "nights": nights,
-            "hrv_history": hrv_history,
-            "last_activity": last_activity,
-        }
-
-    except Exception as e:
-        try: conn.close()
-        except: pass
-        return {"error": str(e)}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): pass
 
     def send_cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def do_OPTIONS(self):
@@ -219,8 +67,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_cors()
         self.end_headers()
 
+    def send_json(self, obj, code=200):
+        body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_cors()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self):
+        if self.path != "/settings":
+            self.send_response(404); self.end_headers(); return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n > SETTINGS_MAX:
+                raise ValueError(f"nastavení je větší než {SETTINGS_MAX} znaků")
+            inp = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+            if not isinstance(inp, dict):
+                raise ValueError("čekám objekt")
+            self.send_json({"ok": True, "at": settings_write(inp)})
+        except Exception as e:
+            self.send_json({"ok": False, "error": str(e)})
+
     def do_GET(self):
-        if self.path == "/data":
+        if self.path == "/settings":
+            self.send_json(settings_read())
+
+        elif self.path == "/data":
             data = load_data()
             body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
             self.send_response(200)
@@ -230,8 +103,6 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
         elif self.path == "/sync":
-            def run_sync():
-                subprocess.run([sys.executable, "-m", "garmin_givemydata"], capture_output=True)
             threading.Thread(target=run_sync, daemon=True).start()
             body = json.dumps({"status": "sync_started"}).encode()
             self.send_response(200)
@@ -250,6 +121,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+
 if __name__ == "__main__":
     if not DB_PATH.exists():
         print(f"CHYBA: Databaze nenalezena na {DB_PATH}")
@@ -265,7 +137,7 @@ if __name__ == "__main__":
 
     def open_browser():
         import time; time.sleep(0.8)
-        webbrowser.open(str(DASHBOARD_PATH))
+        webbrowser.open(DASHBOARD_PATH.resolve().as_uri())
 
     threading.Thread(target=open_browser, daemon=True).start()
 

@@ -3,12 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Garmin Live Dashboard</title>
+<title>Garmin Health</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#080b10;--bg2:#0e1219;--bg3:#141820;--bg4:#1c2230;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.11);--text:#e8edf5;--text2:#9aaabb;--text3:#5a6e82;--accent:#00d4aa;--accent-dim:rgba(0,212,170,0.1);--accent2:#5b8fff;--accent2-dim:rgba(91,143,255,0.1);--warn:#ffb547;--warn-dim:rgba(255,181,71,0.1);--danger:#ff5f6d;--danger-dim:rgba(255,95,109,0.1);--purple:#b18fff;--r:10px;--r-sm:6px;}
@@ -39,6 +37,8 @@ main{position:relative;z-index:1;width:100%;overflow-x:hidden;}
 #serverError{display:none;background:var(--bg2);border:1px solid rgba(255,95,109,0.25);border-radius:var(--r);padding:20px 24px;margin-bottom:18px;}
 #serverError h3{color:var(--danger);font-size:14px;margin-bottom:8px;}
 #serverError p{font-size:13px;color:var(--text2);line-height:1.8;}
+#serverError.note-warn{border-color:rgba(255,181,71,0.35);padding:12px 18px;}
+#serverError.note-warn h3{color:var(--warn);margin-bottom:0;}
 code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7px;border-radius:4px;font-size:11px;color:var(--accent);}
 #syncOverlay{display:none;position:fixed;inset:0;background:rgba(8,11,16,0.88);backdrop-filter:blur(6px);z-index:200;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
 #syncOverlay.show{display:flex;}
@@ -103,6 +103,19 @@ code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7p
 .badge-warn{background:var(--warn-dim);color:var(--warn);border:1px solid rgba(255,181,71,0.2);}
 .badge-danger{background:var(--danger-dim);color:var(--danger);border:1px solid rgba(255,95,109,0.2);}
 @media(max-width:768px){.chart-grid{grid-template-columns:1fr;}main{padding:14px;}header{padding:0 14px;}}
+/* telefon (cloud verze na iPhonu): nic nesmí být širší než obrazovka */
+@media(max-width:600px){
+  html,body{overflow-x:hidden;}
+  .cards-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+  .tab-bar{padding:0 8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .tab-bar::-webkit-scrollbar{display:none;}
+  .tab-btn{flex:0 0 auto;}
+  .thresh-card{overflow-x:auto;}
+  .header-right{gap:6px;}
+  .logo-sub{display:none;}
+  #lastUpdated{font-size:10px;max-width:110px;line-height:1.3;}
+  [id^="tab-"]>div[style*="padding:24px 28px"]{padding:14px 12px!important;}
+}
 ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px;}
 
 /* ── TABS ─────────────────────────────────────────────────── */
@@ -700,8 +713,41 @@ code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7p
 
 </main>
 <script>
+// ── DATA: cloud (Apps Script → Google Disk) nebo lokální server na PC ──
+// Cloud: stránku servíruje Apps Script z GitHubu a vloží window.__GH_CLOUD__ = { key, build }; data a nastavení
+// jdou přes google.script.run (ghGet / ghSet). Lokálně (file:// na PC): http://localhost:8765 (garmin_server.py).
+// Prahy a zóny jsou v obou režimech na Disku (Garmin Data/garmin-settings.json) → stejné na PC, iPadu i iPhonu.
 const API='http://localhost:8765';
-let DATA=null,charts={},currentRange=14;
+const CLOUD=window.__GH_CLOUD__||null;
+const ST_KEYS=['garmin_thresholds','garmin_vst_zones','garmin_hr_zones','garmin_bb_zones','garmin_resp_zones'];
+const STALE_H=30;
+let DATA=null,META=null,charts={},currentRange=14;
+const ST={};   // nastavení v paměti (localStorage jen jako místní kopie — v iframe Apps Scriptu nemusí být dostupné)
+function stGet(k){if(k in ST)return ST[k];try{return localStorage.getItem(k);}catch(e){return null;}}
+function stSet(k,v){ST[k]=v;try{localStorage.setItem(k,v);}catch(e){}stQueue(k,v);}
+function stDel(k){ST[k]=null;try{localStorage.removeItem(k);}catch(e){}stQueue(k,null);}
+let stPend={},stTimer=null;
+function stQueue(k,v){stPend[k]=v;clearTimeout(stTimer);stTimer=setTimeout(stFlush,500);}
+async function stFlush(){
+  const b=stPend;stPend={};if(!Object.keys(b).length)return;
+  try{
+    const r=CLOUD?await gsRun('ghSet',CLOUD.key,JSON.stringify(b))
+      :await (await fetch(`${API}/settings`,{method:'POST',body:JSON.stringify(b),headers:{'Content-Type':'text/plain'}})).json();
+    if(!r.ok)throw new Error(r.error||'neznámá chyba');
+  }catch(e){showNote('Nastavení se neuložilo na Disk ('+(e.message||e)+') — platí jen v tomto prohlížeči.','warn');}
+}
+function stApply(s){
+  if(!s||typeof s!=='object')return;
+  ST_KEYS.forEach(k=>{if(k in s&&s[k]!=null){ST[k]=String(s[k]);try{localStorage.setItem(k,ST[k]);}catch(e){}}});
+  T=loadT();
+}
+function gsRun(fn,...a){
+  return new Promise((res,rej)=>{
+    if(!window.google||!google.script||!google.script.run)return rej(new Error('google.script.run není k dispozici'));
+    google.script.run.withSuccessHandler(t=>{try{res(typeof t==='string'?JSON.parse(t):t);}catch(e){rej(e);}})
+      .withFailureHandler(e=>rej(e instanceof Error?e:new Error(String(e&&e.message||e))))[fn](...a);
+  });
+}
 
 // ── PRAHY ───────────────────────────────────────────────────────
 const THRESH_DEF={
@@ -720,7 +766,7 @@ const THRESH_DEF={
 
 function loadT(){
   try{
-    const s=localStorage.getItem('garmin_thresholds');
+    const s=stGet('garmin_thresholds');
     if(s){const p=JSON.parse(s);const m={};for(const k in THRESH_DEF)m[k]={...THRESH_DEF[k],...(p[k]||{})};return m;}
   }catch(e){}
   return JSON.parse(JSON.stringify(THRESH_DEF));
@@ -728,14 +774,14 @@ function loadT(){
 
 function saveT(T){
   const out={};for(const k in T)out[k]={val:T[k].val};
-  localStorage.setItem('garmin_thresholds',JSON.stringify(out));
+  stSet('garmin_thresholds',JSON.stringify(out));
   const el=document.getElementById('threshSaved');
   el.style.opacity='1';setTimeout(()=>el.style.opacity='0',2000);
 }
 
 function resetThresholds(){
   if(!confirm('Obnovit výchozí prahové hodnoty?'))return;
-  localStorage.removeItem('garmin_thresholds');
+  stDel('garmin_thresholds');
   T=loadT();renderThresholds();if(DATA)renderAll();
 }
 
@@ -773,9 +819,44 @@ function threshSave(el){
 }
 
 async function fetchData(){
+  if(CLOUD){
+    const r=await gsRun('ghGet',CLOUD.key);
+    stApply(r.settings);
+    if(!r.ok)throw new Error(r.error||'Data se nepodařilo načíst');
+    META={src:'cloud',at:r.at,ageH:r.ageH,stale:!!r.stale,warn:r.data&&r.data.warn};
+    return r.data;
+  }
   const r=await fetch(`${API}/data`,{cache:'no-store'});
-  if(!r.ok)throw new Error(r.status);
-  return r.json();
+  if(!r.ok)throw new Error('Lokální server: HTTP '+r.status);
+  try{
+    const s=await fetch(`${API}/settings`,{cache:'no-store'});
+    if(s.ok){
+      const st=await s.json();
+      // jednorázová migrace: prahy a zóny, které zatím žijí jen v tomto prohlížeči (stará verze), nahrát na Disk
+      ST_KEYS.forEach(k=>{if(!(k in st)){let v=null;try{v=localStorage.getItem(k);}catch(e){}if(v!=null)stQueue(k,v);}});
+      stApply(st);
+    }
+  }catch(e){}
+  const d=await r.json();
+  if(d.error)throw new Error(d.error);
+  META={src:'local',at:new Date().toISOString(),ageH:0,stale:false};
+  return d;
+}
+function showNote(msg,kind){
+  const el=document.getElementById('serverError');
+  if(!msg){el.style.display='none';return;}
+  el.querySelector('h3').textContent=(kind==='warn'?'⚠ ':'✖ ')+msg;
+  el.querySelector('p').innerHTML=kind==='warn'?'':(CLOUD
+    ?'Data čte Apps Script z Google Disku (Garmin Data/garmin-data.json). Zapisuje je PC: úloha <strong>Garmin Health\\Sync a export</strong> v Plánovači úloh nebo <strong>Start Garmin Dashboard</strong> na ploše.'
+    :'Dvojklikni na <strong>Start Garmin Dashboard</strong> na ploše.<br>Nebo spusť v CMD: <code>C:\\Python314\\python.exe garmin_server.py</code><br><br>Pak klikni na <strong>↻ Aktualizovat</strong> výše.');
+  el.className=kind==='warn'?'note-warn':'';
+  el.style.display='block';
+}
+function dataFail(e){showNote(CLOUD?String(e&&e.message||e):'Lokální server není spuštěn','err');}
+function dataOk(){
+  if(META&&META.stale)showNote(`Data jsou stará ${Math.round(META.ageH)} h — PC je nesynchronizovalo (běží PC a Plánovač úloh?)`,'warn');
+  else if(META&&META.warn)showNote(META.warn,'warn');
+  else showNote(null);
 }
 
 async function refreshData(){
@@ -783,13 +864,14 @@ async function refreshData(){
   btn.disabled=true;btn.classList.add('loading');
   try{
     DATA=await fetchData();
-    document.getElementById('serverError').style.display='none';
+    dataOk();
     renderAll();
-  }catch(e){document.getElementById('serverError').style.display='block';}
+  }catch(e){dataFail(e);}
   finally{btn.disabled=false;btn.classList.remove('loading');}
 }
 
 async function syncGarmin(){
+  if(CLOUD)return;   // v cloudu stahuje data PC (Plánovač úloh) — tlačítko je skryté
   const btn=document.getElementById('syncBtn');
   const ov=document.getElementById('syncOverlay');
   btn.disabled=true;btn.classList.add('loading');ov.classList.add('show');
@@ -797,9 +879,9 @@ async function syncGarmin(){
     await fetch(`${API}/sync`,{cache:'no-store'});
     await new Promise(r=>setTimeout(r,28000));
     DATA=await fetchData();
-    document.getElementById('serverError').style.display='none';
+    dataOk();
     renderAll();
-  }catch(e){document.getElementById('serverError').style.display='block';}
+  }catch(e){dataFail(e);}
   finally{btn.disabled=false;btn.classList.remove('loading');ov.classList.remove('show');}
 }
 
@@ -1030,7 +1112,9 @@ function renderDate(){
   const months=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
   document.getElementById('dateDisplay').textContent=`${days[now.getDay()]} ${now.getDate()}. ${months[now.getMonth()]}`;
   document.getElementById('dateSmall').textContent=`${now.getFullYear()} · data z Garmin Connect`;
-  document.getElementById('lastUpdated').textContent=now.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
+  document.getElementById('lastUpdated').textContent=META&&META.at
+    ?(META.src==='cloud'?'export ':'načteno ')+new Date(META.at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(META.src==='cloud'&&META.ageH>=1?` · před ${Math.round(META.ageH)} h`:'')
+    :now.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
   if(DATA?.date)document.getElementById('dataDate').textContent=`data: ${DATA.date}`;
 }
 
@@ -1043,8 +1127,9 @@ function renderAll(){
 (async()=>{
   renderDate();
   renderThresholds();
-  try{DATA=await fetchData();document.getElementById('serverError').style.display='none';renderAll();}
-  catch(e){document.getElementById('serverError').style.display='block';}
+  if(CLOUD){const b=document.getElementById('syncBtn');if(b)b.style.display='none';}
+  try{DATA=await fetchData();dataOk();renderAll();}
+  catch(e){dataFail(e);}
 })();
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────
@@ -1070,7 +1155,7 @@ let vstAvgDays = 7; // rolling average window
 
 function vstLoadZones(){
   try{
-    const s=localStorage.getItem('garmin_vst_zones');
+    const s=stGet('garmin_vst_zones');
     if(s){const p=JSON.parse(s);vstZ1=p.z1||26;vstZ2=p.z2||30;vstAvgDays=p.avgDays||7;}
   }catch(e){}
   const el1=document.getElementById('vstZ1Edit');
@@ -1092,7 +1177,7 @@ function vstZoneSave(){
   if(!isNaN(va)&&va>=2&&va<=30)vstAvgDays=va;
   const el2l=document.getElementById('vstZ2Label');
   if(el2l)el2l.textContent=vstZ2;
-  localStorage.setItem('garmin_vst_zones',JSON.stringify({z1:vstZ1,z2:vstZ2,avgDays:vstAvgDays}));
+  stSet('garmin_vst_zones',JSON.stringify({z1:vstZ1,z2:vstZ2,avgDays:vstAvgDays}));
   if(DATA)renderVST();
 }
 
@@ -1447,7 +1532,7 @@ let hrChart=null, hrCurrentDays=180;
 let hrZ1=54, hrZ2=57, hrAvgDays=7;
 
 function hrLoadZones(){
-  try{const s=localStorage.getItem('garmin_hr_zones');if(s){const p=JSON.parse(s);hrZ1=p.z1||54;hrZ2=p.z2||57;hrAvgDays=p.avgDays||7;}}catch(e){}
+  try{const s=stGet('garmin_hr_zones');if(s){const p=JSON.parse(s);hrZ1=p.z1||54;hrZ2=p.z2||57;hrAvgDays=p.avgDays||7;}}catch(e){}
   const e1=document.getElementById('hrZ1Edit'),e2=document.getElementById('hrZ2Edit'),ea=document.getElementById('hrAvgDaysEdit'),el=document.getElementById('hrZ2Label');
   if(e1)e1.textContent=hrZ1;if(e2)e2.textContent=hrZ2;if(ea)ea.textContent=hrAvgDays;if(el)el.textContent=hrZ2;
 }
@@ -1457,7 +1542,7 @@ function hrZoneSave(){
   const va=parseInt(document.getElementById('hrAvgDaysEdit')?.textContent||hrAvgDays);
   if(!isNaN(v1))hrZ1=v1;if(!isNaN(v2))hrZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)hrAvgDays=va;
   const el=document.getElementById('hrZ2Label');if(el)el.textContent=hrZ2;
-  localStorage.setItem('garmin_hr_zones',JSON.stringify({z1:hrZ1,z2:hrZ2,avgDays:hrAvgDays}));
+  stSet('garmin_hr_zones',JSON.stringify({z1:hrZ1,z2:hrZ2,avgDays:hrAvgDays}));
   if(DATA)renderHR();
 }
 function hrSetRange(days,el){hrCurrentDays=days;document.querySelectorAll('#tab-hr .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderHR();}
@@ -1476,7 +1561,7 @@ let bbChart=null, bbCurrentDays=180;
 let bbZ1=35, bbZ2=50, bbAvgDays=7;
 
 function bbLoadZones(){
-  try{const s=localStorage.getItem('garmin_bb_zones');if(s){const p=JSON.parse(s);bbZ1=p.z1||35;bbZ2=p.z2||50;bbAvgDays=p.avgDays||7;}}catch(e){}
+  try{const s=stGet('garmin_bb_zones');if(s){const p=JSON.parse(s);bbZ1=p.z1||35;bbZ2=p.z2||50;bbAvgDays=p.avgDays||7;}}catch(e){}
   const e1=document.getElementById('bbZ1Edit'),e2=document.getElementById('bbZ2Edit'),ea=document.getElementById('bbAvgDaysEdit'),el=document.getElementById('bbZ2Label');
   if(e1)e1.textContent=bbZ1;if(e2)e2.textContent=bbZ2;if(ea)ea.textContent=bbAvgDays;if(el)el.textContent=bbZ2;
 }
@@ -1486,7 +1571,7 @@ function bbZoneSave(){
   const va=parseInt(document.getElementById('bbAvgDaysEdit')?.textContent||bbAvgDays);
   if(!isNaN(v1))bbZ1=v1;if(!isNaN(v2))bbZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)bbAvgDays=va;
   const el=document.getElementById('bbZ2Label');if(el)el.textContent=bbZ2;
-  localStorage.setItem('garmin_bb_zones',JSON.stringify({z1:bbZ1,z2:bbZ2,avgDays:bbAvgDays}));
+  stSet('garmin_bb_zones',JSON.stringify({z1:bbZ1,z2:bbZ2,avgDays:bbAvgDays}));
   if(DATA)renderBB();
 }
 function bbSetRange(days,el){bbCurrentDays=days;document.querySelectorAll('#tab-bb .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderBB();}
@@ -1505,7 +1590,7 @@ let respChart=null, respCurrentDays=180;
 let respZ1=16, respZ2=19, respAvgDays=7;
 
 function respLoadZones(){
-  try{const s=localStorage.getItem('garmin_resp_zones');if(s){const p=JSON.parse(s);respZ1=p.z1||16;respZ2=p.z2||19;respAvgDays=p.avgDays||7;}}catch(e){}
+  try{const s=stGet('garmin_resp_zones');if(s){const p=JSON.parse(s);respZ1=p.z1||16;respZ2=p.z2||19;respAvgDays=p.avgDays||7;}}catch(e){}
   const e1=document.getElementById('respZ1Edit'),e2=document.getElementById('respZ2Edit'),ea=document.getElementById('respAvgDaysEdit'),el=document.getElementById('respZ2Label');
   if(e1)e1.textContent=respZ1;if(e2)e2.textContent=respZ2;if(ea)ea.textContent=respAvgDays;if(el)el.textContent=respZ2;
 }
@@ -1515,7 +1600,7 @@ function respZoneSave(){
   const va=parseInt(document.getElementById('respAvgDaysEdit')?.textContent||respAvgDays);
   if(!isNaN(v1))respZ1=v1;if(!isNaN(v2))respZ2=v2;if(!isNaN(va)&&va>=2&&va<=30)respAvgDays=va;
   const el=document.getElementById('respZ2Label');if(el)el.textContent=respZ2;
-  localStorage.setItem('garmin_resp_zones',JSON.stringify({z1:respZ1,z2:respZ2,avgDays:respAvgDays}));
+  stSet('garmin_resp_zones',JSON.stringify({z1:respZ1,z2:respZ2,avgDays:respAvgDays}));
   if(DATA)renderResp();
 }
 function respSetRange(days,el){respCurrentDays=days;document.querySelectorAll('#tab-resp .vst-range-btn').forEach(b=>b.classList.remove('active'));if(el)el.classList.add('active');renderResp();}
