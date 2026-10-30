@@ -37,7 +37,7 @@ async function routes(ctx) {
 let fails = 0;
 const ok = (name, cond, info) => { console.log((cond ? 'OK   ' : 'FAIL ') + name + (cond || info == null ? '' : ' — ' + info)); if (!cond) fails++; };
 const watch = page => { const errs = []; page.on('pageerror', e => errs.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|net::/.test(m.text())) errs.push(m.text()); }); return errs; };
-const PAGES = ['dnes', 'trendy', 'denik', 'vlivy', 'nast'];
+const PAGES = ['dnes', 'trendy', 'denik', 'vlivy', 'inov', 'nast'];
 
 async function cloud(browser, opt) {
   const settings = { garmin_thresholds: JSON.stringify({ hrv_ok: { val: 31 } }) };
@@ -128,6 +128,20 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('Vlivy: přepínání výsledků bez chyb', /Body Battery ráno ráno po dni/.test(await txt(page, '#p-vlivy')));
       await page.click('#vout [data-k="hrv"]');
       await page.screenshot({ path: path.join(OUT, 'd-vlivy.png'), fullPage: true });
+      // Inovace
+      const nb0 = await page.$eval('#sidenav [data-nb="inov"]', e => +e.textContent || 0);
+      await go(page, 'inov');
+      const nIv = (await page.$$('#p-inov .iv')).length;
+      ok('Inovace: návrhy k hlasování + odznak', nIv >= 3 && nb0 === nIv, nb0 + ' / ' + nIv);
+      const id1 = await page.$eval('#p-inov .iv', e => e.dataset.id);
+      await page.click(`#p-inov .iv[data-id="${id1}"] [data-vote="ano"]`); await page.waitForTimeout(700);
+      const ui1 = (await calls(page, 'ghSet')).map(c => JSON.parse(c[2])).filter(o => o.garmin_ui).pop();
+      ok('Inovace: hlas „Chci“ → garmin_ui na Disk', ui1 && JSON.parse(ui1.garmin_ui).inov[id1].v === 'ano', JSON.stringify(ui1));
+      ok('Inovace: schválený se přesune a odznak klesne', /Schváleno — zavedu\s*1/.test(await txt(page, '#p-inov')) && await page.$eval('#sidenav [data-nb="inov"]', e => +e.textContent || 0) === nb0 - 1);
+      await page.fill('#npod', 'Chci vidět vliv tréninku na spánek'); await page.click('#apod'); await page.waitForTimeout(700);
+      const ui2 = (await calls(page, 'ghSet')).map(c => JSON.parse(c[2])).filter(o => o.garmin_ui).pop();
+      ok('Inovace: podnět se uloží a hlas zůstane', ui2 && JSON.parse(ui2.garmin_ui).pod[0].t === 'Chci vidět vliv tréninku na spánek' && JSON.parse(ui2.garmin_ui).inov[id1].v === 'ano');
+      await page.screenshot({ path: path.join(OUT, 'd-inov.png'), fullPage: true });
       // Nastavení
       await go(page, 'nast');
       await page.fill('[data-th="hr_warn"]', '58'); await page.dispatchEvent('[data-th="hr_warn"]', 'change'); await page.waitForTimeout(700);

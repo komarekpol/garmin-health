@@ -99,6 +99,9 @@ function zoneCol(m, v) { const z = zones(m); if (!z || v == null) return tok('--
 
 // ── vzhled ──
 function uiGet() { try { return JSON.parse(stGet('garmin_ui') || '{}') || {}; } catch (e) { return {}; } }
+// garmin_ui se na Disku ukládá nejvýš 10 000 znaků (ghSet) → hlídat tady, nikdy neuložit useknutý JSON
+const UI_MAX = 9500;
+function uiSet(o) { const j = JSON.stringify(o); if (j.length > UI_MAX) { toast('Neuloženo — data rozhraní by přesáhla ' + UI_MAX + ' znaků'); return false; } stSet('garmin_ui', j); return true; }
 function themeSet(t) { document.documentElement.toggleAttribute('data-theme', t === 'graphite'); if (t === 'graphite') document.documentElement.setAttribute('data-theme', 'graphite'); try { localStorage.setItem('gh_theme', t); } catch (e) {} renderAll(); }
 
 // ══════════ DATA ══════════
@@ -306,15 +309,16 @@ const IC = {
   trendy: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
   denik: '<path d="M4 4h12a4 4 0 0 1 4 4v12H8a4 4 0 0 1-4-4z"/><path d="M8 9h8M8 13h6"/>',
   vlivy: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/>',
+  inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['vlivy', 'Vlivy'], ['nast', 'Nastavení']];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 function navInit() {
-  $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}</button>`).join('');
-  $('sidenav').innerHTML = '<div class="sn-gl">Garmin Health</div>' + NAV.map(([k, l]) => `<button class="sn-i" data-p="${k}">${svgI(k)}<span>${l}</span></button>`).join('')
+  $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}<span class="nb" data-nb="${k}"></span></button>`).join('');
+  $('sidenav').innerHTML = '<div class="sn-gl">Garmin Health</div>' + NAV.map(([k, l]) => `<button class="sn-i" data-p="${k}">${svgI(k)}<span>${l}</span><span class="nb" data-nb="${k}"></span></button>`).join('')
     + '<div class="sn-foot" id="snfoot"></div>';
-  $('bnav').innerHTML = NAV.map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span></button>`).join('');
+  $('bnav').innerHTML = NAV.map(([k, l]) => `<button class="bnav-i" data-p="${k}">${svgI(k)}<span>${l === 'Nastavení' ? 'Víc' : l}</span><span class="nb" data-nb="${k}"></span></button>`).join('');
   document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
 }
 function go(p) {
@@ -326,11 +330,12 @@ function go(p) {
 function renderAll() {
   $('age').textContent = ageText(); $('age').classList.toggle('stale', !!(META && META.stale));
   const f = $('snfoot'); if (f) f.innerHTML = DATA ? 'Data za ' + esc(dShort(DATA.date)) + '<br>' + esc(ageText()) : '';
-  renderPage();
+  navBadges(); renderPage();
 }
+function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {
   if (!DATA) return;
-  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, vlivy: renderVlivy, nast: renderNast })[PAGE](); }
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
   catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
@@ -640,6 +645,62 @@ function zoneBand(m) {
 }
 
 // ── Nastavení ──
+// ── Inovace ──
+const VOTES = { ano: 'Chci', pozdeji: 'Později', ne: 'Nechci' };
+const inovVotes = () => uiGet().inov || {};
+const inovOpen = () => { const v = inovVotes(); return INOV.filter(x => x.st === 'navrh' && !(v[x.id] && v[x.id].v)); };
+function inovVote(id, val, c) {
+  const u = uiGet(); u.inov = u.inov || {}; const cur = u.inov[id] || {};
+  if (val !== undefined) cur.v = cur.v === val ? '' : val;
+  if (c !== undefined) cur.c = String(c).slice(0, 300);
+  cur.at = TODAY(); if (!cur.v && !cur.c) delete u.inov[id]; else u.inov[id] = cur;
+  if (uiSet(u)) { renderInov(); navBadges(); }
+}
+function inovCard(x, v) {
+  const my = v[x.id] || {}, ef = ['bez vyplňování', '1 klepnutí denně', 'víc vyplňování'][x.vypl || 0];
+  const src = x.url ? `<a class="lnk" href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.zdroj)}</a>` : `<span>${esc(x.zdroj || '')}</span>`;
+  const done = x.st === 'zavedeno' ? `<div class="iv-done">Zavedeno ${esc(dShort(x.done || ''))}${x.why ? ' — ' + esc(x.why) : ''}</div>` : x.st === 'zamitnuto' && x.why ? `<div class="iv-why t2 sm">${esc(x.why)}</div>` : '';
+  const vote = x.st === 'navrh' ? `<div class="iv-vote">${Object.entries(VOTES).map(([k, l]) => `<button class="btn iv-b${my.v === k ? ' on iv-' + k : ''}" data-vote="${k}" aria-pressed="${my.v === k}">${l}</button>`).join('')}
+      <button class="lnk iv-cbtn" data-c="1">${my.c ? 'Upravit poznámku' : 'Poznámka'}</button></div>
+      <div class="iv-c"${my.c ? '' : ' hidden'}><textarea rows="2" maxlength="300" placeholder="Jak to chceš jinak, co ti na tom vadí…">${esc(my.c || '')}</textarea></div>` : '';
+  return `<div class="iv" data-id="${esc(x.id)}"><div class="iv-top"><span class="iv-id">${esc(x.id)}</span><b class="iv-t">${esc(x.t)}</b>${pill(ef, x.vypl ? 'amber' : 'info')}</div>
+    <div class="iv-co">${esc(x.co)}</div><div class="iv-jak t2 sm">${esc(x.jak)}</div>
+    <div class="iv-meta xs muted">Návrh ${esc(dShort(x.d))} · ${src}${x.pavel ? ' · <span class="iv-pav">potřebuje tebe: ' + esc(x.pavel) + '</span>' : ''}</div>${done}${vote}</div>`;
+}
+function renderInov() {
+  const v = inovVotes(), u = uiGet(), pod = u.pod || [], open = inovOpen();
+  const yes = INOV.filter(x => x.st === 'navrh' && v[x.id] && v[x.id].v === 'ano');
+  const later = INOV.filter(x => x.st === 'navrh' && v[x.id] && v[x.id].v === 'pozdeji');
+  const zav = INOV.filter(x => x.st === 'zavedeno').sort((a, b) => (b.done || '').localeCompare(a.done || ''));
+  const no = INOV.filter(x => x.st === 'zamitnuto' || (x.st === 'navrh' && v[x.id] && v[x.id].v === 'ne'));
+  const sec = (t, s, arr, emp) => `<div class="card"><div class="card-h"><div class="card-t">${t} <span class="muted">${arr.length || ''}</span></div><span class="card-s">${s}</span></div>`
+    + (arr.length ? arr.map(x => inovCard(x, v)).join('') : `<div class="muted sm">${emp}</div>`) + '</div>';
+  const podRows = pod.slice().reverse().map(p => { const dn = INOV_POD_DONE[p.id];
+    return `<div class="pod"><div><div>${esc(p.t)}</div><div class="xs muted">${esc(dShort(p.at))}${dn ? ' · vyřešeno ' + esc(dShort(dn.done)) + ' — ' + esc(dn.why) : ' · čeká na Clauda'}</div></div>`
+      + (dn ? pill('hotovo', 'info') : `<button class="btn btn-ghost" data-rmpod="${esc(p.id)}" aria-label="Smazat podnět">✕</button>`) + '</div>'; }).join('');
+  $('p-inov').innerHTML = `
+  <div class="page-head"><div><div class="page-t">Inovace</div><div class="page-s">Každý týden pár návrhů od Clauda — hlavně takové, které nechtějí víc vyplňování. Co označíš „Chci“, zavedu.</div></div></div>
+  ${sec('K hlasování', 'nové návrhy', open, 'Vše odhlasováno — nové návrhy přijdou o víkendu.')}
+  <div class="card"><div class="card-h"><div class="card-t">Tvůj podnět</div><span class="card-s">co tě napadne — vyřeším při týdenní kontrole</span></div>
+    <div class="row-add"><input id="npod" maxlength="300" placeholder="např. chci vidět vliv tréninku na spánek"><button class="btn" id="apod">Přidat</button></div>
+    ${podRows ? '<div class="pods">' + podRows + '</div>' : ''}</div>
+  ${sec('Schváleno — zavedu', 'při nejbližší týdenní kontrole', yes, 'Zatím nic. Klepni „Chci“ u návrhu výše.')}
+  ${later.length ? sec('Možná později', 'vrátím se k nim', later, '') : ''}
+  ${sec('Zavedeno', 'co už v aplikaci je', zav, 'Zatím nic.')}
+  ${no.length ? `<details class="card iv-no"><summary class="card-t">Nechci / zamítnuto <span class="muted">${no.length}</span></summary>${no.map(x => inovCard(x, v)).join('')}</details>` : ''}`;
+  const P = $('p-inov');
+  P.querySelectorAll('.iv').forEach(el => { const id = el.dataset.id;
+    el.querySelectorAll('[data-vote]').forEach(b => b.onclick = () => inovVote(id, b.dataset.vote));
+    const cb = el.querySelector('[data-c]'), box = el.querySelector('.iv-c');
+    if (cb && box) { cb.onclick = () => { box.hidden = false; box.querySelector('textarea').focus(); };
+      box.querySelector('textarea').addEventListener('change', e => inovVote(id, undefined, e.target.value.trim())); } });
+  const add = () => { const t = $('npod').value.trim(); if (!t) return; const u2 = uiGet(); u2.pod = u2.pod || [];
+    if (u2.pod.length >= 40) { toast('Max. 40 podnětů — počkej, až je vyřeším'); return; }
+    u2.pod.push({ id: 'P-' + Date.now().toString(36), t: t.slice(0, 300), at: TODAY() }); if (uiSet(u2)) { toast('Podnět uložen'); renderInov(); } };
+  $('apod').onclick = add; $('npod').onkeydown = e => { if (e.key === 'Enter') add(); };
+  P.querySelectorAll('[data-rmpod]').forEach(b => b.onclick = () => { const u2 = uiGet(); u2.pod = (u2.pod || []).filter(x => x.id !== b.dataset.rmpod); if (uiSet(u2)) renderInov(); });
+}
+
 function renderNast() {
   const sup = JR.cfg.sup || [], tags = JR.cfg.tags || [], theme = document.documentElement.getAttribute('data-theme') === 'graphite' ? 'graphite' : 'slate';
   $('p-nast').innerHTML = `

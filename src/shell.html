@@ -149,6 +149,17 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 .br{display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--fs-md);line-height:1.5;padding:3px 0;}
 .br-i{font-size:var(--fs-xs);width:14px;flex:none;}.br-up .br-i{color:var(--green);}.br-down .br-i{color:var(--red);}.br-eq .br-i{color:var(--text3);}
 .br-h{color:var(--text2);}
+.nb{display:none;}.nb:not(:empty){display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--blue);color:var(--on-fill);font-size:var(--fs-xs);font-weight:600;margin-left:auto;}
+.tab .nb:not(:empty){margin-left:6px;}.bnav-i{position:relative;}.bnav-i .nb:not(:empty){position:absolute;top:4px;left:calc(50% + 6px);margin:0;}
+.iv{padding:var(--sp-3) 0;border-top:1px solid var(--grid);}.iv:first-of-type{border-top:0;padding-top:0;}
+.iv-top{display:flex;align-items:center;gap:var(--sp-2);flex-wrap:wrap;}.iv-id{font-size:var(--fs-xs);color:var(--text3);}.iv-t{font-size:var(--fs-md);}
+.iv-co{margin-top:var(--sp-1);line-height:1.5;}.iv-jak{margin-top:var(--sp-1);line-height:1.5;}.iv-meta{margin-top:var(--sp-2);}.iv-pav{color:var(--amber);}
+.iv-vote{display:flex;flex-wrap:wrap;gap:var(--sp-2);align-items:center;margin-top:var(--sp-3);}.iv-b{min-height:40px;min-width:84px;}
+.iv-b.on.iv-ano{background:var(--blue-bg);border-color:var(--blue);color:var(--blue);}.iv-b.on.iv-pozdeji{border-color:var(--amber);color:var(--amber);}.iv-b.on.iv-ne{background:var(--bg4);color:var(--text3);}
+.iv-c textarea{width:100%;margin-top:var(--sp-2);}.iv-done{margin-top:var(--sp-2);font-size:var(--fs-sm);color:var(--text2);}
+.iv-no summary{cursor:pointer;list-style:none;}.iv-no[open] summary{margin-bottom:var(--sp-3);}
+.pods{margin-top:var(--sp-3);}.pod{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-2);padding:var(--sp-2) 0;border-top:1px solid var(--grid);}
+@media(max-width:760px){.bnav-i span:not(.nb){font-size:10px;}.iv-b{flex:1;min-width:0;min-height:44px;}}
 .gauges{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--sp-3);}
 .gc{text-align:center;min-width:0;}.gc .lbl{margin-bottom:var(--sp-1);}
 .gauge{display:block;width:100%;max-width:150px;height:auto;margin:0 auto;}
@@ -260,6 +271,7 @@ td input{width:76px;text-align:center;}
   <section class="page" id="p-trendy"></section>
   <section class="page" id="p-denik"></section>
   <section class="page" id="p-vlivy"></section>
+  <section class="page" id="p-inov"></section>
   <section class="page" id="p-nast"></section>
 </main>
 <nav class="bnav" id="bnav" aria-label="Sekce"></nav>
