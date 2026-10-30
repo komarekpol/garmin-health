@@ -1,6 +1,7 @@
 // Test syncu přes Garmin Personal API v Apps Scriptu bez sítě a bez osobních dat:
 // skutečný apps-script/garmin-apps-script.gs ve vm s modely služeb Apps Scriptu (Disk, Vlastnosti, mezipaměť, UrlFetchApp)
-// a modelem Personal API (tvary odpovědí podle polí Garmin Connect, která čte garmin-givemydata).
+// a modelem Personal API — tvary odpovědí podle skutečných vzorků z 30.10.2026 (Garmin Data/garmin-api-vzorky.json):
+// souhrny v2 ve skupinách, spánek plochý se sleepScores, Body Battery řada [čas, úroveň] + událost SLEEP, HRV hrvSummaries.
 //   node tests/t_gas_sync.js   → zapíše tests/out/sample-api.json (pro test dashboardu)
 const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = require('crypto');
 const ROOT = path.resolve(__dirname, '..'), OUT = path.join(__dirname, 'out');
@@ -28,33 +29,39 @@ function api(url, opt) {
   if (API.fail401once) { API.fail401once = false; return res(401, ''); }   // vypršený token → nový a znovu
   let m;
   if ((m = p.match(/^\/hrv-service\/hrv\/daily\/(\d{4}-\d{2}-\d{2})\/(\d{4}-\d{2}-\d{2})$/))) {
-    return res(200, { hrvSummaries: range(m[1], m[2]).map(d => ({ calendarDate: d, weeklyAvg: 30, lastNightAvg: 24 + idx(d) % 9, lastNight5MinHigh: 41, status: 'BALANCED',
+    const r = range(m[1], m[2]).filter(has); if (!r.length) return res(204, '');   // skutečné API: bez dat 204
+    return res(200, { hrvSummaries: r.map(d => ({ calendarDate: d, weeklyAvg: 30, lastNightAvg: 24 + idx(d) % 9, lastNight5MinHigh: 41, status: 'BALANCED',
       baseline: { lowUpper: 25, balancedLow: 27, balancedUpper: 35, markerValue: 0.5 } })) });
   }
   if (p === '/usersummary-service/v2/dailysummaries') {
     const r = range(q.startDate, q.endDate); if (r.length > API.maxSumSpan) return res(400, '');
-    return res(200, { data: r.map(d => ({ calendarDate: d, totalSteps: 9000, restingHeartRate: 51 + idx(d) % 3, lastSevenDaysAvgRestingHeartRate: 52,
-      averageStressLevel: 31, maxStressLevel: 88, bodyBatteryHighestValue: 92, bodyBatteryLowestValue: 18, bodyBatteryMostRecentValue: 47,
-      avgWakingRespirationValue: 14.5, totalKilocalories: 2400, activeKilocalories: 520 })) });   // bodyBatteryAtWakeTime záměrně chybí → dopočet z řady
+    return res(200, { data: r.filter(has).map(d => ({ uuid: 'u', userProfilePk: 1, calendarDate: d, source: 'garmin', includesWellnessData: true,
+      movement: { steps: { goal: 99999, value: 9000 } }, calories: { burnedTotal: 2400, burnedActive: 520 },
+      heartRate: { minValue: 48, maxValue: 140, restingValue: 51 + idx(d) % 3 }, stress: { avgLevel: 31, maxLevel: 88 },
+      bodyBattery: { minValue: 18, maxValue: 92, chargedValue: 60, drainedValue: 55, latestValue: 47 }, respiration: { avgValue: 14.5 } })) });
   }
   if (p === '/sleep-service/sleep/dailySleepSummariesByDate') {
     const r = range(q.startDate, q.endDate); if (r.length > API.maxSleepSpan) return res(400, '');   // limit délky → kód musí rozsah zkrátit
-    return res(200, r.map(sleepObj));
+    return res(200, r.filter(has).map(sleepObj));
   }
-  if (p === '/sleep-service/sleep/dailySleep') return res(200, sleepObj(q.date));
+  if (p === '/sleep-service/sleep/dailySleep') return res(200, has(q.date) ? sleepObj(q.date) : { id: null, calendarDate: null, sleepTimeSeconds: null });   // den bez dat = objekt se samými null
   if (p === '/wellness-service/wellness/bodyBattery/reports/daily') {
-    return res(200, range(q.startDate, q.endDate).map(d => { const t0 = Date.parse(d + 'T00:00:00Z');
-      return { date: d, charged: 60, drained: 55, bodyBatteryValuesArray: [[t0 - 3 * 3600e3, 'MEASURED', 30, 2], [t0 + 5 * 3600e3, 'MEASURED', 78, 2], [t0 + 12 * 3600e3, 'MEASURED', 55, 2]] }; }));
+    return res(200, range(q.startDate, q.endDate).filter(has).map(d => { const t0 = Date.parse(d + 'T00:00:00Z');
+      return { date: d, charged: 60, drained: 55, bodyBatteryValuesArray: [[t0 - 3 * 3600e3, 30], [t0 + 5 * 3600e3, 78], [t0 + 12 * 3600e3, 55]],
+        bodyBatteryActivityEvent: [{ eventType: 'SLEEP', durationInMilliseconds: 28e6, bodyBatteryImpact: 42 }] }; }));
   }
   if (p.startsWith('/fitnessage-service/fitnessage/v2/')) return res(200, { chronologicalAge: 50, fitnessAge: 44.4, achievableFitnessAge: 41 });
   if (p === '/activitylist-service/activities/search/activities') return res(200, [{ activityName: 'Běh', activityType: { typeKey: 'running' }, startTimeLocal: TODAY + ' 07:00:00', duration: 3600, distance: 10000, averageHR: 145, activityTrainingLoad: 120 }]);
   return res(404, '');
 }
+// dny, které má Garmin (hodinky synchronizované) — test „nesynchronizované hodinky“ posune hranici
+API.lastSynced = null;
+function has(d) { return !API.lastSynced || d <= API.lastSynced; }
 function sleepObj(d) {
   const end = Date.parse(d + 'T05:30:00Z');
-  return { dailySleepDTO: { calendarDate: d, sleepTimeSeconds: 7 * 3600 + idx(d) % 5 * 600, deepSleepSeconds: 4800, lightSleepSeconds: 13200, remSleepSeconds: 5400, awakeSleepSeconds: 1200,
-    averageRespirationValue: 14.1, avgSleepStress: 19, avgHeartRate: 53, sleepEndTimestampGMT: end, sleepScoreFeedback: 'POSITIVE', sleepScores: { overall: { value: 70 + idx(d) % 15, qualifierKey: 'GOOD' } } },
-    restingHeartRate: 50, bodyBatteryChange: 45, avgOvernightHrv: 29 };
+  return { id: 1, userProfilePK: 1, calendarDate: d, sleepTimeSeconds: 7 * 3600 + idx(d) % 5 * 600, deepSleepSeconds: 4800, lightSleepSeconds: 13200, remSleepSeconds: 5400, awakeSleepSeconds: 1200,
+    averageRespirationValue: 14.1, avgSleepStress: 19, avgHeartRate: 53, sleepEndTimestampGMT: end, sleepScoreFeedback: 'POSITIVE',
+    sleepScores: { totalDuration: { qualifierKey: 'GOOD' }, overall: { value: 70 + idx(d) % 15, qualifierKey: 'GOOD' } } };
 }
 
 // ── model Apps Scriptu ──
@@ -116,7 +123,11 @@ ok('noci za 200 dní', data.nights.length >= 195 && data.nights.length <= 201, d
 ok('HRV historie ~2 roky', data.hrv_history.length >= 700, data.hrv_history.length);
 ok('poslední noc: skóre, fáze, HRV', data.nights.at(-1).score >= 70 && data.nights.at(-1).deep_min === 80 && data.nights.at(-1).hrv > 0, JSON.stringify(data.nights.at(-1)));
 ok('Body Battery při probuzení dopočtena z řady', data.daily.body_battery_at_wake === 78 && data.nights.at(-1).bb === 78, data.daily.body_battery_at_wake);
-ok('denní souhrn: klidová TF, stres, dýchání', data.daily.resting_heart_rate > 0 && data.daily.average_stress_level === 31 && data.daily.avg_waking_respiration === 14.5);
+ok('denní souhrn v2: klidová TF, stres, dýchání, BB, kroky', data.daily.resting_heart_rate > 0 && data.daily.average_stress_level === 31 && data.daily.max_stress_level === 88
+  && data.daily.avg_waking_respiration === 14.5 && data.daily.body_battery_highest === 92 && data.daily.body_battery_most_recent === 47 && data.daily.total_steps === 9000, JSON.stringify(data.daily));
+ok('7denní průměr klidové TF dopočten', data.daily.avg_resting_heart_rate_7day >= 51 && data.daily.avg_resting_heart_rate_7day <= 53, data.daily.avg_resting_heart_rate_7day);
+ok('změna BB ve spánku z události SLEEP', data.sleep_latest.body_battery_change === 42 && data.nights.at(-1).bb_change === 42, data.sleep_latest.body_battery_change);
+ok('klidová TF u spánku z denního souhrnu', data.sleep_latest.resting_heart_rate > 0 && data.nights.at(-1).hr > 0);
 ok('HRV baseline (lowUpper / balancedUpper)', data.hrv.baseline_low === 25 && data.hrv.baseline_upper === 35);
 ok('fitness věk + aktivita', data.fitness.fitness_age === 44.4 && data.last_activity.activity_name === 'Běh' && data.last_activity.distance_km === 10);
 ok('readiness prázdná (API ji nemá) → stránka odhadne', Object.keys(data.readiness).length === 0);
@@ -148,6 +159,19 @@ ok('neplatný klíč = jasná chyba', !r.ok && /neplatný nebo vypršel/.test(r.
 // připomínka vypršení klíče
 G.props.GARMIN_KEY_EXP = add(TODAY, 20); G.env.keyExpWatch_(); G.env.keyExpWatch_();
 ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.test(m.sub)).length === 1, JSON.stringify(G.mails.map(m => m.sub)));
+
+// hodinky 6 dní nesynchronizované: Garmin zná jen dny do -6 → po syncu hodinek se dotáhnou všechny chybějící dny
+{
+  const G3 = gasEnv(); G3.props.SYNC_KEY = 'k'; G3.props.GARMIN_API_KEY = 'test-key'; API.fail401once = false;
+  API.lastSynced = add(TODAY, -6);
+  let r3 = G3.env.syncGarmin_({});
+  const n1 = JSON.parse(G3.file('garmin-data.json').content).nights.at(-1).date;
+  ok('nesynchronizované hodinky: poslední noc = poslední den v Garminu', r3.ok && n1 === API.lastSynced, n1);
+  API.lastSynced = null;   // Pavel synchronizoval hodinky
+  r3 = G3.env.syncGarmin_({});
+  const d3 = JSON.parse(G3.file('garmin-data.json').content), nd = d3.nights.map(n => n.date);
+  ok('po syncu hodinek se dotáhnou všechny chybějící dny (ne jen 3)', r3.ok && range(add(TODAY, -6), TODAY).every(d => nd.includes(d)), nd.slice(-8).join(','));
+}
 
 // backfill s výpadkem Garminu (HTTP 500 u souhrnů) → nedokončený, další běh doplní
 {

@@ -361,15 +361,19 @@ function dateOf_(o) {
   const d = pick_(o, ['calendarDate', 'date', 'summaryDate', 'sleepDate']) || pick_(o, ['startTimestampLocal', 'startTimeLocal']);
   return isYmd_(String(d || '')) ? String(d).slice(0, 10) : null;
 }
+// Denní souhrn v2 (ověřeno na skutečné odpovědi 30.10.2026): skupiny heartRate / stress / bodyBattery / respiration / movement / calories.
+// Staré ploché názvy (v1, garmin-givemydata) jako záloha. 7denní průměr klidové TF v2 nemá → dopočte buildData_.
 function dailyOf_(o) {
-  const v = k => num_(pick_(o, k));
-  return { total_steps: v(['totalSteps']), resting_heart_rate: v(['restingHeartRate', 'restingHR']),
-    avg_resting_heart_rate_7day: v(['lastSevenDaysAvgRestingHeartRate', 'averageRestingHeartRate']),
-    average_stress_level: v(['averageStressLevel', 'avgStressLevel', 'overallStressLevel']), max_stress_level: v(['maxStressLevel']),
-    body_battery_highest: v(['bodyBatteryHighestValue']), body_battery_lowest: v(['bodyBatteryLowestValue']),
-    body_battery_most_recent: v(['bodyBatteryMostRecentValue']), body_battery_at_wake: v(['bodyBatteryAtWakeTime']),
-    body_battery_during_sleep: v(['bodyBatteryDuringSleep']), avg_waking_respiration: v(['avgWakingRespirationValue']),
-    total_kilocalories: v(['totalKilocalories']), active_kilocalories: v(['activeKilocalories']) };
+  const g = (grp, k) => num_((o[grp] || {})[k]), f = k => num_(pick_(o, k)), hr = o.heartRate || {}, st = o.stress || {}, bb = o.bodyBattery || {}, rs = o.respiration || {};
+  const steps = ((o.movement || {}).steps || {}).value;
+  return { total_steps: num_(steps) ?? f(['totalSteps']),
+    resting_heart_rate: num_(hr.restingValue) ?? f(['restingHeartRate', 'restingHR']),
+    avg_resting_heart_rate_7day: f(['lastSevenDaysAvgRestingHeartRate']),
+    average_stress_level: num_(st.avgLevel) ?? f(['averageStressLevel', 'overallStressLevel']), max_stress_level: num_(st.maxLevel) ?? f(['maxStressLevel']),
+    body_battery_highest: num_(bb.maxValue) ?? f(['bodyBatteryHighestValue']), body_battery_lowest: num_(bb.minValue) ?? f(['bodyBatteryLowestValue']),
+    body_battery_most_recent: num_(bb.latestValue) ?? f(['bodyBatteryMostRecentValue']), body_battery_at_wake: f(['bodyBatteryAtWakeTime']),
+    body_battery_during_sleep: f(['bodyBatteryDuringSleep']), avg_waking_respiration: num_(rs.avgValue) ?? f(['avgWakingRespirationValue']),
+    total_kilocalories: g('calories', 'burnedTotal') ?? f(['totalKilocalories']), active_kilocalories: g('calories', 'burnedActive') ?? f(['activeKilocalories']) };
 }
 function sleepOf_(o) {
   const dto = o.dailySleepDTO || o, v = k => num_(pick_(dto, k)), top = k => num_(pick_(o, k));
@@ -394,6 +398,9 @@ function hrvOf_(o) {
 function bbOf_(o) {
   const arr = o.bodyBatteryValuesArray || null;   // [[čas GMT ms, „MEASURED“, úroveň, verze]] nebo [[čas, úroveň]]
   const out = { charged: num_(pick_(o, ['charged', 'bodyBatteryChargedValue'])), drained: num_(pick_(o, ['drained', 'bodyBatteryDrainedValue'])) };
+  // změna Body Battery ve spánku = událost SLEEP → bodyBatteryImpact (ověřeno 30.10.2026)
+  const ev = (o.bodyBatteryActivityEvent || []).filter(e => e && e.eventType === 'SLEEP');
+  if (ev.length) out.sleep_change = num_(ev[ev.length - 1].bodyBatteryImpact);
   if (Array.isArray(arr)) {
     const pts = arr.map(p => Array.isArray(p) ? [num_(p[0]), num_(p.length > 2 ? p[2] : p[1])] : [num_(p.timestamp || p.startTimestampGMT), num_(p.bodyBatteryLevel || p.level || p.value)]).filter(p => p[0] != null && p[1] != null);
     if (pts.length) { out.pts = pts; out.highest = Math.max.apply(null, pts.map(p => p[1])); out.lowest = Math.min.apply(null, pts.map(p => p[1])); out.most_recent = pts[pts.length - 1][1]; }
@@ -445,7 +452,10 @@ function syncGarmin_(opt) {
     const H = histRead_(), today = ymd_(new Date());
     // backfill (první běh / syncFull): po částech přes více běhů, stav v BF_STATE
     const bf = p.getProperty('BF_DONE') ? null : JSON.parse(p.getProperty('BF_STATE') || 'null') || { hrv: addDays_(today, -HRV_BACK_DAYS_), day: addDays_(today, -DAY_BACK_DAYS_) };
-    const fromH = bf ? bf.hrv : addDays_(today, -RECENT_DAYS_), fromD = bf ? bf.day : addDays_(today, -RECENT_DAYS_);
+    // běžný sync: posledních RECENT_DAYS_ dní, ale když hodinky několik dní nesynchronizovaly, od posledního dne s daty (max. 28 dní zpět)
+    const lastWith = part => { const ks = Object.keys(H.days).filter(k => H.days[k][part]).sort(); return ks.length ? ks[ks.length - 1] : null; };
+    const recentFrom = part => { const l = lastWith(part), r = addDays_(today, -RECENT_DAYS_), m = addDays_(today, -28); return !l || l > r ? r : l < m ? m : l; };
+    const fromH = bf ? bf.hrv : recentFrom('h'), fromD = bf ? bf.day : recentFrom('s');
     // krok s chybou nezastaví ostatní; vrací true jen při úspěchu (backfill se posune jen po úspěšném kroku)
     const step = (name, fn) => { if (Date.now() - ctx.t0 > RUN_BUDGET_MS_) { ctx.partial = true; return false; } try { fn(); return !ctx.partial; } catch (e) { if (e.stop) throw e; if (/HTTP 401|GARMIN_API_KEY/.test(e)) throw e; ctx.errs.push(name + ': ' + String(e.message || e).slice(0, 200)); return false; } };
 
@@ -464,7 +474,7 @@ function syncGarmin_(opt) {
         const s = (H.days[dd] || {}).s || {}, d = (H.days[dd] || {}).d || {};
         let wake = null; if (b.pts && s.sleep_end_gmt) { const before = b.pts.filter(q => q[0] <= s.sleep_end_gmt); if (before.length) wake = before[before.length - 1][1]; }
         histPut_(H, dd, 'd', { body_battery_highest: d.body_battery_highest ?? b.highest, body_battery_lowest: d.body_battery_lowest ?? b.lowest,
-          body_battery_most_recent: d.body_battery_most_recent ?? b.most_recent, body_battery_at_wake: d.body_battery_at_wake ?? wake }); })));
+          body_battery_most_recent: d.body_battery_most_recent ?? b.most_recent, body_battery_at_wake: d.body_battery_at_wake ?? wake, sleep_bb_change: b.sleep_change }); })));
     if (bf && okD.every(Boolean)) bf.day = today;
     step('fitness věk', () => { const j = gpGet_('/fitnessage-service/fitnessage/v2/' + today, null, ctx); if (j) H.fit = { calendar_date: today, chronological_age: num_(pick_(j, ['chronologicalAge'])), fitness_age: num_(pick_(j, ['fitnessAge', 'achievableFitnessAge'])) }; });
     step('aktivita', () => { const j = listOf_(gpGet_('/activitylist-service/activities/search/activities', { start: 0, limit: 1 }, ctx)); if (j[0]) H.act = actOf_(j[0]); });
@@ -495,15 +505,19 @@ function buildData_(H) {
   const lbl = d => +d.slice(8, 10) + '.' + +d.slice(5, 7) + '.';
   const dD = last('d'), dH = last('h'), dS = last('s');
   const daily = dD ? Object.assign({ calendar_date: dD }, H.days[dD].d) : {};
+  if (dD && daily.avg_resting_heart_rate_7day == null) {   // v2 souhrny ho nemají → průměr klidové TF za 7 dní do dD
+    const r7 = ds.filter(d => d <= dD && d > addDays_(dD, -7)).map(d => (H.days[d].d || {}).resting_heart_rate).filter(v => v != null);
+    if (r7.length) daily.avg_resting_heart_rate_7day = Math.round(r7.reduce((a, b) => a + b, 0) / r7.length);
+  }
   const hrv = dH ? Object.assign({ calendar_date: dH }, H.days[dH].h) : {};
   let sleep = {};
-  if (dS) { const s = H.days[dS].s; sleep = Object.assign({ calendar_date: dS }, s, { sleep_hours: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null,
+  if (dS) { const s = H.days[dS].s, sd = H.days[dS].d || {}; sleep = Object.assign({ calendar_date: dS }, s, { body_battery_change: s.body_battery_change ?? sd.sleep_bb_change ?? null, resting_heart_rate: s.resting_heart_rate ?? sd.resting_heart_rate ?? null, sleep_hours: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null,
     deep_min: s.deep_sleep_seconds != null ? Math.round(s.deep_sleep_seconds / 60) : null, light_min: s.light_sleep_seconds != null ? Math.round(s.light_sleep_seconds / 60) : null,
     rem_min: s.rem_sleep_seconds != null ? Math.round(s.rem_sleep_seconds / 60) : null, awake_min: s.awake_sleep_seconds != null ? Math.round(s.awake_sleep_seconds / 60) : null }); }
   const from = addDays_(ymd_(new Date()), -NIGHTS_DAYS_);
   const nights = ds.filter(d => d >= from && H.days[d].s).map(d => { const x = H.days[d], s = x.s, dd = x.d || {}, h = x.h || {}, m = v => v != null ? Math.round(v / 60) : null;
     return { calendar_date: d, date: d, label: lbl(d), hours: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null, score: s.sleep_score_overall ?? null,
-      hr: s.resting_heart_rate ?? dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, bb_change: s.body_battery_change ?? null, stress: s.avg_sleep_stress ?? null,
+      hr: s.resting_heart_rate ?? dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, bb_change: s.body_battery_change ?? dd.sleep_bb_change ?? null, stress: s.avg_sleep_stress ?? null,
       resp: s.average_respiration ?? null, hrv: h.last_night_avg ?? s.avg_overnight_hrv ?? null, deep_min: m(s.deep_sleep_seconds), rem_min: m(s.rem_sleep_seconds),
       light_min: m(s.light_sleep_seconds), awake_min: m(s.awake_sleep_seconds) }; });
   const hrv_history = ds.filter(d => H.days[d].h && H.days[d].h.last_night_avg != null).map(d => { const h = H.days[d].h;
