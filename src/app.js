@@ -283,7 +283,7 @@ function factors() {
   gF('g:train', 'Trénink (zátěž ≥ 20)', d => acts(d).some(isTrain));
   gF('g:hard', 'Tvrdý trénink (zátěž ≥ 100 / TE ≥ 3,5)', d => acts(d).some(a => (a.l || 0) >= 100 || (a.te || 0) >= 3.5));
   gF('g:late', 'Trénink po 18 h', d => acts(d).some(a => isTrain(a) && a.h >= 18));
-  gF('g:cold', 'Otužování (Garmin + deník)', d => acts(d).some(a => /cold|plunge|otu[žz]|ledov/i.test(a.n || '')) || tg(d, 'otuz') === 1);
+  gF('g:cold', 'Otužování (Garmin + deník)', d => acts(d).some(a => sportOf(a) === 'otuz') || tg(d, 'otuz') === 1);
   gF('g:sauna', 'Sauna (Garmin + deník)', d => acts(d).some(a => /sauna/i.test(a.n || '')) || tg(d, 'sauna') === 1);
   gF('g:med', 'Meditace / dech (Garmin + deník)', d => acts(d).some(a => /medit|breath|dech/i.test((a.n || '') + ' ' + (a.k || ''))) || tg(d, 'med') === 1 || tg(d, 'dech') === 1);
   gF('g:steps', 'Kroky ≥ 10 000', d => (BYD[d].stp || 0) >= 10000);
@@ -342,7 +342,7 @@ const IC = {
   inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['beh', 'Běh'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['beh', 'Trénink'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
 // telefon: spodní lišta max 6 položek (dotyk ≥ 44 px na 390 px) — Vlivy a Inovace jsou ve Víc (= Nastavení), odznak Inovací se ukáže na Víc
 const BNAV_SKIP = ['vlivy', 'inov'];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;

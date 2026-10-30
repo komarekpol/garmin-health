@@ -561,7 +561,7 @@ function actMini_(a) {
   const o = { n: String(a.activityName || '').slice(0, 60), k: t.typeKey || null, h: st.length >= 13 ? +st.slice(11, 13) : null,
     m: a.duration != null ? Math.round(a.duration / 60) : null, l: a.activityTrainingLoad != null ? Math.round(a.activityTrainingLoad) : null,
     te: a.aerobicTrainingEffect != null ? Math.round(a.aerobicTrainingEffect * 10) / 10 : null };
-  // běžecké a další údaje (záložka Běh) — jen pole nejvyšší úrovně odpovědi (názvy Garmin Connect, víc variant), jen když existují, ať historie neroste
+  // běžecké a další údaje (záložka Trénink) — jen pole nejvyšší úrovně odpovědi (názvy Garmin Connect, víc variant), jen když existují, ať historie neroste
   const v = keys => { for (const k of keys) { const x = num_(a[k]); if (x != null) return x; } return null; };
   const put = (k, x, d) => { if (x != null && isFinite(x)) { const p = Math.pow(10, d || 0); o[k] = Math.round(x * p) / p; } };
   const dist = v(['distance']); if (dist > 0) put('km', dist / 1000, 2);
@@ -572,6 +572,10 @@ function actMini_(a) {
   put('cad', v(['averageRunningCadenceInStepsPerMinute', 'avgRunningCadenceInStepsPerMinute', 'averageRunCadence']));
   put('str', v(['avgStrideLength', 'averageStrideLength']));
   put('tea', v(['anaerobicTrainingEffect']), 1); put('vo2', v(['vO2MaxValue', 'vo2MaxValue']), 1);
+  // kolo a trenažéry (záložka Trénink): výkon, kadence kola, záběry vesla — jen když Garmin pole vrátí
+  put('pw', v(['avgPower', 'averagePower'])); put('pwx', v(['maxPower']));
+  put('bcad', v(['averageBikingCadenceInRevPerMinute', 'avgBikingCadenceInRevPerMinute', 'averageBikeCadence']));
+  put('spm', v(['averageStrokeCadence', 'avgStrokeCadence', 'avgStrokeRate']), 1); put('stk', v(['strokes', 'totalNumberOfStrokes', 'totalStrokes']));
   if (a.activityId != null) o.id = String(a.activityId).slice(0, 20);
   if (st.length >= 16) o.t = st.slice(11, 16);
   return o;

@@ -192,6 +192,21 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('Běh: další běhy', (await page.$$('#blist .run')).length > 20);
       ok('Běh: I-006 zavedeno', await page.evaluate(() => INOV.find(x => x.id === 'I-006').st === 'zavedeno'));
       await page.screenshot({ path: path.join(OUT, 'd-beh.png'), fullPage: true });
+      // Trénink: ostatní sporty
+      ok('Trénink: klasifikace sportOf', await page.evaluate(() => [sportOf({ k: 'other', n: 'Cold Plunge | 12.0°C' }), sportOf({ k: 'other', n: 'Cold Shower' }), sportOf({ k: 'trail_running' }), sportOf({ k: 'mountain_biking' }), sportOf({ k: 'indoor_rowing', n: '20:00 row' }), sportOf({ k: 'fitness_equipment', n: 'v5:00/r SkiErg' }), sportOf({ k: 'hiit', n: 'v10:00/r...4 SkiErg' }), sportOf({ k: 'strength_training', n: 'Posilovna' }), sportOf({ k: 'breathwork' })].join()) === 'otuz,otuz,run,bike,erg,erg,erg,other,other');
+      ok('Trénink: souhrn týdenní zátěže (skládaný graf všech sportů)', await page.evaluate(() => CHT.length >= 1 && CHT[0].data.datasets.length === 5 && CHT[0].data.datasets.some(d => d.label === 'Kolo' && d.data.some(v => v > 0))));
+      for (const [sp, re] of [['bike', /km\/h/], ['erg', /\/500 m/], ['otuz', /°C/], ['other', /Posilovna|Odpočinek/]]) {
+        await page.click(`#tsport [data-v="${sp}"]`); await page.waitForTimeout(200);
+        const t2 = await txt(page, '#tbody');
+        ok(`Trénink: ${sp} — KPI / seznam s daty`, re.test(t2) && (await page.$$('#blist .run')).length > 0 && !/NaN|undefined/.test(t2), t2.slice(0, 200));
+        await page.screenshot({ path: path.join(OUT, `d-tren-${sp}.png`), fullPage: true });
+      }
+      await page.click('#tsport [data-v="erg"]'); await page.waitForTimeout(150);
+      ok('Trénink: veslo a SkiErg zvlášť, tempo / 500 m z rychlosti', await page.evaluate(() => { const a = actsAll('erg'); const r = a.find(x => ergKind(x) === 'Veslo'), k = a.find(x => ergKind(x) === 'SkiErg'); return !!r && !!k && paceF(p500(r)) === paceF(500 / r.sp); }) && /Veslo/.test(await txt(page, '#blist')) && /SkiErg/.test(await txt(page, '#blist')));
+      await page.click('#tsport [data-v="otuz"]'); await page.waitForTimeout(150);
+      ok('Trénink: otužování — teplota vody z názvu do grafu', await page.evaluate(() => CHT.some(c => c.data.datasets.some(d => /Teplota/.test(d.label) && d.data.some(v => v >= 8 && v <= 16)))));
+      ok('Vlivy: g:cold používá stejnou klasifikaci (sportOf)', await page.evaluate(() => { const f = factors().find(x => x.id === 'g:cold'); const d = actsAll('otuz')[0].d; return f.f(d) === 1; }));
+      await page.click('#tsport [data-v="run"]'); await page.waitForTimeout(150);
       // Inovace
       const nb0 = await page.$eval('#sidenav [data-nb="inov"]', e => +e.textContent || 0);
       await go(page, 'inov');
@@ -232,6 +247,11 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
         ok(`telefon: ${p} se vejde na šířku (390 px)`, w <= 390, w + ' px');
         await page.screenshot({ path: path.join(OUT, `m-${p}.png`), fullPage: true });
       }
+      for (const sp of ['bike', 'erg', 'otuz', 'other', 'run']) { await page.evaluate(x => { UI.sport = x; go('beh'); }, sp); await page.waitForTimeout(200);
+        const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(`telefon: Trénink ${sp} se vejde (390 px)`, w <= 390, w + ' px');
+        if (sp === 'erg') await page.screenshot({ path: path.join(OUT, 'm-tren-erg.png'), fullPage: true }); }
+      const segH = await page.$$eval('#tsport button', b => b.map(x => x.getBoundingClientRect().height));
+      ok('telefon: přepínač sportů ≥ 44 px', segH.every(h => h >= 44), segH.join(','));
       const tgt = await page.$$eval('#bnav .bnav-i', b => b.map(x => x.getBoundingClientRect().height));
       ok('telefon: dotykové plochy lišty ≥ 44 px', tgt.every(h => h >= 44), tgt.join(','));
       ok('telefon: bez chyb', errs.length === 0, errs.join(' | '));

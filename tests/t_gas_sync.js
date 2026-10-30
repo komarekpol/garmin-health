@@ -60,7 +60,17 @@ function api(url, opt) {
           duration: Math.round(km * 1000 / sp), movingDuration: Math.round(km * 1000 / sp) - 30, distance: km * 1000, averageSpeed: sp, maxSpeed: sp * 1.3,
           averageHR: 140 + i % 12, maxHR: 168, elevationGain: tk === 'trail_running' ? 210 : 35, averageRunningCadenceInStepsPerMinute: 166.4,
           avgStrideLength: 101.3, activityTrainingLoad: 120, aerobicTrainingEffect: 3.4, anaerobicTrainingEffect: 0.8, vO2MaxValue: 48 }); }
-      if (idx(d) % 5 === 0) all.push({ activityName: 'Cold Plunge | 15.0°C', activityType: { typeKey: 'other' }, startTimeLocal: d + ' 06:30:00', duration: 180, distance: 0, averageHR: 72, activityTrainingLoad: 0.06 });
+      const i5 = idx(d);
+      if (i5 % 5 === 0) all.push({ activityId: 8000000 + i5, activityName: i5 % 35 === 0 ? 'Cold Shower' : 'Cold Plunge | ' + (8 + i5 % 9) + '.0°C', activityType: { typeKey: 'other' }, startTimeLocal: d + ' 06:30:00', duration: 120 + i5 % 4 * 30, distance: 0, averageHR: 72, activityTrainingLoad: 0.06 });
+      // Pavlovy další sporty (podle jeho Garmin DB): MTB / kolo, veslo, SkiErg (fitness_equipment / cross_country_indoor_skiing / hiit), posilovna, dech
+      if (i5 % 11 === 1) all.push({ activityId: 7000000 + i5, activityName: i5 % 22 === 1 ? 'Olomouc Cyklistika' : 'Olomouc Horská cyklistika', activityType: { typeKey: i5 % 22 === 1 ? 'cycling' : 'mountain_biking' }, startTimeLocal: d + ' 16:00:00',
+        duration: 3000, movingDuration: 2800, distance: 15000, averageSpeed: 5, maxSpeed: 11, averageHR: 132, maxHR: 165, elevationGain: 180, avgPower: 165, maxPower: 420, averageBikingCadenceInRevPerMinute: 78, activityTrainingLoad: 85, aerobicTrainingEffect: 2.9 });
+      if (i5 % 7 === 2) all.push({ activityId: 6000000 + i5, activityName: '20:00 row', activityType: { typeKey: 'indoor_rowing' }, startTimeLocal: d + ' 18:30:00',
+        duration: 1200, distance: 4050, averageSpeed: 3.375, averageHR: 146, maxHR: 170, averageStrokeCadence: 26.4, strokes: 528, activityTrainingLoad: 60, aerobicTrainingEffect: 3.1 });
+      if (i5 % 13 === 3) all.push({ activityId: 5000000 + i5, activityName: i5 % 26 === 3 ? '20:00 SkiErg' : 'v5:00/r...3 SkiErg', activityType: { typeKey: i5 % 26 === 3 ? 'cross_country_indoor_skiing' : 'fitness_equipment' }, startTimeLocal: d + ' 18:30:00',
+        duration: 1200, distance: 4120, averageSpeed: 3.43, averageHR: 150, maxHR: 172, averageStrokeCadence: 38, activityTrainingLoad: 55, aerobicTrainingEffect: 3.0 });
+      if (i5 % 29 === 4) all.push({ activityId: 4000000 + i5, activityName: 'Posilovna', activityType: { typeKey: 'strength_training' }, startTimeLocal: d + ' 17:00:00', duration: 3000, distance: 0, averageHR: 110, activityTrainingLoad: 40 });
+      if (i5 % 23 === 5) all.push({ activityId: 3000000 + i5, activityName: 'Odpočinek a soustředění', activityType: { typeKey: 'breathwork' }, startTimeLocal: d + ' 21:00:00', duration: 336, averageHR: 60 });
     });
     API.actQ = (API.actQ || 0) + 1;
     return res(200, all.slice(+q.start || 0, (+q.start || 0) + (+q.limit || 20)));
@@ -283,6 +293,12 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
     ok('Běh: typy running / trail / treadmill', ['running', 'trail_running', 'treadmill_running'].every(k => runs.some(a => a.k === k)));
     const cp = [].concat(...ds.map(x => x.a)).find(a => /Cold/.test(a.n));
     ok('Běh: neběžecká aktivita bez prázdných polí (distance 0 → bez km)', cp && cp.km == null && cp.cad == null, JSON.stringify(cp)); }
+  { const all = [].concat(...JSON.parse(G.file('garmin-data.json').content).days.map(x => x.a));
+    const bk = all.find(a => a.k === 'mountain_biking'), rw = all.find(a => a.k === 'indoor_rowing'), ru = all.find(a => /running/.test(a.k));
+    ok('Trénink: kolo nese výkon, max výkon, kadenci kola', bk && bk.pw === 165 && bk.pwx === 420 && bk.bcad === 78 && bk.km === 15, JSON.stringify(bk));
+    ok('Trénink: veslo nese záběry / min a počet záběrů', rw && rw.spm === 26.4 && rw.stk === 528 && rw.km === 4.05, JSON.stringify(rw));
+    ok('Trénink: běh bez polí kola a vesla', ru && ru.pw == null && ru.bcad == null && ru.spm == null, JSON.stringify(ru));
+    ok('Trénink: všechny Pavlovy typy v datech', ['mountain_biking', 'cycling', 'indoor_rowing', 'fitness_equipment', 'cross_country_indoor_skiing', 'strength_training', 'breathwork'].every(k => all.some(a => a.k === k)) && all.some(a => a.n === 'Cold Shower')); }
 }
 
 fs.writeFileSync(path.join(OUT, 'sample-api.json'), G.file('garmin-data.json').content);
