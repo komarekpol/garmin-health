@@ -211,7 +211,7 @@ function ghFoodSet(key, id, json) {
 // Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
 //   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
 //   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku),
-//   kg: váha (nastaví), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
+//   kg: váha (nastaví); položka bez d jen s food = jen do databáze (import), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
 //   jídlo s položkami z databáze: m: [{ s, h, w, it: [{ f: id jídla, g: gramy }] }] }] }.
 // Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
 function inboxMerge_() {
@@ -225,7 +225,7 @@ function inboxMerge_() {
       const txt = f.getBlob().getDataAsString('UTF-8');
       if (txt.length > INBOX_MAX_) throw new Error('soubor má ' + txt.length + ' znaků (limit ' + INBOX_MAX_ + ')');
       const inp = JSON.parse(txt), items = Array.isArray(inp.items) ? inp.items : [inp];
-      items.forEach(x => { if (!x || !isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
+      items.forEach(x => { if (!x) throw new Error('prázdná položka'); if (x.d == null && (x.food || []).length && !['t', 'tadd', 'm', 'sup', 'n', 'kg', 'newSup', 'newTags'].some(k => k in x)) return; /* jen jídla do databáze, bez dne */ if (!isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
       let jj = null, food = false;
       journalWrite_(j => { items.forEach(x => { if (x.food) food = true; inboxApply_(j, x); }); jj = j; });
       if (food) foodExtract_(jj);
@@ -245,6 +245,7 @@ function inboxApply_(j, x) {
     if (j.food[k] && !x.foodSet) return;
     if (!j.food[k] && Object.keys(j.food).length >= FOOD_N_MAX_) throw new Error('databáze jídel je plná (' + FOOD_N_MAX_ + ')');
     j.food[k] = foodClean_(o); });
+  if (x.d == null) return;   // položka jen s jídly (import databáze) — den se nezakládá
   const day = j.days[x.d] || {}; day.t = day.t || {}; day.m = day.m || []; day.sup = day.sup || [];
   Object.keys(x.t || {}).forEach(k => { const v = Number(x.t[k]); if (id(k) && isFinite(v)) { if (v > 0) day.t[id(k)] = Math.min(v, 99); else delete day.t[id(k)]; } });
   Object.keys(x.tadd || {}).forEach(k => { const v = Number(x.tadd[k]); if (id(k) && isFinite(v)) { const r = Math.max(0, Math.min(99, (Number(day.t[id(k)]) || 0) + v)); if (r > 0) day.t[id(k)] = r; else delete day.t[id(k)]; } });

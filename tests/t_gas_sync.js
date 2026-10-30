@@ -265,6 +265,11 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   ok('schránka: existující jídlo se bez foodSet nepřepíše (Pavlovy opravy zůstanou)', g3.journal.food.ovesna_kase.l === 'Ovesná kaše s mlékem', g3.inboxErr);
   G.folder.createFile('garmin-denik-vstup 2026-10-30 1802.json', JSON.stringify({ items: [{ d: Y, m: [{ s: 'ob', it: [{ f: 'neexistuje', g: 100 }] }] }] }));
   ok('schránka: položka s neznámým jídlem odmítnuta (nic nezapsáno)', /není v databázi/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
+  // import jen databáze jídel (bez dne) — žádný den se nezaloží
+  const nd0 = Object.keys(JSON.parse(G.env.ghGet('k1')).journal.days).length;
+  G.folder.createFile('garmin-denik-vstup import.json', JSON.stringify({ v: 1, items: [{ food: [{ id: 'quinoa', l: 'Quinoa', por: 60, k: 368, p: 14.1, f: 6.1, c: 64.2, src: 'https://www.kaloricketabulky.cz/potraviny/quinoa' }] }] }));
+  const g4 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: import jen jídel bez dne', g4.journal.food.quinoa && g4.journal.food.quinoa.k === 368 && Object.keys(g4.journal.days).length === nd0 && !g4.inboxErr, g4.inboxErr);
   // databáze ze stránky
   let fr = JSON.parse(G.env.ghFoodSet('k1', 'rohlik', JSON.stringify({ l: 'Rohlík', por: 43, porL: '1 ks', k: 290, p: 9, f: 4, c: 54 })));
   ok('jídla: ghFoodSet uloží a vrátí jídlo', fr.ok && fr.food.k === 290 && JSON.parse(G.env.ghGet('k1')).journal.food.rohlik.por === 43, JSON.stringify(fr));
