@@ -1,9 +1,8 @@
 r"""
 Garmin Local Server
 ===================
-Čte data z garmin.db (garmin_data.py) a servíruje je jako JSON na localhost:8765.
-Dashboard běží hlavně z Google Apps Scriptu (data z Disku); lokální server zůstává pro práci offline
-a pro tlačítko „Sync Garmin“ na tomto PC.
+VOLITELNÝ offline režim. Hlavní dashboard běží v cloudu (Apps Script stahuje data z Garmin Personal API,
+PC není potřeba). Tento server čte lokální garmin.db (garmin_data.py) a servíruje ji na localhost:8765.
 Spouštěj přes Start Garmin Dashboard.bat nebo přímo:
   C:\Python314\python.exe garmin_server.py
 """
@@ -14,10 +13,10 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 from garmin_data import DB_PATH, load_data
-from garmin_export import EXPORT_DIR
 
-# Prahy a zóny dashboardu: stejný soubor, který čte a zapisuje Apps Script (Disk je synchronizuje) → stejné na všech zařízeních
-SETTINGS_PATH = EXPORT_DIR / "garmin-settings.json"
+# Prahy a zóny dashboardu: stejný soubor, který čte a zapisuje Apps Script (Disk pro počítače ho synchronizuje) → stejné všude
+SETTINGS_DIR = Path(os.environ.get("GARMIN_SETTINGS_DIR") or r"G:\Můj disk\Garmin Data")
+SETTINGS_PATH = SETTINGS_DIR / "garmin-settings.json"
 SETTINGS_KEYS = ("garmin_thresholds", "garmin_vst_zones", "garmin_hr_zones", "garmin_bb_zones", "garmin_resp_zones")
 SETTINGS_MAX = 50_000
 
@@ -49,9 +48,8 @@ PORT = 8765
 
 
 def run_sync():
-    # stažení nových dat z Garmin Connect a hned export na Disk (ať je mají i ostatní zařízení)
+    # stažení nových dat z Garmin Connect do lokální garmin.db (jen offline režim)
     subprocess.run([sys.executable, "-m", "garmin_givemydata"], capture_output=True)
-    subprocess.run([sys.executable, str(HERE / "garmin_export.py")], capture_output=True)
 
 
 class Handler(BaseHTTPRequestHandler):

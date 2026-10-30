@@ -1,5 +1,5 @@
 // Test dashboardu bez osobních dat (Playwright + Chromium).
-//   node tests/t_dashboard.js            (předtím: python3 tests/test_local.py --sample tests/out/sample.json)
+//   node tests/t_dashboard.js   (cloudová data = výstup Apps Scriptu z tests/t_gas_sync.js; spustí ho sám, když chybí)
 // A) cloud: stránka projde stejným wrapScripts_ jako v Apps Scriptu (načtený z apps-script/garmin-apps-script.gs),
 //    google.script.run je model (ghGet / ghSet). B) lokálně: file:// + skutečný garmin_server.py nad syntetickou DB.
 // CDN knihovny se servírují z node_modules (bez sítě), fonty se zahodí. Snímky do tests/out/.
@@ -8,8 +8,8 @@ const { chromium } = require('playwright');
 
 const ROOT = path.resolve(__dirname, '..'), OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });
-const SAMPLE = path.join(OUT, 'sample.json');
-if (!fs.existsSync(SAMPLE)) cp.execFileSync('python3', [path.join(__dirname, 'test_local.py'), '--sample', SAMPLE], { stdio: 'inherit' });
+const SAMPLE = path.join(OUT, 'sample-api.json');
+if (!fs.existsSync(SAMPLE)) cp.execFileSync('node', [path.join(__dirname, 't_gas_sync.js')], { stdio: 'inherit' });
 const sample = JSON.parse(fs.readFileSync(SAMPLE, 'utf8'));
 const html = fs.readFileSync(path.join(ROOT, 'garmin-dashboard.html'), 'utf8');
 
@@ -49,7 +49,7 @@ async function cloud(browser, opt) {
   const reply = Object.assign({ ok: true, data: sample, settings, at: sample.exported_at, ageH: 2.5, stale: false }, opt.reply || {});
   const inj = '<script>window.__GH_CLOUD__=' + JSON.stringify({ key: 'testkey', build: { sha: 'abc1234', src: 'github' } }) + ';</script>'
     + '<script>window.__SET__=[];window.google={script:{run:(function mk(ok,fail){return new Proxy({},{get:(t,k)=>k==="withSuccessHandler"?(f=>mk(f,fail)):k==="withFailureHandler"?(f=>mk(ok,f)):'
-    + '(...a)=>setTimeout(()=>{if(k==="ghGet")ok(JSON.stringify(' + JSON.stringify(reply) + '));else if(k==="ghSet"){window.__SET__.push(a);ok(JSON.stringify({ok:true}));}else fail(new Error("?"+k));},30)})})()}};</script>';
+    + '(...a)=>setTimeout(()=>{if(k==="ghGet")ok(JSON.stringify(' + JSON.stringify(reply) + '));else if(k==="ghSync"){window.__SYNC__=(window.__SYNC__||0)+1;ok(JSON.stringify(Object.assign(' + JSON.stringify(reply) + ',{sync:{ok:true,calls:7,errs:[]}})));}else if(k==="ghSet"){window.__SET__.push(a);ok(JSON.stringify({ok:true}));}else fail(new Error("?"+k));},30)})})()}};</script>';
   const page_ = gsCtx.wrapScripts_(html).replace(/<head[^>]*>/i, m => m + inj);
   const ctx = await browser.newContext({ viewport: opt.vp || { width: 1400, height: 1000 } });
   await routes(ctx);
@@ -68,8 +68,11 @@ async function cloud(browser, opt) {
       const { ctx, page, errs } = await cloud(browser, {});
       ok('cloud: banner readiness', (await page.$eval('#readinessBanner', e => e.innerText.trim().length)) > 0);
       ok('cloud: karty', (await page.$$eval('#tab-overview canvas, #tab-overview svg', e => e.length)) > 0);
-      ok('cloud: skrytý Sync Garmin', await page.$eval('#syncBtn', e => getComputedStyle(e).display === 'none'));
-      ok('cloud: hlavička ukazuje export', /export .* · před 2 h|export .* · před 3 h/.test(await page.$eval('#lastUpdated', e => e.innerText)), await page.$eval('#lastUpdated', e => e.innerText));
+      ok('cloud: hlavička ukazuje čas syncu', /sync .* · před [23] h/.test(await page.$eval('#lastUpdated', e => e.innerText)), await page.$eval('#lastUpdated', e => e.innerText));
+      ok('cloud: připravenost = odhad (API readiness nemá)', /Připravenost \(odhad\)/i.test(await page.$eval('#cardsGrid', e => e.innerText)) && /odhad z HRV/.test(await page.$eval('#readinessBanner', e => e.innerText)), await page.$eval('#readinessBanner', e => e.innerText));
+      ok('cloud: Sync Garmin viditelný', await page.$eval('#syncBtn', e => getComputedStyle(e).display !== 'none'));
+      await page.click('#syncBtn'); await page.waitForTimeout(600);
+      ok('cloud: Sync Garmin → ghSync a překreslení', (await page.evaluate(() => window.__SYNC__)) === 1 && await page.$eval('#syncBtn', e => !e.disabled) && await page.$eval('#serverError', e => getComputedStyle(e).display === 'none'));
       ok('cloud: bez hlášky chyby', await page.$eval('#serverError', e => getComputedStyle(e).display === 'none'));
       ok('cloud: prahy z Disku (HRV normál 31)', /31/.test(await page.$eval('.thresh-editable[data-key="hrv_ok"]', e => e.innerText)));
       await page.screenshot({ path: path.join(OUT, 'cloud-desktop.png'), fullPage: true });
@@ -110,7 +113,7 @@ async function cloud(browser, opt) {
       const db = path.join(td, 'garmin.db');
       cp.execFileSync('python3', ['-c', `import sys;sys.path.insert(0,${JSON.stringify(__dirname)});import test_local;test_local.make_db(${JSON.stringify(db)})`]);
       const exp = path.join(td, 'Garmin Data');
-      const env = Object.assign({}, process.env, { GARMIN_DB: db, GARMIN_EXPORT_DIR: exp, PYTHONUTF8: '1', BROWSER: 'true' });
+      const env = Object.assign({}, process.env, { GARMIN_DB: db, GARMIN_SETTINGS_DIR: exp, PYTHONUTF8: '1', BROWSER: 'true' });
       // server bez otevírání prohlížeče: spustíme Handler přímo
       const srv = cp.spawn('python3', ['-c', 'import garmin_server as g;from http.server import HTTPServer;HTTPServer(("localhost",8765),g.Handler).serve_forever()'], { cwd: path.join(ROOT, 'local'), env });
       await new Promise(r => setTimeout(r, 1200));

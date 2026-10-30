@@ -1,31 +1,31 @@
 # Garmin Health — pokyny pro vývoj
 
-Pavlův zdravotní dashboard z hodinek Garmin (HRV, klidová TF, Body Battery, dýchání, spánek, readiness). Komunikace česky, stručně, jen ověřená data. Stejná architektura jako Tradelog / EdgePilot (`komarekpol/tradelog`).
+Pavlův zdravotní dashboard z hodinek Garmin (HRV, klidová TF, Body Battery, dýchání, spánek, připravenost). Komunikace česky, stručně, jen ověřená data. Stejná architektura jako Tradelog / EdgePilot (`komarekpol/tradelog`). **Běží celý v cloudu — PC není potřeba** (Pavel 30.10.2026: „nechci to mít spojené s PC“).
 
 ## Soubory
 - `garmin-dashboard.html` — celá aplikace (jeden soubor, vanilla JS + Chart.js z cdnjs). **Živá verze**: Apps Script ji při každém otevření stránky načte z větve `main` → push do `main` = nasazení na PC, iPad i iPhone.
 - `apps-script/garmin-apps-script.gs` — Google Apps Script (soubor `garmin` v projektu „Garmin Health“, manifest `apps-script/appsscript.json`). **Nasazuje se sám**: `selfUpdateTick` 1× za hodinu stáhne soubor z `main`, ověří syntaxi, přepíše `garmin` a přepne nasazení. Musí dál obsahovat `function selfUpdate(` a `function doGet(` (pojistka). Změna oprávnění v manifestu nebo nová setup funkce = napsat Pavlovi přesně, co spustit.
-- `local/` — běží na Pavlově PC ve složce `C:\Garmin Dashboard` (Windows, `C:\Python314\python.exe`). **Nenasazuje se samo**: po změně je Claude zapíše přes propojení s počítačem (device bridge) do `C:\Garmin Dashboard` a řekne, co spustit.
-  - `garmin_data.py` — **jediný zdroj obsahu dat** (dotazy nad `~/.garmin-givemydata/garmin.db`, jen čtení `mode=ro`). Server i export ho importují.
-  - `garmin_export.py` — zapíše `G:\Můj disk\Garmin Data\garmin-data.json` (Disk pro počítače ho nahraje). Atomicky; chyba / prázdná data = poslední dobrý soubor zůstává, kód 1.
-  - `garmin_server.py` — lokální server `localhost:8765` (`/data`, `/sync` = stažení + export, `/settings` GET/POST) pro práci offline z `file://`.
-  - `garmin_sync_export.bat` (Plánovač úloh, log `sync_log.txt`), `Start Garmin Dashboard.bat` (ručně: sync → export → server), `Nastavit automaticky sync.bat` + `nastavit_sync.ps1` (úloha `\Garmin Health\Sync a export` 07:40 / 12:40 / 21:40, StartWhenAvailable).
-- `tests/` — `python3 tests/test_local.py` (syntetická DB → load_data → export) a `node tests/t_dashboard.js` (Playwright: cloud se skutečným `wrapScripts_` z .gs + model google.script.run, lokálně file:// + skutečný server, telefon 390 px). Osobní data v repu nikdy nejsou.
+- `local/` — **volitelný offline režim** na PC (`C:\Garmin Dashboard`): `garmin_data.py` (dotazy nad `~/.garmin-givemydata/garmin.db`, jen čtení) + `garmin_server.py` (localhost:8765, `/data`, `/sync`, `/settings`) + `Start Garmin Dashboard.bat`. Hlavní tok ho nepotřebuje. Tvar dat `load_data()` = tvar `buildData_()` v Apps Scriptu — při změně měnit obojí.
+- `tests/` — `node tests/t_gas_sync.js` (skutečný .gs ve vm s modelem služeb Apps Scriptu a modelem Personal API: backfill, 401 / 400 / 429 / 500, vypršení klíče), `node tests/t_dashboard.js` (Playwright: cloud se skutečným `wrapScripts_` + model google.script.run, offline file:// + skutečný server, telefon 390 px), `python3 tests/test_local.py` (offline load_data). Osobní data v repu nikdy nejsou.
 
 ## Architektura
-- **Garmin Connect → PC**: `python -m garmin_givemydata` (přihlášení v prohlížeči jen na PC, žádné heslo ani token Garminu v cloudu ani v repu) → `garmin.db`.
-- **PC → Disk**: `garmin_export.py` → `Můj disk/Garmin Data/garmin-data.json` (dnes ~0,1–0,2 MB; 200 nocí + celá historie HRV).
-- **Disk → dashboard**: Apps Script `doGet` (`…/exec?key=SYNC_KEY`) → `page_` (HTML z GitHubu přes `GH_REPO` / `GH_TOKEN`, záloha poslední dobré stránky na Disku `garmin-dashboard-zaloha.html`, `wrapScripts_` proti minifikaci HtmlService) + `window.__GH_CLOUD__` → stránka volá `google.script.run.ghGet(key)` (data + nastavení + stáří) a `ghSet(key, json)` (jen klíče `KEEP_KEYS_`).
-- **Prahy a zóny** (`garmin_thresholds`, `garmin_*_zones`): soubor `Garmin Data/garmin-settings.json` — v cloudu přes `ghSet`, lokálně přes `/settings` serveru; stránka je drží v paměti `ST` (`stGet` / `stSet` / `stDel`), localStorage jen kopie. Nový uložený klíč = `ST_KEYS` v HTML + `KEEP_KEYS_` v .gs + `SETTINGS_KEYS` v serveru.
-- **Hlídání**: data starší než 30 h → žlutá hláška na stránce a e-mail 1× denně (`staleWatch_` v `selfUpdateTick`); stav `Garmin Data/garmin-health-stav.json` (čte Claude při kontrole).
-- Sync z cloudu nejde (data stahuje jen PC) — tlačítko „Sync Garmin“ je v cloudu skryté.
+- **Garmin → Apps Script**: oficiální **Garmin Connect Personal API** (od 21.10.2026, zdarma, jen čtení). Klíč `GARMIN_API_KEY` (Vlastnost skriptu; vytváří Pavel v Garmin Connect web → Nastavení → Personal API Key, platnost max. 1 rok, `GARMIN_KEY_EXP` = datum vypršení) → POST `personal.connectapi.garmin.com/personalapitoken-service/personal-api/personal-api-key/token` (hlavička `ApiKey`, **Accept `*/*`**, odpověď = JWT text) → GET s `Bearer`. Cesty podle oficiálního klienta `github.com/garmin/connect-personal-api-python`.
+  - Endpointy: `/hrv-service/hrv/daily/{a}/{b}`, `/usersummary-service/v2/dailysummaries`, `/sleep-service/sleep/dailySleepSummariesByDate` + `/sleep-service/sleep/dailySleep`, `/wellness-service/wellness/bodyBattery/reports/daily`, `/fitnessage-service/fitnessage/v2/{d}`, `/activitylist-service/activities/search/activities`.
+  - **Nedává**: Training Readiness, Training Status (zátěž), VO2max → stránka počítá **odhad připravenosti** (`readinessOf`: HRV 35 % v pásmu baseline, spánek 30 %, BB při probuzení 20 %, klidová TF 15 %), vždy označený „odhad“.
+  - Tvary odpovědí Garmin nedokumentuje → parsery (`dailyOf_`, `sleepOf_`, `hrvOf_`, `bbOf_`) hledají názvy polí Garmin Connect (stejné jako garmin-givemydata); první běh uloží `Garmin Data/garmin-api-vzorky.json` (klíče + zkrácené hodnoty) — **po prvním skutečném běhu ověřit mapování proti vzorkům**.
+  - Sync: `syncTick_` z hodinového `selfUpdateTick`, ~každé 2 h v 5–23 h Praha, posledních 3 dní (~7–9 volání); tlačítko „Sync Garmin“ = `ghSync`. První běh = backfill (HRV 730 dní, ostatní 210) po částech `SPAN_`, při HTTP 400 se rozsah půlí; stav `BF_STATE` / `BF_DONE` — **hotovo jen když obě části došly do dneška bez chyby**. 401 = nový token, pak chyba „klíč neplatný“; 429 = pauza 1 h (`GARMIN_COOLDOWN`); zámek `LockService`.
+- **Disk** (`Můj disk/Garmin Data`): `garmin-hist.json` (historie po dnech `d` / `s` / `h`, 800 dní), `garmin-data.json` (výstup pro stránku, tvar load_data), `garmin-settings.json` (prahy a zóny), `garmin-health-stav.json` (stav pro kontrolu Clauda), `garmin-dashboard-zaloha.html` (poslední dobrá stránka).
+- **Stránka**: `doGet` (`…/exec?key=SYNC_KEY`) → `page_` (HTML z GitHubu, `wrapScripts_`, `window.__GH_CLOUD__`) → `google.script.run.ghGet` / `ghSync` / `ghSet`.
+- **Prahy a zóny**: `ST_KEYS` v HTML = `KEEP_KEYS_` v .gs = `SETTINGS_KEYS` v serveru (nový klíč do všech tří).
+- **Hlídání**: data > 30 h → žlutá hláška + e-mail 1× denně s poslední chybou syncu (`staleWatch_`); klíč vyprší do 30 dní → e-mail 1× týdně (`keyExpWatch_`).
 
 ## Pravidla
-- **Nikdy** necommitovat osobní / zdravotní data (garmin.db, exporty, FIT, nastavení), SYNC_KEY, GH token ani URL webové aplikace s klíčem. Repo zůstává soukromé.
-- Data dashboardu se mění jen v `garmin_data.py` (verze `DATA_VERSION`); dashboard musí zvládnout chybějící pole.
-- Před pushem: `python3 tests/test_local.py && node tests/t_dashboard.js` (0 FAIL), u UI změn zkontrolovat snímky `tests/out/*.png` (desktop i telefon — stránka nesmí být širší než 390 px).
+- **Nikdy** necommitovat osobní / zdravotní data (hist, exporty, vzorky API, garmin.db, FIT, nastavení), SYNC_KEY, GARMIN_API_KEY, GH token ani URL webové aplikace s klíčem. Repo zůstává soukromé. Klíč Garminu nikdy nežádat do chatu — Pavel ho vkládá jen do Vlastností skriptu.
+- Podmínky Garmin Connect Developer Program: klíč jen pro vlastní data, nesdílet; zákaz vytvářet AI modely / AI znalostní báze z dat zařízení Garmin — analýza Pavlových dat Claudem je čtení, ne trénink; do žádného trvalého „knowledge base“ mimo Pavlův Disk data neukládat.
+- Rate limity Garmin nezveřejňuje → nepřidávat volání bez důvodu (běžný sync ≤ 10 volání).
+- Před pushem: `node tests/t_gas_sync.js && node tests/t_dashboard.js && python3 tests/test_local.py` (0 FAIL), u UI změn zkontrolovat snímky `tests/out/*.png` (desktop i telefon — stránka nesmí být širší než 390 px).
 - Commity česky, krátce co a proč.
-- Limity: `garmin-data.json` varování nad 2 MB, odmítnutí nad 8 MB (`garmin_export.py`, `DATA_MAX_`); nastavení < 50 tis. znaků. Překročení nikdy potichu.
+- Limity: `garmin-data.json` < 8 MB (`DATA_MAX_`; dnes ~0,2 MB), historie 800 dní (~0,3 kB / den), nastavení < 50 tis. znaků. Překročení nikdy potichu.
 - Zdravotní doporučení na stránce jsou orientační; prahy nastavuje Pavel.
 
 ## Kroky nastavení (jednorázově, dělá Pavel)

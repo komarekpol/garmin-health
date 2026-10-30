@@ -113,7 +113,7 @@ code{font-family:'JetBrains Mono',monospace;background:var(--bg4);padding:2px 7p
   .thresh-card{overflow-x:auto;}
   .header-right{gap:6px;}
   .logo-sub{display:none;}
-  #lastUpdated{font-size:10px;max-width:110px;line-height:1.3;}
+  #lastUpdated{display:none;}   /* čas syncu je na telefonu u „data:“ v sekci Aktuální stav */
   [id^="tab-"]>div[style*="padding:24px 28px"]{padding:14px 12px!important;}
 }
 ::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px;}
@@ -819,13 +819,7 @@ function threshSave(el){
 }
 
 async function fetchData(){
-  if(CLOUD){
-    const r=await gsRun('ghGet',CLOUD.key);
-    stApply(r.settings);
-    if(!r.ok)throw new Error(r.error||'Data se nepodařilo načíst');
-    META={src:'cloud',at:r.at,ageH:r.ageH,stale:!!r.stale,warn:r.data&&r.data.warn};
-    return r.data;
-  }
+  if(CLOUD)return cloudTake(await gsRun('ghGet',CLOUD.key));
   const r=await fetch(`${API}/data`,{cache:'no-store'});
   if(!r.ok)throw new Error('Lokální server: HTTP '+r.status);
   try{
@@ -842,19 +836,26 @@ async function fetchData(){
   META={src:'local',at:new Date().toISOString(),ageH:0,stale:false};
   return d;
 }
+function cloudTake(r){
+  stApply(r.settings);
+  if(!r.ok)throw new Error(r.error||'Data se nepodařilo načíst');
+  const se=r.sync&&!r.sync.ok?r.sync.error:(r.sync&&r.sync.errs&&r.sync.errs.length?r.sync.errs.join(' · '):null);
+  META={src:'cloud',at:r.at,ageH:r.ageH,stale:!!r.stale,warn:se?'Sync z Garminu: '+se:(r.data&&r.data.warn)};
+  return r.data;
+}
 function showNote(msg,kind){
   const el=document.getElementById('serverError');
   if(!msg){el.style.display='none';return;}
   el.querySelector('h3').textContent=(kind==='warn'?'⚠ ':'✖ ')+msg;
   el.querySelector('p').innerHTML=kind==='warn'?'':(CLOUD
-    ?'Data čte Apps Script z Google Disku (Garmin Data/garmin-data.json). Zapisuje je PC: úloha <strong>Garmin Health\\Sync a export</strong> v Plánovači úloh nebo <strong>Start Garmin Dashboard</strong> na ploše.'
+    ?'Data stahuje Apps Script „Garmin Health“ z Garmin Personal API každé ~2 hodiny (nebo tlačítkem <strong>Sync Garmin</strong>). Když hláška trvá, zkontroluj klíč <strong>GARMIN_API_KEY</strong> ve Vlastnostech skriptu (vyprší nejvýš za rok).'
     :'Dvojklikni na <strong>Start Garmin Dashboard</strong> na ploše.<br>Nebo spusť v CMD: <code>C:\\Python314\\python.exe garmin_server.py</code><br><br>Pak klikni na <strong>↻ Aktualizovat</strong> výše.');
   el.className=kind==='warn'?'note-warn':'';
   el.style.display='block';
 }
 function dataFail(e){showNote(CLOUD?String(e&&e.message||e):'Lokální server není spuštěn','err');}
 function dataOk(){
-  if(META&&META.stale)showNote(`Data jsou stará ${Math.round(META.ageH)} h — PC je nesynchronizovalo (běží PC a Plánovač úloh?)`,'warn');
+  if(META&&META.stale)showNote(`Data jsou stará ${Math.round(META.ageH)} h — sync z Garminu neprobíhá (klíč Personal API?)`,'warn');
   else if(META&&META.warn)showNote(META.warn,'warn');
   else showNote(null);
 }
@@ -871,14 +872,16 @@ async function refreshData(){
 }
 
 async function syncGarmin(){
-  if(CLOUD)return;   // v cloudu stahuje data PC (Plánovač úloh) — tlačítko je skryté
   const btn=document.getElementById('syncBtn');
   const ov=document.getElementById('syncOverlay');
   btn.disabled=true;btn.classList.add('loading');ov.classList.add('show');
   try{
-    await fetch(`${API}/sync`,{cache:'no-store'});
-    await new Promise(r=>setTimeout(r,28000));
-    DATA=await fetchData();
+    if(CLOUD)DATA=cloudTake(await gsRun('ghSync',CLOUD.key));   // Apps Script stáhne poslední dny z Garmin Personal API
+    else{
+      await fetch(`${API}/sync`,{cache:'no-store'});
+      await new Promise(r=>setTimeout(r,28000));
+      DATA=await fetchData();
+    }
     dataOk();
     renderAll();
   }catch(e){dataFail(e);}
@@ -996,8 +999,28 @@ function avgsRow(a7,a14,unit){
   </div>`;
 }
 
+// ── PŘIPRAVENOST ─────────────────────────────────────────────────
+// Garmin Personal API Training Readiness nevrací → když chybí, odhad z toho, co máme (vážený průměr dostupných složek 0–100):
+// HRV 35 % (poslední noc v pásmu baseline: dolní mez = 50, horní = 100), skóre spánku 30 %, Body Battery při probuzení 20 %,
+// klidová TF 15 % (každý tep nad 7denním průměrem −10). Orientační — není to Garminův algoritmus.
+const clamp100=v=>Math.max(0,Math.min(100,v));
+function readinessOf(){
+  const r=DATA.readiness||{};
+  if(r.score!=null)return{score:r.score,est:false};
+  const h=DATA.hrv||{},d=DATA.daily||{},sl=DATA.sleep_latest||{},parts=[];
+  const hv=h.last_night_avg,lo=h.baseline_low,up=h.baseline_upper;
+  if(hv!=null&&lo!=null&&up!=null&&up>lo)parts.push(['HRV',35,clamp100(50+50*(hv-lo)/(up-lo))]);
+  if(sl.sleep_score_overall!=null)parts.push(['spánek',30,clamp100(sl.sleep_score_overall)]);
+  if(d.body_battery_at_wake!=null)parts.push(['BB',20,clamp100(d.body_battery_at_wake)]);
+  const rhr=d.resting_heart_rate??sl.resting_heart_rate,r7=d.avg_resting_heart_rate_7day;
+  if(rhr!=null&&r7!=null)parts.push(['TF',15,clamp100(100-10*(rhr-r7))]);
+  if(!parts.length)return{score:null,est:true,parts};
+  const w=parts.reduce((a,p)=>a+p[1],0);
+  return{score:Math.round(parts.reduce((a,p)=>a+p[1]*p[2],0)/w),est:true,parts};
+}
+
 function renderCards(){
-  const d=DATA.daily||{},h=DATA.hrv||{},r=DATA.readiness||{},f=DATA.fitness||{},sl=DATA.sleep_latest||{};
+  const d=DATA.daily||{},h=DATA.hrv||{},r=readinessOf(),f=DATA.fitness||{},sl=DATA.sleep_latest||{};
   const hrv=h.last_night_avg??0;
   const hr=d.resting_heart_rate??sl.resting_heart_rate??0;
   const bb=d.body_battery_at_wake??d.body_battery_most_recent??0;
@@ -1038,7 +1061,7 @@ function renderCards(){
      zones:[{from:0,to:bbW,color:CD},{from:bbW,to:bbOk,color:CW},{from:bbOk,to:100,color:COK}],
      val:bb,min:0,max:100,unit:'',color:cBb,avg7:bb7,avg14:bb14,avgUnit:'',
      status:bb>=bbOk?'DOBRÝ':bb>=bbW?'NÍZKÝ':'KRITICKÝ'},
-    {label:'Training Readiness',
+    {label:r.est?'Připravenost (odhad)':'Training Readiness',
      zones:[{from:0,to:rW,color:CD},{from:rW,to:rOk,color:CW},{from:rOk,to:100,color:COK}],
      val:Math.round(sc),min:0,max:100,unit:'%',color:cSc,avg7:null,avg14:null,avgUnit:'',
      status:sc>=rOk?'PŘIPRAVEN':sc>=rW?'OPATRNĚ':'ODPOČÍVAT'},
@@ -1063,7 +1086,7 @@ function renderCards(){
 
 
 function renderBanner(){
-  const r=DATA.readiness||{},ts=DATA.training_status||{};
+  const r=readinessOf(),ts=DATA.training_status||{};
   const sc=Math.round(r.score||0);
   let bg,border,color,label,desc;
   if(sc>=80){bg='var(--accent-dim)';border='rgba(0,212,170,0.22)';color='var(--accent)';label='TRÉNINK OK';desc='Všechny metriky zelené.';}
@@ -1074,7 +1097,9 @@ function renderBanner(){
   el.innerHTML=`<div class="readiness-score" style="color:${color}">${sc}<sup>/100</sup></div>
     <div class="readiness-info">
       <div class="readiness-label" style="color:${color}">${label}</div>
-      <div class="readiness-desc">${desc} · Acute ${ts.training_load_acute??'—'} · Chronic ${ts.training_load_chronic??'—'}</div>
+      <div class="readiness-desc">${desc}${r.est
+        ?` · odhad z ${r.parts.map(p=>p[0]+' '+Math.round(p[2])).join(' · ')||'—'} (Garmin readiness API nedává)`
+        :` · Acute ${ts.training_load_acute??ts.acute_load??'—'} · Chronic ${ts.training_load_chronic??ts.chronic_load??'—'}`}</div>
     </div>`;
 }
 
@@ -1113,9 +1138,9 @@ function renderDate(){
   document.getElementById('dateDisplay').textContent=`${days[now.getDay()]} ${now.getDate()}. ${months[now.getMonth()]}`;
   document.getElementById('dateSmall').textContent=`${now.getFullYear()} · data z Garmin Connect`;
   document.getElementById('lastUpdated').textContent=META&&META.at
-    ?(META.src==='cloud'?'export ':'načteno ')+new Date(META.at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(META.src==='cloud'&&META.ageH>=1?` · před ${Math.round(META.ageH)} h`:'')
+    ?(META.src==='cloud'?'sync ':'načteno ')+new Date(META.at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(META.src==='cloud'&&META.ageH>=1?` · před ${Math.round(META.ageH)} h`:'')
     :now.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'});
-  if(DATA?.date)document.getElementById('dataDate').textContent=`data: ${DATA.date}`;
+  if(DATA?.date)document.getElementById('dataDate').textContent=`data: ${DATA.date}`+(META&&META.at?` · ${document.getElementById('lastUpdated').textContent}`:'');
 }
 
 function renderAll(){
@@ -1127,7 +1152,6 @@ function renderAll(){
 (async()=>{
   renderDate();
   renderThresholds();
-  if(CLOUD){const b=document.getElementById('syncBtn');if(b)b.style.display='none';}
   try{DATA=await fetchData();dataOk();renderAll();}
   catch(e){dataFail(e);}
 })();

@@ -1,6 +1,6 @@
 """
-Test lokální části bez osobních dat: syntetická garmin.db se stejnými tabulkami a sloupci,
-které čte garmin_data.py → load_data() → garmin_export.py. Spuštění: python tests/test_local.py
+Test volitelného offline režimu bez osobních dat: syntetická garmin.db se stejnými tabulkami a sloupci,
+které čte garmin_data.py → load_data() (tvar dat = stejný jako výstup Apps Scriptu buildData_). Spuštění: python tests/test_local.py
 Volitelně zapíše vzorová data pro test dashboardu: python tests/test_local.py --sample tests/out/sample.json
 """
 import json, os, sqlite3, subprocess, sys, tempfile
@@ -48,8 +48,7 @@ def main():
     fails = 0
     with tempfile.TemporaryDirectory() as td:
         db = Path(td) / "garmin.db"; make_db(db)
-        out = Path(td) / "Garmin Data"
-        env = dict(os.environ, GARMIN_DB=str(db), GARMIN_EXPORT_DIR=str(out), PYTHONUTF8="1")
+        env = dict(os.environ, GARMIN_DB=str(db), PYTHONUTF8="1")
 
         # 1) load_data: obsah a tvar
         code = "import json,garmin_data;print(json.dumps(garmin_data.load_data(),default=str))"
@@ -64,31 +63,14 @@ def main():
             ("readiness", d["readiness"].get("score") is not None),
             ("label noci", d["nights"][-1]["label"].endswith(".")),
         ]
-        # 2) export: atomický zápis, žádný dočasný soubor navíc
-        r2 = subprocess.run([sys.executable, str(LOCAL / "garmin_export.py")], cwd=LOCAL, env=env, capture_output=True, text=True)
-        f = out / "garmin-data.json"
-        e = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
-        checks += [
-            ("export kod 0", r2.returncode == 0),
-            ("export soubor", f.exists()),
-            ("exported_at", bool(e.get("exported_at"))),
-            ("zadne .tmp", not list(out.glob("*.tmp"))),
-            ("velikost < 2 MB", f.exists() and f.stat().st_size < 2_000_000),
-        ]
-        # 3) ochrana: prázdná / chybějící DB nepřepíše poslední dobrý export
-        good = f.read_text(encoding="utf-8") if f.exists() else ""
-        env_bad = dict(env, GARMIN_DB=str(Path(td) / "neni.db"))
-        r3 = subprocess.run([sys.executable, str(LOCAL / "garmin_export.py")], cwd=LOCAL, env=env_bad, capture_output=True, text=True)
-        checks += [("chybejici DB = kod 1", r3.returncode == 1),
-                   ("chybejici DB neprepise export", f.exists() and f.read_text(encoding="utf-8") == good)]
-        if sample and f.exists():
+        if sample:
             Path(sample).parent.mkdir(parents=True, exist_ok=True)
-            Path(sample).write_text(good, encoding="utf-8")
+            Path(sample).write_text(json.dumps(d, ensure_ascii=False, default=str), encoding="utf-8")
     for name, ok in checks:
         print(("OK   " if ok else "FAIL ") + name)
         fails += 0 if ok else 1
     if fails:
-        print(r.stderr[-2000:], r2.stdout, r2.stderr[-2000:], r3.stdout)
+        print(r.stderr[-2000:])
     print(f"{len(checks) - fails}/{len(checks)} OK")
     return 1 if fails else 0
 
