@@ -11,7 +11,8 @@ const { chromium } = require('playwright');
 const ROOT = path.resolve(__dirname, '..'), OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });
 const SAMPLE = path.join(OUT, 'sample-api.json');
-if (!fs.existsSync(SAMPLE)) cp.execFileSync('node', [path.join(__dirname, 't_gas_sync.js')], { stdio: 'inherit' });
+// vzorek se váže na dnešní datum → starší než dnešek se vygeneruje znovu (jinak testy po půlnoci selžou)
+if (!fs.existsSync(SAMPLE) || fs.statSync(SAMPLE).mtime.toDateString() !== new Date().toDateString()) cp.execFileSync('node', [path.join(__dirname, 't_gas_sync.js')], { stdio: 'inherit' });
 const sample = JSON.parse(fs.readFileSync(SAMPLE, 'utf8'));
 const html = fs.readFileSync(path.join(ROOT, 'garmin-dashboard.html'), 'utf8');
 
