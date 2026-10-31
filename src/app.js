@@ -215,8 +215,14 @@ const MEAL_S = [['sn', 'Snídaně'], ['ob', 'Oběd'], ['ve', 'Večeře'], ['sv',
 const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id === id) return t; const c = (JR.cfg.tags || []).find(x => x.id === id); return c ? { id: c.id, l: c.l } : null; };
 const jDay = d => JR.days[d] || null;
 function jEdit(d) { const j = JR.days[d] ? JSON.parse(JSON.stringify(JR.days[d])) : {}; j.t = j.t || {}; j.m = j.m || []; j.sup = j.sup || []; return j; }
+// pravidelné doplňky (I-007): cfg.sup[].reg = { from: 'RRRR-MM-DD', h: 'text s časy' } → od data `from` je doplněk každý den zaškrtnutý sám,
+// vynechání = den.sx (seznam vynechaných); ruční / chatové zaškrtnutí zůstává v den.sup
+const supCfg = id => (JR.cfg.sup || []).find(s => s.id === id) || null;
+const supReg = s => !!(s && s.reg && /^\d{4}-\d{2}-\d{2}$/.test(s.reg.from || ''));
+const supRegDay = (s, d) => supReg(s) && d >= s.reg.from && d <= TODAY();
+function supOn(d, id) { const j = jDay(d) || {}, s = supCfg(id); if ((j.sup || []).includes(id)) return true; return supRegDay(s, d) && !(j.sx || []).includes(id); }
 const mealHas = m => m && (m.w || m.h || (m.it || []).length);
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.n || '').trim() && j.kg == null && j.bf == null; }
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !(j.n || '').trim() && j.kg == null && j.bf == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
@@ -277,7 +283,7 @@ function factors() {
   F.push({ id: 't:alk2', l: 'Alkohol 2+ sklenky', g: 'Jídlo a pití', src: 'deník', f: d => tg(d, 'alk', 2) });
   F.push({ id: 'm:late', l: 'Jídlo po 20 h', g: 'Jídlo a pití', src: 'deník', f: d => { const j = J(d); if (!j) return null; return (j.m || []).some(m => (m.h || '') >= '20:00') || (j.t || {}).vecere_pozde ? 1 : 0; } });
   (JR.cfg.tags || []).forEach(t => F.push({ id: 't:' + t.id, l: t.l, g: 'Vlastní', src: 'deník', f: d => tg(d, t.id) }));
-  (JR.cfg.sup || []).forEach(s => F.push({ id: 's:' + s.id, l: s.l, g: 'Doplňky', src: 'deník', f: d => { const j = J(d); return j ? ((j.sup || []).includes(s.id) ? 1 : 0) : null; } }));
+  (JR.cfg.sup || []).forEach(s => F.push({ id: 's:' + s.id, l: s.l, g: 'Doplňky', src: 'deník', f: d => { if (supRegDay(s, d)) return supOn(d, s.id) ? 1 : 0; const j = J(d); return j ? ((j.sup || []).includes(s.id) ? 1 : 0) : null; } }));
   const hasDay = d => !!BYD[d];
   const gF = (id, l, fn) => F.push({ id: id, l: l, g: 'Z Garminu', src: 'Garmin', f: d => hasDay(d) ? (fn(d) ? 1 : 0) : null });
   gF('g:train', 'Trénink (zátěž ≥ 20)', d => acts(d).some(isTrain));
@@ -555,7 +561,7 @@ function renderDenik() {
   <div class="card"><div class="card-h"><div class="card-t">Štítky dne</div><span class="save-st" id="jst"></span></div>
     ${TAGS.map(g => `<div class="grp"><div class="lbl">${esc(g.g)}</div><div class="chips">${g.items.map(t => chipHtml(t, j, d)).join('')}</div></div>`).join('')}
     ${ctags.length ? `<div class="grp"><div class="lbl">Vlastní</div><div class="chips">${ctags.map(t => chipHtml({ id: t.id, l: t.l }, j, d)).join('')}</div></div>` : ''}
-    <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${j.sup.includes(s.id) ? ' on' : ''}" data-s="${esc(s.id)}">${esc(s.l)}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div></div>
+    <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${supOn(d, s.id) ? ' on' : ''}" data-s="${esc(s.id)}"${supReg(s) ? ` title="Pravidelný doplněk${s.reg.h ? ' — ' + esc(s.reg.h) : ''}: zaškrtnutý sám, klepnutím označíš vynechání"` : ''}>${esc(s.l)}${supReg(s) ? ' <span class="reg">⟳</span>' : ''}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div></div>
     ${actsH ? `<div class="grp"><div class="lbl">Z Garminu (automaticky)</div><div class="chips">${actsH}</div></div>` : ''}
   </div>
   <div class="card"><div class="card-h"><div class="card-t">Jídlo a váha</div><button class="lnk" data-go="jidlo">Upravit v Jídle →</button></div>
@@ -565,7 +571,9 @@ function renderDenik() {
     <textarea id="jnote" placeholder="Jak se cítíš, co bylo jinak…">${esc(j.n || '')}</textarea></div>`;
   const P = $('p-denik');
   bindChips(P, d);
-  P.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { const jj = jEdit(d), id = b.dataset.s, i = jj.sup.indexOf(id); if (i >= 0) jj.sup.splice(i, 1); else jj.sup.push(id); jPut(d, jj); b.classList.toggle('on', i < 0); }));
+  P.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { const jj = jEdit(d), id = b.dataset.s, on = supOn(d, id), reg = supRegDay(supCfg(id), d); jj.sx = jj.sx || [];
+    if (on) { jj.sup = jj.sup.filter(x => x !== id); if (reg && !jj.sx.includes(id)) jj.sx.push(id); } else { jj.sx = jj.sx.filter(x => x !== id); if (!reg && !jj.sup.includes(id)) jj.sup.push(id); }
+    if (!jj.sx.length) delete jj.sx; jPut(d, jj); b.classList.toggle('on', !on); }));
   P.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
   $('jprev').onclick = () => { UI.jday = addD(d, -1); renderDenik(); };
   $('jnext').onclick = () => { if (d < TODAY()) { UI.jday = addD(d, 1); renderDenik(); } };
@@ -773,7 +781,7 @@ function renderNast() {
       <div class="sm t2">${inovOpen().length ? inovOpen().length + ' návrhů čeká na tvůj hlas.' : 'Vše odhlasováno — nové návrhy přijdou v neděli.'}</div></div></div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Doplňky a léky</div><span class="card-s">zobrazí se v Deníku</span></div>
-      <div class="list-ed" id="lsup">${sup.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
+      <div class="sup-ed" id="lsup">${sup.map(s => `<div class="sup-row"><span class="sup-n">${esc(s.l)}</span><label class="sm t2"><input type="checkbox" data-reg="${esc(s.id)}" ${supReg(s) ? 'checked' : ''}> každý den</label>${supReg(s) ? `<input class="sup-h" data-regh="${esc(s.id)}" value="${esc(s.reg.h || '')}" placeholder="kdy, např. 10:00, 14:00" maxlength="40">` : ''}<button class="x" data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></div>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
       <div class="row-add"><input id="nsup" placeholder="např. Hořčík, D3, Omega-3" maxlength="40"><button class="btn" id="asup">Přidat</button></div></div>
     <div class="card"><div class="card-h"><div class="card-t">Vlastní štítky</div><span class="card-s">co chceš sledovat navíc</span></div>
       <div class="list-ed" id="ltag">${tags.map(s => `<span class="chip">${esc(s.l)}<button data-rm="${esc(s.id)}" aria-label="Odebrat">✕</button></span>`).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
@@ -794,6 +802,8 @@ function renderNast() {
     const arr = JR.cfg[key] = JR.cfg[key] || []; if (!arr.some(x => x.id === id)) arr.push({ id: id, l: l.slice(0, 40) }); jCfgSave(); renderNast(); };
   $('asup').onclick = () => addTo('sup', 'nsup'); $('atag').onclick = () => addTo('tags', 'ntag');
   $('nsup').onkeydown = e => { if (e.key === 'Enter') addTo('sup', 'nsup'); }; $('ntag').onkeydown = e => { if (e.key === 'Enter') addTo('tags', 'ntag'); };
+  $('lsup').querySelectorAll('[data-reg]').forEach(c => c.onchange = () => { const s = supCfg(c.dataset.reg); if (!s) return; if (c.checked) s.reg = { from: TODAY(), h: '' }; else delete s.reg; jCfgSave(); renderNast(); });
+  $('lsup').querySelectorAll('[data-regh]').forEach(i => i.onchange = () => { const s = supCfg(i.dataset.regh); if (s && s.reg) { s.reg.h = i.value.trim().slice(0, 40); jCfgSave(); } });
   [['lsup', 'sup'], ['ltag', 'tags']].forEach(([el, key]) => $(el).querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { JR.cfg[key] = (JR.cfg[key] || []).filter(x => x.id !== b.dataset.rm); jCfgSave(); renderNast(); }));
   $('p-nast').querySelectorAll('[data-th]').forEach(i => i.addEventListener('change', () => { const v = parseFloat(i.value); if (isNaN(v)) { i.value = T[i.dataset.th].val; return; } T[i.dataset.th].val = v; saveT(); toast('Práh uložen'); }));
   $('treset').onclick = () => { stDel('garmin_thresholds'); T = loadT(); renderNast(); toast('Výchozí prahy obnoveny'); };

@@ -269,6 +269,12 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
     m: [{ s: 'sn', h: '07:10', w: '', it: [{ f: 'ovesna_kase', g: 300 }] }] }] }));
   let g3 = JSON.parse(G.env.ghGet('k1'));
   ok('schránka: nové jídlo do databáze, položka v jídle, váha', g3.journal.food.ovesna_kase && g3.journal.food.ovesna_kase.k === 110 && g3.journal.days[Y].m.some(m => m.it && m.it[0].f === 'ovesna_kase' && m.it[0].g === 300) && g3.journal.days[Y].kg === 82.4, JSON.stringify(g3.journal.days[Y]));
+  // pravidelný doplněk (I-007): reg se uloží do cfg, nevalidní od data schránku shodí do CHYBA
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1802.json', JSON.stringify({ items: [{ d: Y, newSup: [{ id: 'd3', l: 'Vitamín D3', reg: { from: Y, h: '10:00, 14:00' } }] }] }));
+  g3 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: pravidelný doplněk (reg) se uloží do nastavení', (g3.journal.cfg.sup.find(x => x.id === 'd3') || {}).reg && g3.journal.cfg.sup.find(x => x.id === 'd3').reg.from === Y && g3.journal.cfg.sup.find(x => x.id === 'd3').reg.h === '10:00, 14:00', JSON.stringify(g3.journal.cfg.sup));
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1803.json', JSON.stringify({ items: [{ d: Y, newSup: [{ id: 'd3', l: 'Vitamín D3', reg: { from: 'zítra' } }] }] }));
+  ok('schránka: neplatné reg.from odmítnuto', /reg\.from/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
   ok('schránka: výtah garmin-jidla.json jen s databází', JSON.parse(G.file('garmin-jidla.json').content).food.ovesna_kase.l === 'Ovesná kaše s mlékem' && !/days/.test(G.file('garmin-jidla.json').content));
   G.folder.createFile('garmin-denik-vstup 2026-10-30 1801.json', JSON.stringify({ items: [{ d: Y, food: [{ id: 'ovesna_kase', l: 'Jiná', k: 999 }] }] }));
   g3 = JSON.parse(G.env.ghGet('k1'));

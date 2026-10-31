@@ -34,7 +34,8 @@ const INOV = [
   { id: 'I-007', d: '2026-10-31', t: 'Pravidelné doplňky se zapíšou samy',
     co: 'Doplněk, který bereš denně (např. EGCg ráno), nemusíš odklikávat — v deníku bude zaškrtnutý sám a odškrtneš ho jen ve dny, kdy ho vynecháš.',
     jak: 'U doplňku v Nastavení volba „každý den“ (+ čas). Vlivy pak porovnají jen dny, kdy jsi ho vynechal. Bez vyplňování.',
-    vypl: 0, zdroj: 'podnět Pavla 31.10.2026 (EGCg 2 kapsle kolem 6:00)', url: '', st: 'navrh' },
+    vypl: 0, zdroj: 'podnět Pavla 31.10.2026 (EGCg 2 kapsle kolem 6:00)', url: '', st: 'zavedeno', done: '2026-10-31',
+    why: 'Nastavení → Doplňky: „každý den“ + čas (cfg.sup[].reg); Deník: ⟳ zaškrtnutý sám, vynechání = den.sx; Vlivy počítají od data reg.from. Chatové nastavení přes newSup.reg vyžaduje nový Apps Script', pavel: 'vložit nový Apps Script (pošlu) — jen pro nastavení doplňků z chatu; stránka funguje hned' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};

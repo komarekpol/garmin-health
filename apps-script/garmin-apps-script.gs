@@ -210,7 +210,7 @@ function ghFoodSet(key, id, json) {
 // ── 📥 Schránka deníku (Pavel 30.10.2026: „řeknu přes chat mikrofonem, co jsem jedl a pil, a ty mi aktualizuješ deník“) ──
 // Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
 //   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
-//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l }] (doplní do nastavení deníku),
+//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l, reg?: { from, h } }] (doplní do nastavení deníku; reg = pravidelný doplněk),
 //   kg: váha (nastaví), bf: tělesný tuk % (nastaví); položka bez d jen s food = jen do databáze (import), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
 //   jídlo s položkami z databáze: m: [{ s, h, w, it: [{ f: id jídla, g: gramy }] }] }] }.
 // Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
@@ -261,7 +261,9 @@ function inboxApply_(j, x) {
   (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });
   if (x.n) day.n = ((day.n ? day.n + ' · ' : '') + String(x.n)).slice(0, 1000);
   [['newSup', 'sup'], ['newTags', 'tags']].forEach(([a, b]) => (x[a] || []).forEach(o => { const k = id(o && o.id), l = String(o && o.l || '').slice(0, 40);
-    if (!k || !l) return; const arr = j.cfg[b] = j.cfg[b] || []; if (!arr.some(z => z.id === k)) arr.push({ id: k, l: l }); }));
+    if (!k || !l) return; const arr = j.cfg[b] = j.cfg[b] || []; let e = arr.find(z => z.id === k); if (!e) { e = { id: k, l: l }; arr.push(e); }
+    // pravidelný doplněk (I-007): reg { from: RRRR-MM-DD, h: 'časy' } — doplněk je od data `from` každý den zaškrtnutý sám (výjimky den.sx); reg: null = zrušit
+    if (a === 'newSup' && o && 'reg' in o) { if (o.reg === null) delete e.reg; else if (o.reg && isYmd_(String(o.reg.from || '')) && String(o.reg.from).length === 10) e.reg = { from: String(o.reg.from), h: String(o.reg.h || '').slice(0, 40) }; else throw new Error('newSup ' + k + ': neplatné reg.from'); } }));
   day.at = new Date().toISOString(); day.src = 'chat';
   if (JSON.stringify(day).length > JOURNAL_DAY_MAX_) throw new Error('den ' + x.d + ' by byl větší než ' + JOURNAL_DAY_MAX_ + ' znaků');
   j.days[x.d] = day;
