@@ -380,7 +380,7 @@ const INOV = [
     why: 'Nastavení → Doplňky: „každý den“ + čas (cfg.sup[].reg); Deník: ⟳ zaškrtnutý sám, vynechání = den.sx; Vlivy počítají od data reg.from. Chatové nastavení přes newSup.reg vyžaduje nový Apps Script', pavel: 'vložit nový Apps Script (pošlu) — jen pro nastavení doplňků z chatu; stránka funguje hned' },
   { id: 'I-008', d: '2026-11-01', t: 'Kolik doplňku: výchozí množství a úprava za den',
     co: 'U doplňku vidíš a upravíš množství (např. 2 kapsle). Když si omegu jeden den dáš 2×, přepíšeš to jen pro ten den — výchozí zůstane.',
-    jak: 'Nastavení → Doplňky: „Kolik“ = celkem za den + jednotka z rozbalovacího seznamu (kapsle, tableta, ml, l, g, kg); při dvou časech se dělí 2 + 2. Deník → Množství dnes: jen pro vybraný den. Z chatu: newSup q a sq jako text „4 kapsle“.',
+    jak: 'Nastavení → Doplňky: „Kolik“ = celkem za den + jednotka z rozbalovacího seznamu (kapsle, ml, l, g, kg; tableta = kapsle); při dvou časech se dělí 2 + 2. Deník → Množství dnes: jen pro vybraný den. Z chatu: newSup q a sq jako text „4 kapsle“.',
     vypl: 0, zdroj: 'podnět Pavla 1.11.2026 („chybí sloupeček kolik a ať jde upravovat“)', url: '', st: 'zavedeno', done: '2026-11-01',
     why: 'cfg.sup[].q (číslo + jednotka, qParse / qJoin) + den.sq (src/app.js supQ, supSplit, Deník „Množství“), přejmenování doplňku v řádku, schránka newSup.q / sq (apps-script inboxApply_), testy t_dashboard + t_gas_sync. Množství je text, Vlivy ho zatím nepočítají', pavel: 'vložit nový Apps Script jen kvůli zápisu množství z chatu; stránka funguje hned' },
   { id: 'I-009', d: '2026-11-01', t: 'Spánkový dluh za 14 nocí',
@@ -1024,10 +1024,10 @@ function supOn(d, id) { const j = jDay(d) || {}, s = supCfg(id); if ((j.sup || [
 // den.sq { id: text } = množství jen pro ten den (přepíše výchozí)
 const Q_MAX = 20;
 const supQ = (d, id) => { const j = jDay(d) || {}, s = supCfg(id), o = j.sq && j.sq[id]; return o != null && o !== '' ? String(o) : ((s && s.q) || ''); };
-// „Kolik“ = CELKOVÉ množství na den: číslo + jednotka z rozbalovacího seznamu (Pavel 1.11.2026: kapsle / ml / l / g / kg, + tableta). Uloženo jako text „4 kapsle“
+// „Kolik“ = CELKOVÉ množství na den: číslo + jednotka z rozbalovacího seznamu (Pavel 1.11.2026: kapsle / ml / l / g / kg; tableta = kapsle, starý zápis se čte jako kapsle). Uloženo jako text „4 kapsle“
 // (cfg.sup[].q, den.sq[id]) — shodně se zápisem z chatu. Při víc časech (reg.h) se dělí rovným dílem: 4 kapsle ve 2 časech = 2 + 2 (jen po půlkách)
-const SUP_UNITS = ['kapsle', 'tableta', 'ml', 'l', 'g', 'kg'];
-const SUP_U_ALIAS = { kapsle: 'kapsle', kapsli: 'kapsle', kapsl: 'kapsle', kaps: 'kapsle', tableta: 'tableta', tablety: 'tableta', tabletu: 'tableta', tablet: 'tableta', ml: 'ml', l: 'l', g: 'g', kg: 'kg' };
+const SUP_UNITS = ['kapsle', 'ml', 'l', 'g', 'kg'];
+const SUP_U_ALIAS = { kapsle: 'kapsle', kapsli: 'kapsle', kapsl: 'kapsle', kaps: 'kapsle', tableta: 'kapsle', tablety: 'kapsle', tabletu: 'kapsle', tablet: 'kapsle', ml: 'ml', l: 'l', g: 'g', kg: 'kg' };
 function qParse(q) { const m = String(q == null ? '' : q).trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/); if (!m) return { n: '', u: '' }; return { n: m[1].replace('.', ','), u: SUP_U_ALIAS[m[2].trim().toLowerCase()] || '' }; }
 const qJoin = (n, u) => { n = String(n || '').trim().replace('.', ','); return n ? n + (u ? ' ' + u : '') : ''; };
 function supSplit(q, h) { const n = parseFloat(qParse(q).n.replace(',', '.')), t = (String(h || '').match(/\d{1,2}[:.]\d{2}/g) || []).length;

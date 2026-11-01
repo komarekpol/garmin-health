@@ -227,10 +227,10 @@ function supOn(d, id) { const j = jDay(d) || {}, s = supCfg(id); if ((j.sup || [
 // den.sq { id: text } = množství jen pro ten den (přepíše výchozí)
 const Q_MAX = 20;
 const supQ = (d, id) => { const j = jDay(d) || {}, s = supCfg(id), o = j.sq && j.sq[id]; return o != null && o !== '' ? String(o) : ((s && s.q) || ''); };
-// „Kolik“ = CELKOVÉ množství na den: číslo + jednotka z rozbalovacího seznamu (Pavel 1.11.2026: kapsle / ml / l / g / kg, + tableta). Uloženo jako text „4 kapsle“
+// „Kolik“ = CELKOVÉ množství na den: číslo + jednotka z rozbalovacího seznamu (Pavel 1.11.2026: kapsle / ml / l / g / kg; tableta = kapsle, starý zápis se čte jako kapsle). Uloženo jako text „4 kapsle“
 // (cfg.sup[].q, den.sq[id]) — shodně se zápisem z chatu. Při víc časech (reg.h) se dělí rovným dílem: 4 kapsle ve 2 časech = 2 + 2 (jen po půlkách)
-const SUP_UNITS = ['kapsle', 'tableta', 'ml', 'l', 'g', 'kg'];
-const SUP_U_ALIAS = { kapsle: 'kapsle', kapsli: 'kapsle', kapsl: 'kapsle', kaps: 'kapsle', tableta: 'tableta', tablety: 'tableta', tabletu: 'tableta', tablet: 'tableta', ml: 'ml', l: 'l', g: 'g', kg: 'kg' };
+const SUP_UNITS = ['kapsle', 'ml', 'l', 'g', 'kg'];
+const SUP_U_ALIAS = { kapsle: 'kapsle', kapsli: 'kapsle', kapsl: 'kapsle', kaps: 'kapsle', tableta: 'kapsle', tablety: 'kapsle', tabletu: 'kapsle', tablet: 'kapsle', ml: 'ml', l: 'l', g: 'g', kg: 'kg' };
 function qParse(q) { const m = String(q == null ? '' : q).trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/); if (!m) return { n: '', u: '' }; return { n: m[1].replace('.', ','), u: SUP_U_ALIAS[m[2].trim().toLowerCase()] || '' }; }
 const qJoin = (n, u) => { n = String(n || '').trim().replace('.', ','); return n ? n + (u ? ' ' + u : '') : ''; };
 function supSplit(q, h) { const n = parseFloat(qParse(q).n.replace(',', '.')), t = (String(h || '').match(/\d{1,2}[:.]\d{2}/g) || []).length;
