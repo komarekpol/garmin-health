@@ -101,12 +101,25 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.click('#quick [data-t="stres"]'); await page.waitForTimeout(900);
       const jl = (await calls(page, 'ghJournalSet')).pop();
       ok('Dnes: po převzetí další změna odejde s at serveru', JSON.parse(jl[3]).at === '2026-10-30T15:00:00.000Z' && JSON.parse(jl[3]).t.stres === 1 && JSON.parse(jl[3]).m[0].w === 'z chatu');
+      // I-002 Regenerace za týden: karta se stavem a čísly bez NaN
+      const rc = await page.evaluate(() => recovOf());
+      ok('Dnes: I-002 Regenerace za týden (stav + normál HRV)', rc && ['good', 'ok', 'amber', 'crit'].includes(rc.k) && rc.lo < rc.hi && /Regenerace za týden/.test(await txt(page, '#p-dnes')) && !/NaN/.test(await txt(page, '#p-dnes .recov')), JSON.stringify(rc));
+      ok('I-002: nízké HRV celý týden → riziko / únava', await page.evaluate(() => { const ref = DATA.date, keep = {}; for (let i = 0; i < 7; i++) { const x = BYD[addD(ref, -i)]; if (x) { keep[x.d] = x.hrv; x.hrv = 5; } } const r = recovOf(); Object.keys(keep).forEach(d => { BYD[d].hrv = keep[d]; }); return r && (r.k === 'amber' || r.k === 'crit'); }));
+      // I-001 ranní pocit: klepnutí → den.pc, druhé klepnutí smaže
+      await page.click('#pcrow [data-pc="4"]'); await page.waitForTimeout(900);
+      let pj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Dnes: I-001 pocit 4 → den.pc + věta o shodě s odhadem', pj.pc === 4 && await page.$eval('#pcrow [data-pc="4"]', e => e.classList.contains('on')) && /Pocit 4\/5 · odhad připravenosti/.test(await txt(page, '#p-dnes')), JSON.stringify(pj));
+      await page.click('#pcrow [data-pc="4"]'); await page.waitForTimeout(900);
+      pj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Dnes: I-001 druhé klepnutí pocit smaže', pj.pc == null, JSON.stringify(pj));
+      ok('I-001: pocit jako výsledek Vlivů (víc pocitů po alkoholu horší)', await page.evaluate(() => { const ds = Object.keys(JR.days).sort().slice(-100), bk = {}; ds.forEach(d => { bk[d] = JR.days[d].pc; const y = JR.days[addD(d, -1)]; JR.days[d].pc = y && y.t && y.t.alk ? 2 : 4; });
+        const r = influence('pc').ok.find(x => x.f.id === 't:alk'); ds.forEach(d => { if (bk[d] == null) delete JR.days[d].pc; else JR.days[d].pc = bk[d]; }); return !!r && r.e < -1 && !r.good; }));
       // Sync = jedno tlačítko
       await page.click('#syncBtn'); await page.waitForTimeout(400);
       ok('Sync: jedno tlačítko → ghSync a znovu aktivní', (await calls(page, 'ghSync')).length === 1 && await page.$eval('#syncBtn', e => !e.disabled));
       // Trendy
       await go(page, 'trendy');
-      for (const m of ['hrv', 'rhr', 'bb', 'resp', 'sleep', 'st']) {
+      for (const m of ['hrv', 'rhr', 'bb', 'resp', 'sleep', 'st', 'pc']) {
         await page.click(`#tmet [data-k="${m}"]`); await page.waitForTimeout(150);
         const drawn = await page.evaluate(() => !!CH && CH.data.datasets.some(d => d.data.some(v => v != null)));
         ok(`Trendy: ${m} vykreslí data`, drawn);
@@ -123,6 +136,14 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await go(page, 'denik');
       ok('Deník: skupiny štítků a doplněk z nastavení', /Jídlo a pití/i.test(await txt(page, '#p-denik')) && /Hořčík/.test(await txt(page, '#p-denik')) && /Masáž/.test(await txt(page, '#p-denik')));
       ok('Deník: aktivity z Garminu', /Běh/.test(await txt(page, '#p-denik')));
+      // I-004: nepoužité štítky pod „Další štítky“, vlastní a používané vidět; Jako včera zkopíruje štítky a doplňky
+      await page.evaluate(() => { const d = addD(TODAY(), -5); window.__BK5__ = JR.days[d]; JR.days[d] = Object.assign({}, JR.days[d], { t: { alk: 1, kava: 2, med: 5 } }); renderDenik(); });
+      ok('Deník: I-004 nepoužívané štítky schované, používané (alkohol) vidět', await page.$('#jmore') && await page.$eval('#jmore', e => !e.open && !!e.querySelector('[data-t="sauna"]')) && !(await page.$eval('#p-denik', e => !!e.querySelector(':scope > .card > .grp [data-t="sauna"]'))) && /Alkohol/.test(await txt(page, '#p-denik')), await page.evaluate(() => JSON.stringify([...(tagsUsed(TODAY()) || [])]) + ' more=' + !!document.getElementById('jmore')));
+      await page.evaluate(() => { UI.jday = addD(TODAY(), -1); window.__BK2__ = JR.days[addD(TODAY(), -2)]; JR.days[addD(TODAY(), -2)] = { t: { alk: 1, otuz: 1 }, sup: ['mg'], at: 'x' }; renderDenik(); });
+      await page.click('#jlike'); await page.waitForTimeout(1000);
+      const lk = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Deník: I-004 Jako včera zkopíruje štítky a doplňky (jídlo a poznámka zůstanou)', lk.t.alk === 1 && lk.t.otuz === 1 && lk.sup.includes('mg') && /^den \d+$/.test(lk.n || ''), JSON.stringify(lk));
+      await page.evaluate(() => { JR.days[addD(TODAY(), -2)] = window.__BK2__; JR.days[addD(TODAY(), -5)] = window.__BK5__; UI.jday = null; renderDenik(); });
       await page.click('#p-denik [data-t="alk"] [data-a="+"]'); await page.click('#p-denik [data-t="alk"] [data-a="+"]');
       await page.click('#jsup [data-s="mg"]');
       await page.fill('#jnote', 'unavený'); await page.waitForTimeout(1000);

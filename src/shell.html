@@ -146,6 +146,17 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
 .brief+.grid{margin-top:var(--sp-4);}
+.recov .stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:0;}
+@media(max-width:760px){.recov .stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+/* ranní pocit (I-001) */
+.pc{margin-bottom:var(--sp-3);}
+.pc-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--sp-2);margin-top:var(--sp-2);}
+.pcb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;border:1px solid var(--border2);border-radius:var(--r-md);background:var(--bg3);color:var(--text2);cursor:pointer;padding:var(--sp-1);touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.pcb b{font-size:var(--fs-h2);color:var(--text);}.pcb span{font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.pcb.on{background:var(--blue-bg);border-color:var(--blue);color:var(--text);}
+.pc-cmp{margin-top:var(--sp-2);}
+/* Deník: další štítky (I-004) */
+details.more{margin-top:var(--sp-3);}details.more>summary{cursor:pointer;color:var(--text2);font-size:var(--fs-sm);min-height:32px;display:flex;align-items:center;}
 .br{display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--fs-md);line-height:1.5;padding:3px 0;}
 .br-i{font-size:var(--fs-xs);width:14px;flex:none;}.br-up .br-i{color:var(--green);}.br-down .br-i{color:var(--red);}.br-eq .br-i{color:var(--text3);}
 .br-h{color:var(--text2);}

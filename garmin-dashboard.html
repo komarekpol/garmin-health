@@ -146,6 +146,17 @@ a.lnk:hover,button.lnk:hover{text-decoration:underline;}
 
 /* KPI dlaždice (EdgePilot kpiTile): popisek → číslo → minigraf → kontext */
 .brief+.grid{margin-top:var(--sp-4);}
+.recov .stats{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:0;}
+@media(max-width:760px){.recov .stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+/* ranní pocit (I-001) */
+.pc{margin-bottom:var(--sp-3);}
+.pc-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--sp-2);margin-top:var(--sp-2);}
+.pcb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;border:1px solid var(--border2);border-radius:var(--r-md);background:var(--bg3);color:var(--text2);cursor:pointer;padding:var(--sp-1);touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.pcb b{font-size:var(--fs-h2);color:var(--text);}.pcb span{font-size:var(--fs-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.pcb.on{background:var(--blue-bg);border-color:var(--blue);color:var(--text);}
+.pc-cmp{margin-top:var(--sp-2);}
+/* Deník: další štítky (I-004) */
+details.more{margin-top:var(--sp-3);}details.more>summary{cursor:pointer;color:var(--text2);font-size:var(--fs-sm);min-height:32px;display:flex;align-items:center;}
 .br{display:flex;gap:var(--sp-2);align-items:baseline;font-size:var(--fs-md);line-height:1.5;padding:3px 0;}
 .br-i{font-size:var(--fs-xs);width:14px;flex:none;}.br-up .br-i{color:var(--green);}.br-down .br-i{color:var(--red);}.br-eq .br-i{color:var(--text3);}
 .br-h{color:var(--text2);}
@@ -335,11 +346,13 @@ const INOV = [
   { id: 'I-001', d: '2026-10-30', t: 'Ranní pocit jedním klepnutím',
     co: 'Uvidíš, jestli se tvůj pocit shoduje s odhadem připravenosti, a Vlivy začnou počítat i s tím, jak se cítíš — ne jen s čísly z hodinek.',
     jak: 'Na stránce Dnes pět smajlíků (1 = mizerně … 5 = skvěle). Jedno klepnutí ráno, nic víc. V Trendech pocit vedle HRV, ve Vlivech jako další výsledek.',
-    vypl: 1, zdroj: 'vlastní nápad', url: '', st: 'navrh' },
+    vypl: 1, zdroj: 'vlastní nápad', url: '', st: 'zavedeno', done: '2026-11-01',
+    why: 'Dnes → karta Deník dnes: „Jak se ráno cítíš?“ 1–5 (pcHtml / bindPc, den.pc) + věta shoda s odhadem připravenosti; Vlivy výsledek „Ranní pocit“ (OUT.pc, outVal); Trendy „Pocit“ vedle HRV s r (drawTrend). Stránka, bez nového Apps Scriptu' },
   { id: 'I-002', d: '2026-10-30', t: 'Stav regenerace podle trendu HRV',
     co: 'Místo jedné noci uvidíš, jak se tělo vyrovnává se zátěží za poslední týden: zvládáš / stabilní / riziko přetížení / nahromaděná únava.',
     jak: 'Z 7denního průměru HRV proti tvému normálnímu pásmu, kolísání HRV ze dne na den (CV) a klidové TF — stejný princip jako HRV4Training. Bez vyplňování.',
-    vypl: 0, zdroj: 'HRV4Training — automatická detekce trendu', url: 'https://www.hrv4training.com/blog2/automatically-detected-physiological-trend-how-are-you-coping-with-your-training', st: 'navrh' },
+    vypl: 0, zdroj: 'HRV4Training — automatická detekce trendu', url: 'https://www.hrv4training.com/blog2/automatically-detected-physiological-trend-how-are-you-coping-with-your-training', st: 'zavedeno', done: '2026-11-01',
+    why: 'Dnes → karta „Regenerace za týden“ (recovOf / recovHtml v src/app.js): Ø HRV 7 dní proti normálu Ø 60 dní ± 0,5 SD, CV 7 dní proti obvyklému, klidová TF; stavy Zvládáš / Stabilní / Nestabilní / Riziko přetížení / Nahromaděná únava' },
   { id: 'I-003', d: '2026-10-30', t: 'Tvůj ideální čas usínání',
     co: 'Večer uvidíš okno, kdy jít spát, aby byl spánek nejlepší — odvozené z tvých vlastních nocí.',
     jak: 'Z nocí s nejlepším skóre spánku a nejnižší klidovou TF najde typický čas usínání (Oura potřebuje ~2 týdny pravidelných dat). Apps Script začne ukládat čas usnutí a probuzení.',
@@ -347,7 +360,8 @@ const INOV = [
   { id: 'I-004', d: '2026-10-30', t: 'Deník: „Jako včera“ a jen tvoje štítky',
     co: 'Méně klikání. Doplňky a běžné věci bývají denně stejné.',
     jak: 'Tlačítko „Jako včera“ zkopíruje štítky a doplňky z předchozího dne. Štítky, které nepoužíváš, se schovají pod „Další“. WHOOP doporučuje sledovat jen 5–10 věcí, které reálně zapisuješ, a vliv ukazuje už po 5 záznamech.',
-    vypl: 0, zdroj: 'WHOOP Journal (the5krunner)', url: 'https://the5krunner.com/2023/04/15/whoop-new-recovery-behaviours/', st: 'navrh' },
+    vypl: 0, zdroj: 'WHOOP Journal (the5krunner)', url: 'https://the5krunner.com/2023/04/15/whoop-new-recovery-behaviours/', st: 'zavedeno', done: '2026-11-01',
+    why: 'Deník: tlačítko „Jako včera“ (likeYesterday — štítky, doplňky, vynechání, množství; jídlo a poznámka ne); štítky nepoužité 60 dní pod „Další štítky“ (tagsUsed, ukáže se až při ≥ 3 používaných; vlastní štítky vždy vidět)' },
   { id: 'I-005', d: '2026-10-30', t: 'Nedělní souhrn týdne e-mailem',
     co: 'Jednou týdně krátce do mailu: co se zlepšilo a zhoršilo, nejlepší a nejhorší noc, co ukázaly Vlivy. Nemusíš nic otevírat.',
     jak: 'Apps Script v neděli večer pošle e-mail se stejnými čísly jako karta Krátce + Vlivy. Bez vyplňování.',
@@ -367,6 +381,14 @@ const INOV = [
     jak: 'Nastavení → Doplňky: „Kolik“ = celkem za den + jednotka z rozbalovacího seznamu (kapsle, tableta, ml, l, g, kg); při dvou časech se dělí 2 + 2. Deník → Množství dnes: jen pro vybraný den. Z chatu: newSup q a sq jako text „4 kapsle“.',
     vypl: 0, zdroj: 'podnět Pavla 1.11.2026 („chybí sloupeček kolik a ať jde upravovat“)', url: '', st: 'zavedeno', done: '2026-11-01',
     why: 'cfg.sup[].q (číslo + jednotka, qParse / qJoin) + den.sq (src/app.js supQ, supSplit, Deník „Množství“), přejmenování doplňku v řádku, schránka newSup.q / sq (apps-script inboxApply_), testy t_dashboard + t_gas_sync. Množství je text, Vlivy ho zatím nepočítají', pavel: 'vložit nový Apps Script jen kvůli zápisu množství z chatu; stránka funguje hned' },
+  { id: 'I-009', d: '2026-11-01', t: 'Spánkový dluh za 14 nocí',
+    co: 'Jedno číslo: kolik spánku ti za poslední dva týdny chybí proti tvé potřebě — a jestli dluh roste, nebo ho splácíš. Lepší vodítko než jedna noc.',
+    jak: 'Z délky spánku z hodinek: každá noc pod tvou potřebou přidá dluh, delší noc ho splácí, novější noci váží víc (jako RISE, cíl pod 5 h). Potřebu odhadne z tvých nocí, v Nastavení jde přepsat. Bez vyplňování.',
+    vypl: 0, zdroj: 'RISE — How is my sleep debt calculated', url: 'https://help.risescience.com/hc/en-us/articles/40621334445335-How-is-my-sleep-debt-calculated', st: 'navrh' },
+  { id: 'I-010', d: '2026-11-01', t: 'Ranní signál nemoci',
+    co: 'Ráno upozornění, když se několik hodnot najednou odchýlí od tvého normálu — často den dva předtím, než nemoc ucítíš. Víš, že máš ubrat.',
+    jak: 'Dýchání v noci, klidová TF a HRV proti tvému průměru 30 dní; jedna odchylka nic, dvě a víc současně = „drobné“ / „výrazné“ známky (princip Oura Symptom Radar, teplotu Garmin přes API nedává). Bez vyplňování, orientační — ne diagnóza.',
+    vypl: 0, zdroj: 'Oura — Symptom Radar', url: 'https://ouraring.com/blog/symptom-radar/', st: 'navrh' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
@@ -1003,7 +1025,7 @@ function supSplit(q, h) { const n = parseFloat(qParse(q).n.replace(',', '.')), t
   if (!(n > 0) || t < 2 || (n / t * 2) % 1) return ''; return Array(t).fill(String(n / t).replace('.', ',')).join(' + '); }
 const supSplitTxt = (s, q) => { const x = supSplit(q, s && s.reg && s.reg.h); return x ? ' (' + x + ')' : ''; };
 const mealHas = m => m && (m.w || m.h || (m.it || []).length);
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !Object.keys(j.sq || {}).length && !(j.n || '').trim() && j.kg == null && j.bf == null; }
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !Object.keys(j.sq || {}).length && !(j.n || '').trim() && j.kg == null && j.bf == null && j.pc == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
@@ -1054,7 +1076,10 @@ const OUT = {
   sc:  { l: 'Skóre spánku', u: 'b.', k: 'sc', better: 1, d: 0 },
   rhr: { l: 'Klidová TF', u: 'bpm', k: 'rhr', better: -1, d: 1 },
   bb:  { l: 'Body Battery ráno', u: '', k: 'bb', better: 1, d: 0 },
+  pc:  { l: 'Ranní pocit', u: '', k: 'pc', better: 1, d: 1, j: 1 },   // I-001: pocit 1–5 z deníku (den.pc), ne z Garminu
 };
+// hodnota výsledku rána d: z Garminu (BYD) nebo z deníku (o.j — ranní pocit den.pc)
+const outVal = (o, d) => o.j ? (jDay(d) ? num(jDay(d)[o.k]) : null) : (BYD[d] ? num(BYD[d][o.k]) : null);
 const acts = d => (BYD[d] && BYD[d].a) || [];
 const isTrain = a => (a.l || 0) >= 20;
 function factors() {
@@ -1093,8 +1118,8 @@ function factors() {
 function influence(ok) {
   const o = OUT[ok], rows = [];
   DAYS.forEach(x => {
-    const n = BYD[addD(x.d, 1)], y = n ? num(n[o.k]) : null; if (y == null) return;
-    const prev = []; for (let i = 0; i < 14; i++) { const p = BYD[addD(x.d, -i)]; const v = p ? num(p[o.k]) : null; if (v != null) prev.push(v); }
+    const y = outVal(o, addD(x.d, 1)); if (y == null) return;
+    const prev = []; for (let i = 0; i < 14; i++) { const v = outVal(o, addD(x.d, -i)); if (v != null) prev.push(v); }
     if (prev.length < 5) return;
     rows.push({ d: x.d, r: y - avg(prev) });
   });
@@ -1252,6 +1277,50 @@ function briefHtml() {
     + b.map(x => `<div class="br br-${x.k}"><span class="br-i" aria-hidden="true">${ic[x.k]}</span><div><span class="br-h">${esc(x.h)}:</span> ${x.t}</div></div>`).join('') + '</div>';
 }
 
+
+// ── Ranní pocit (I-001): jedno klepnutí 1–5 → den.pc; Vlivy ho berou jako další výsledek, Trendy vedle HRV ──
+const PC_L = ['', 'mizerně', 'slabě', 'ujde to', 'dobře', 'skvěle'];
+function pcHtml(d, R) {
+  const v = (jDay(d) || {}).pc;
+  const btn = n => `<button type="button" class="pcb${v === n ? ' on' : ''}" data-pc="${n}" aria-pressed="${v === n}" title="${PC_L[n]}"><b>${n}</b><span>${PC_L[n]}</span></button>`;
+  let cmp = '';
+  if (v != null && R && R.score != null) {
+    const rb = R.score >= T.ready_ok.val ? 3 : R.score >= T.ready_warn.val ? 2 : 1, pb = v >= 4 ? 3 : v === 3 ? 2 : 1;
+    cmp = `<div class="xs t2 pc-cmp">Pocit ${v}/5 · odhad připravenosti ${R.score} — ${rb === pb ? 'shodují se' : pb > rb ? 'cítíš se líp, než ukazují čísla' : 'cítíš se hůř, než ukazují čísla — poslechni tělo'}.</div>`;
+  }
+  return `<div class="pc"><div class="lbl">Jak se ráno cítíš?</div><div class="pc-row" id="pcrow">${[1, 2, 3, 4, 5].map(btn).join('')}</div>${cmp}</div>`;
+}
+function bindPc(root, d, after) {
+  root.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', () => { const j = jEdit(d), n = +b.dataset.pc;
+    if (j.pc === n) delete j.pc; else j.pc = n; jPut(d, j); after(); }));
+}
+
+// ── Stav regenerace podle trendu HRV (I-002, princip HRV4Training): 7denní Ø HRV proti normálnímu pásmu (Ø 60 dní před tím ± 0,5 SD),
+// kolísání HRV (CV 7 dní) proti obvyklému a klidová TF 7 dní proti Ø 60 dní. Bez vyplňování, orientační. ──
+function recovOf() {
+  const ref = (DATA && DATA.date) || TODAY(), vals = (k, from, n) => { const v = []; for (let i = from; i < from + n; i++) { const x = BYD[addD(ref, -i)]; if (x && num(x[k]) != null) v.push(num(x[k])); } return v; };
+  const h7 = vals('hrv', 0, 7), hb = vals('hrv', 7, 60);
+  if (h7.length < 5 || hb.length < 20) return null;
+  const m = avg(hb), sd = Math.sqrt(vr(hb)), lo = m - 0.5 * sd, hi = m + 0.5 * sd, a7 = avg(h7), cv = a => avg(a) ? Math.sqrt(vr(a)) / avg(a) * 100 : null;
+  const cvs = []; for (let i = 7; i <= 60; i++) { const w = vals('hrv', i, 7); if (w.length >= 5) cvs.push(cv(w)); }
+  const cv7 = cv(h7), cvB = cvs.length ? avg(cvs) : null, r7 = vals('rhr', 0, 7), rb = vals('rhr', 7, 60);
+  const dR = r7.length >= 4 && rb.length >= 20 ? avg(r7) - avg(rb) : null, cvHi = cvB != null && cv7 > cvB * 1.5, cvUp = cvB != null && cv7 > cvB * 1.25;
+  let k, l, t;
+  if (a7 < lo && ((dR != null && dR >= 2) || cvUp)) { k = 'crit'; l = 'Nahromaděná únava'; t = 'HRV je celý týden pod tvým normálem a ' + (dR != null && dR >= 2 ? 'klidová TF je vyšší' : 'víc kolísá') + '. Ber to jako signál ubrat a dospat.'; }
+  else if (a7 < lo) { k = 'amber'; l = 'Riziko přetížení'; t = 'Týdenní Ø HRV kleslo pod tvůj normál. Zvaž lehčí dny, dokud se nevrátí.'; }
+  else if (cvHi) { k = 'amber'; l = 'Nestabilní'; t = 'HRV ze dne na den výrazně víc kolísá než obvykle — tělo se se zátěží zatím vyrovnává hůř.'; }
+  else if (cvB != null && cv7 <= cvB) { k = 'good'; l = 'Zvládáš zátěž'; t = 'HRV v normálu a stabilní — tělo se se zátěží vyrovnává dobře.'; }
+  else { k = 'ok'; l = 'Stabilní'; t = 'HRV v normálu, kolísání trochu vyšší než obvykle. Nic neobvyklého.'; }
+  return { k, l, t, a7, lo, hi, cv7, cvB, dR, n: hb.length };
+}
+function recovHtml() {
+  const r = recovOf(); if (!r) return '';
+  return `<div class="card recov"><div class="card-h"><div class="card-t">Regenerace za týden</div>${pill(r.l, r.k)}</div>
+    <div class="sm" style="margin-bottom:var(--sp-3)">${esc(r.t)}</div>
+    <div class="stats">${stat('HRV Ø 7 dní', fmt(r.a7) + ' ms')}${stat('Tvůj normál', fmt(r.lo) + '–' + fmt(r.hi) + ' ms')}${stat('Kolísání (CV)', fmt(r.cv7, 1) + ' %' + (r.cvB != null ? ' · obvykle ' + fmt(r.cvB, 1) : ''))}${r.dR != null ? stat('Klidová TF vs normál', sgn(r.dR, 1) + ' bpm') : ''}</div>
+    <div class="xs muted" style="margin-top:var(--sp-2)">Normál = Ø HRV ${r.n} dní před tímto týdnem ± 0,5 SD. Princip podle HRV4Training, orientační.</div></div>`;
+}
+
 // ── Dnes ──
 function renderDnes() {
   const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
@@ -1282,6 +1351,7 @@ function renderDnes() {
   $('p-dnes').innerHTML = `
   <div class="page-head"><div><div class="page-t">${esc(cap(dLong(TODAY())))}</div><div class="page-s">Data za ${esc(dShort(DATA.date))} · ${esc(ageText())}</div></div></div>
   ${briefHtml()}
+  ${recovHtml()}
   <div class="grid g-hero">
     <div class="card"><div class="hero">${ring(sc, rcol)}<div style="min-width:0;flex:1">
       <div class="lbl">${R.est ? 'Připravenost (odhad)' : 'Training Readiness'}</div>
@@ -1302,6 +1372,7 @@ function renderDnes() {
   </div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div class="card-t">Deník dnes</div><span class="save-st" id="jst"></span></div>
+      ${pcHtml(jt, R)}
       <div class="chips" id="quick">${quick}</div>
       ${nutLine(jt) ? `<div class="sm" style="margin-top:var(--sp-3)">Jídlo: ${nutLine(jt)}</div>` : ''}
       <div style="margin-top:var(--sp-3);display:flex;gap:var(--sp-4);flex-wrap:wrap"><button class="lnk" data-go="jidlo">Jídlo a váha →</button><button class="lnk" data-go="denik">Celý deník →</button></div></div>
@@ -1311,6 +1382,7 @@ function renderDnes() {
   <div class="card"><div class="card-h"><div class="card-t">Budíky</div><span class="card-s"><span class="g7">▍Ø 7 dní</span> <span class="g14">▍Ø 14 dní</span></span></div>
     <div class="gauges">${gaugesHtml({ hrv: num(hrv), hr: num(hr), bb: num(bb), sc: sc, ss: num(ss), fa: fa, ca: f.chronological_age })}</div></div>`;
   bindChips($('quick'), jt);
+  bindPc($('p-dnes'), jt, renderDnes);
   document.querySelectorAll('#p-dnes [data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
 }
 
@@ -1332,15 +1404,33 @@ function bindChips(root, d) {
 }
 
 // ── Deník ──
+// I-004: štítky, které za posledních 60 dní nepoužíváš, jsou schované pod „Další štítky“ (WHOOP: sleduj jen to, co reálně zapisuješ);
+// zobrazí se všechny, dokud nejsou aspoň 3 používané. Vlastní štítky jsou vidět vždy. „Jako včera“ zkopíruje štítky a doplňky z předchozího dne.
+const TAG_USED_D = 60;
+function tagsUsed(d) {
+  const u = new Set(), from = addD(TODAY(), -TAG_USED_D);
+  Object.keys(JR.days).forEach(k => { if (k < from) return; const t = (JR.days[k] || {}).t || {}; Object.keys(t).forEach(id => { if (t[id] > 0) u.add(id); }); });
+  return u.size >= 3 ? u : null;
+}
+function likeYesterday(d) {
+  const y = jDay(addD(d, -1)); if (!y) return false;
+  const j = jEdit(d); j.t = JSON.parse(JSON.stringify(y.t || {})); j.sup = (y.sup || []).slice(); if ((y.sx || []).length) j.sx = y.sx.slice(); else delete j.sx;
+  if (y.sq && Object.keys(y.sq).length) j.sq = JSON.parse(JSON.stringify(y.sq)); else delete j.sq;
+  jPut(d, j); return true;
+}
 function renderDenik() {
   const d = UI.jday || TODAY(), j = jEdit(d), x = BYD[d] || {}, sup = JR.cfg.sup || [], ctags = JR.cfg.tags || [];
+  const used = tagsUsed(d), vis = t => !used || used.has(t.id) || ((j.t || {})[t.id] || 0) > 0;
+  const hid = TAGS.map(g => ({ g: g.g, items: g.items.filter(t => !vis(t)) })).filter(g => g.items.length), nHid = hid.reduce((a, g) => a + g.items.length, 0);
+  const yd = jDay(addD(d, -1)), yHas = !!(yd && (Object.keys(yd.t || {}).some(k => yd.t[k] > 0) || (yd.sup || []).length));
   const actsH = (x.a || []).map(a => `<span class="chip auto">${esc(a.n || a.k)}${a.h != null ? ' · ' + a.h + ' h' : ''}${a.m ? ' · ' + a.m + ' min' : ''}${a.l ? ' · zátěž ' + a.l : ''}</span>`).join('');
   $('p-denik').innerHTML = `
   <div class="page-head"><div><div class="page-t">Deník</div><div class="page-s">Co jíš, piješ a děláš — Vlivy z toho počítají, co tvé HRV a spánek ovlivňuje.</div></div>
     <div class="daynav"><button class="btn" id="jprev" aria-label="Předchozí den">‹</button><div class="daynav-t">${esc(cap(dLong(d)))}</div>
     <button class="btn" id="jnext" aria-label="Další den" ${d >= TODAY() ? 'disabled' : ''}>›</button>${d !== TODAY() ? '<button class="btn btn-ghost" id="jtoday">Dnes</button>' : ''}</div></div>
-  <div class="card"><div class="card-h"><div class="card-t">Štítky dne</div><span class="save-st" id="jst"></span></div>
-    ${TAGS.map(g => `<div class="grp"><div class="lbl">${esc(g.g)}</div><div class="chips">${g.items.map(t => chipHtml(t, j, d)).join('')}</div></div>`).join('')}
+  <div class="card"><div class="card-h"><div class="card-t">Štítky dne</div><span class="save-st" id="jst"></span><button class="btn" id="jlike" ${yHas ? '' : 'disabled title="Předchozí den nemá štítky ani doplňky"'}>Jako včera</button></div>
+    ${TAGS.map(g => { const it = g.items.filter(vis); return it.length ? `<div class="grp"><div class="lbl">${esc(g.g)}</div><div class="chips">${it.map(t => chipHtml(t, j, d)).join('')}</div></div>` : ''; }).join('')}
+    ${nHid ? `<details class="more" id="jmore"${UI.moreOpen ? ' open' : ''}><summary>Další štítky (${nHid}) — tyhle za posledních ${TAG_USED_D} dní nepoužíváš</summary>${hid.map(g => `<div class="grp"><div class="lbl">${esc(g.g)}</div><div class="chips">${g.items.map(t => chipHtml(t, j, d)).join('')}</div></div>`).join('')}</details>` : ''}
     ${ctags.length ? `<div class="grp"><div class="lbl">Vlastní</div><div class="chips">${ctags.map(t => chipHtml({ id: t.id, l: t.l }, j, d)).join('')}</div></div>` : ''}
     <div class="grp"><div class="lbl">Doplňky a léky</div><div class="chips" id="jsup">${sup.length ? sup.map(s => `<button type="button" class="chip${supOn(d, s.id) ? ' on' : ''}" data-s="${esc(s.id)}"${supReg(s) ? ` title="Pravidelný doplněk${s.reg.h ? ' — ' + esc(s.reg.h) : ''}: zaškrtnutý sám, klepnutím označíš vynechání"` : ''}>${esc(s.l)}${supOn(d, s.id) && supQ(d, s.id) ? ` <span class="reg">${esc(supQ(d, s.id))}${esc(supSplitTxt(s, supQ(d, s.id)))}</span>` : ''}${supReg(s) ? ' <span class="reg">⟳</span>' : ''}</button>`).join('') : '<span class="muted sm">Seznam doplňků si nastav v <button class="lnk" data-go="nast">Nastavení</button>.</span>'}</div>
       ${sup.some(s => supOn(d, s.id)) ? `<details class="sq" id="jsq"${UI.sqOpen ? ' open' : ''}><summary class="sm t2">Množství ${d === TODAY() ? 'dnes' : 'ten den'}</summary><div class="sq-rows">${sup.filter(s => supOn(d, s.id)).map(s => `<label class="sq-row"><span class="sup-n">${esc(s.l)}</span><input class="sup-q" data-sq="${esc(s.id)}" value="${esc(qParse(supQ(d, s.id)).n)}" placeholder="kolik" inputmode="decimal" maxlength="8" aria-label="Kolik — ${esc(s.l)}"><span class="sm t2 sup-unit">${esc(qParse(s.q).u)}</span></label>`).join('')}</div></details>` : ''}</div>
@@ -1356,6 +1446,8 @@ function renderDenik() {
   P.querySelectorAll('[data-s]').forEach(b => b.addEventListener('click', () => { const jj = jEdit(d), id = b.dataset.s, on = supOn(d, id), reg = supRegDay(supCfg(id), d); jj.sx = jj.sx || [];
     if (on) { jj.sup = jj.sup.filter(x => x !== id); if (reg && !jj.sx.includes(id)) jj.sx.push(id); if (jj.sq) { delete jj.sq[id]; if (!Object.keys(jj.sq).length) delete jj.sq; } } else { jj.sx = jj.sx.filter(x => x !== id); if (!reg && !jj.sup.includes(id)) jj.sup.push(id); }
     if (!jj.sx.length) delete jj.sx; jPut(d, jj); renderDenik(); }));
+  $('jlike').onclick = () => { if (likeYesterday(d)) { toast('Zkopírováno z ' + dShort(addD(d, -1))); renderDenik(); } };
+  if ($('jmore')) $('jmore').addEventListener('toggle', () => { UI.moreOpen = $('jmore').open; });
   const sqd = $('jsq');
   if (sqd) { sqd.addEventListener('toggle', () => { UI.sqOpen = sqd.open; });
     sqd.querySelectorAll('[data-sq]').forEach(i => i.addEventListener('change', () => { const id = i.dataset.sq, s = supCfg(id), n = i.value.trim().replace('.', ','); if (n && !/^\d+(,\d+)?$/.test(n)) { i.value = qParse(supQ(d, id)).n; return; }
@@ -1386,7 +1478,7 @@ function renderVlivy() {
 }
 
 // ── Trendy ──
-const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres'], ['kcal', 'Kalorie'], ['makra', 'Makra'], ['kg', 'Váha']];
+const TR = [['hrv', 'HRV'], ['rhr', 'Klidová TF'], ['bb', 'Body Battery'], ['resp', 'Dýchání'], ['sleep', 'Spánek'], ['st', 'Stres'], ['pc', 'Pocit'], ['kcal', 'Kalorie'], ['makra', 'Makra'], ['kg', 'Váha']];
 const RANGES = [[14, '14 d'], [30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Vše']];
 let CH = null;
 function renderTrendy() {
@@ -1452,6 +1544,19 @@ function drawTrend() {
     if (wks.length) $('twk').innerHTML = `<div class="lbl wk">Po týdnech (Ø ze dnů se zápisem)</div><div class="tbl-wrap"><table data-nogrid><thead><tr><th>Týden od</th><th>Dny</th><th>kcal</th><th>B</th><th>T</th><th>S</th><th>Bilance</th><th>Váha</th></tr></thead><tbody>`
       + wks.map(k => { const w = wk[k], a = f => w.n.length ? fmt(Math.round(avg(w.n.map(f)))) : '—';
         return `<tr><td>${esc(dShort(k))}</td><td>${w.n.length}</td><td>${a(x => x.k)}</td><td>${a(x => x.p)}</td><td>${a(x => x.f)}</td><td>${a(x => x.c)}</td><td>${w.b.length ? sgn(Math.round(avg(w.b)), 0) : '—'}</td><td>${w.kg.length ? fmt(avg(w.kg), 1) : '—'}</td></tr>`; }).join('') + '</tbody></table></div>';
+  } else if (m === 'pc') {
+    // I-001: ranní pocit (deník, 1–5) vedle HRV; shoda = Pearsonovo r mezi pocitem a HRV téhož rána
+    title = 'Ranní pocit vedle HRV';
+    const pv = rows.map(x => outVal(OUT.pc, x.d)), hv = rows.map(x => num(x.hrv));
+    const ds = [{ type: 'bar', label: 'Pocit (1–5)', data: pv, backgroundColor: tok('--blue'), borderRadius: 2, yAxisID: 'y2' },
+      { type: 'line', label: 'HRV (ms)', data: hv, borderColor: tok('--text2'), pointRadius: rows.length > 60 ? 0 : 2, borderWidth: 1.6, tension: .25, spanGaps: true, yAxisID: 'y' }];
+    CH = new Chart($('tch'), { data: { labels, datasets: ds }, options: { ...base, scales: { x: base.scales.x, y: { ...base.scales.y, title: { display: true, text: 'HRV ms', color: t3, font } }, y2: { position: 'right', min: 0, max: 5, ticks: { color: t3, font, stepSize: 1 }, grid: { display: false } } } } });
+    leg = `<span><i style="background:${tok('--blue')}"></i>Pocit (pravá osa)</span><span><i style="background:${tok('--text2')}"></i>HRV</span>`;
+    const pr = rows.map((x, i) => [pv[i], hv[i]]).filter(a => a[0] != null && a[1] != null), p1 = pv.filter(v => v != null);
+    let r = null; if (pr.length >= 8) { const ma = avg(pr.map(a => a[0])), mb = avg(pr.map(a => a[1])), sa = Math.sqrt(vr(pr.map(a => a[0]))), sb = Math.sqrt(vr(pr.map(a => a[1])));
+      if (sa > 0 && sb > 0) r = pr.reduce((t, a) => t + (a[0] - ma) * (a[1] - mb), 0) / (pr.length - 1) / sa / sb; }
+    $('tst').innerHTML = stat('Dny s pocitem', fmt(p1.length)) + stat('Ø pocit', p1.length ? fmt(avg(p1), 1) : '—') + stat('Shoda s HRV (r)', r == null ? 'málo dat' : fmt(r, 2) + (Math.abs(r) >= 0.3 ? (r > 0 ? ' · souhlasí' : ' · opačně') : ' · slabá'));
+    if (!p1.length) $('twk').innerHTML = '<div class="muted sm" style="margin-top:var(--sp-3)">Pocit zapíšeš jedním klepnutím na stránce Dnes (Jak se ráno cítíš?).</div>';
   } else if (m === 'sleep') {
     title = 'Spánek — fáze a skóre';
     const H = k => rows.map(x => x[k] != null ? Math.round(x[k] / 6) / 10 : null);
