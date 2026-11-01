@@ -210,7 +210,8 @@ function ghFoodSet(key, id, json) {
 // ── 📥 Schránka deníku (Pavel 30.10.2026: „řeknu přes chat mikrofonem, co jsem jedl a pil, a ty mi aktualizuješ deník“) ──
 // Claude založí v Garmin Data soubor „garmin-denik-vstup …json“: { v: 1, items: [{ d: 'RRRR-MM-DD',
 //   t: { štítek: hodnota } (nastaví), tadd: { štítek: +počet } (přičte — počítadla alk / kava / med), m: [{ s: sn|ob|ve|sv, h: 'HH:MM', w: text }] (přidá),
-//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l, reg?: { from, h } }] (doplní do nastavení deníku; reg = pravidelný doplněk),
+//   sup: [id doplňku] (přidá), n: text (připojí k poznámce), newSup / newTags: [{ id, l, reg?: { from, h }, q?: 'kolik' }] (doplní do nastavení deníku; reg = pravidelný doplněk, q = výchozí množství na den),
+//   sq: { id doplňku: 'kolik' } (množství doplňku jen pro ten den, prázdný text = zpět na výchozí),
 //   kg: váha (nastaví), bf: tělesný tuk % (nastaví); položka bez d jen s food = jen do databáze (import), food: [{ id, l, por, porL, k, p, f, c, src }] (nová jídla do databáze; existující id se nepřepíše, jen s foodSet: true),
 //   jídlo s položkami z databáze: m: [{ s, h, w, it: [{ f: id jídla, g: gramy }] }] }] }.
 // Převezme se při otevření stránky (apiData_) a každou hodinu (selfUpdateTick); hotový soubor jde do koše, chybný se přejmenuje na „… CHYBA“ a chyba je v health.
@@ -225,7 +226,7 @@ function inboxMerge_() {
       const txt = f.getBlob().getDataAsString('UTF-8');
       if (txt.length > INBOX_MAX_) throw new Error('soubor má ' + txt.length + ' znaků (limit ' + INBOX_MAX_ + ')');
       const inp = JSON.parse(txt), items = Array.isArray(inp.items) ? inp.items : [inp];
-      items.forEach(x => { if (!x) throw new Error('prázdná položka'); if (x.d == null && (x.food || []).length && !['t', 'tadd', 'm', 'sup', 'n', 'kg', 'bf', 'newSup', 'newTags'].some(k => k in x)) return; /* jen jídla do databáze, bez dne */ if (!isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
+      items.forEach(x => { if (!x) throw new Error('prázdná položka'); if (x.d == null && (x.food || []).length && !['t', 'tadd', 'm', 'sup', 'sq', 'n', 'kg', 'bf', 'newSup', 'newTags'].some(k => k in x)) return; /* jen jídla do databáze, bez dne */ if (!isYmd_(String(x.d || '')) || String(x.d).length !== 10) throw new Error('chybí nebo neplatné datum d'); });
       let jj = null, food = false;
       journalWrite_(j => { items.forEach(x => { if (x.food) food = true; inboxApply_(j, x); }); jj = j; });
       if (food) foodExtract_(jj);
@@ -259,11 +260,16 @@ function inboxApply_(j, x) {
   if (x.kg != null) { const kg = Number(x.kg); if (!isFinite(kg) || kg < 30 || kg > 250) throw new Error('nesmyslná váha ' + x.kg); day.kg = Math.round(kg * 10) / 10; }
   if (x.bf != null) { const bf = Number(x.bf); if (!isFinite(bf) || bf < 3 || bf > 60) throw new Error('nesmyslný tělesný tuk ' + x.bf); day.bf = Math.round(bf * 10) / 10; }
   (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });
+  if (x.sq && typeof x.sq === 'object') { day.sq = day.sq || {};   // množství doplňků jen pro ten den (text ≤ 20 znaků)
+    Object.keys(x.sq).forEach(k => { const kk = id(k), v = String(x.sq[k] == null ? '' : x.sq[k]).trim().slice(0, 20); if (!kk) return; if (v) day.sq[kk] = v; else delete day.sq[kk]; });
+    if (!Object.keys(day.sq).length) delete day.sq; }
   if (x.n) day.n = ((day.n ? day.n + ' · ' : '') + String(x.n)).slice(0, 1000);
   [['newSup', 'sup'], ['newTags', 'tags']].forEach(([a, b]) => (x[a] || []).forEach(o => { const k = id(o && o.id), l = String(o && o.l || '').slice(0, 40);
     if (!k || !l) return; const arr = j.cfg[b] = j.cfg[b] || []; let e = arr.find(z => z.id === k); if (!e) { e = { id: k, l: l }; arr.push(e); }
     // pravidelný doplněk (I-007): reg { from: RRRR-MM-DD, h: 'časy' } — doplněk je od data `from` každý den zaškrtnutý sám (výjimky den.sx); reg: null = zrušit
-    if (a === 'newSup' && o && 'reg' in o) { if (o.reg === null) delete e.reg; else if (o.reg && isYmd_(String(o.reg.from || '')) && String(o.reg.from).length === 10) e.reg = { from: String(o.reg.from), h: String(o.reg.h || '').slice(0, 40) }; else throw new Error('newSup ' + k + ': neplatné reg.from'); } }));
+    if (a === 'newSup' && o && 'reg' in o) { if (o.reg === null) delete e.reg; else if (o.reg && isYmd_(String(o.reg.from || '')) && String(o.reg.from).length === 10) e.reg = { from: String(o.reg.from), h: String(o.reg.h || '').slice(0, 40) }; else throw new Error('newSup ' + k + ': neplatné reg.from'); }
+    if (a === 'newSup' && o && 'q' in o) { const q = String(o.q == null ? '' : o.q).trim().slice(0, 20); if (q) e.q = q; else delete e.q; } }));   // q = výchozí množství na den
+
   day.at = new Date().toISOString(); day.src = 'chat';
   if (JSON.stringify(day).length > JOURNAL_DAY_MAX_) throw new Error('den ' + x.d + ' by byl větší než ' + JOURNAL_DAY_MAX_ + ' znaků');
   j.days[x.d] = day;
