@@ -38,9 +38,9 @@ const INOV = [
     why: 'Nastavení → Doplňky: „každý den“ + čas (cfg.sup[].reg); Deník: ⟳ zaškrtnutý sám, vynechání = den.sx; Vlivy počítají od data reg.from. Chatové nastavení přes newSup.reg vyžaduje nový Apps Script', pavel: 'vložit nový Apps Script (pošlu) — jen pro nastavení doplňků z chatu; stránka funguje hned' },
   { id: 'I-008', d: '2026-11-01', t: 'Kolik doplňku: výchozí množství a úprava za den',
     co: 'U doplňku vidíš a upravíš množství (např. 2 kapsle). Když si omegu jeden den dáš 2×, přepíšeš to jen pro ten den — výchozí zůstane.',
-    jak: 'Nastavení → Doplňky: sloupec „Kolik“ (výchozí na den). Deník → Množství dnes: jen pro vybraný den; shoda s výchozím = beze změny. Z chatu: newSup q a sq.',
+    jak: 'Nastavení → Doplňky: „Kolik“ = celkem za den + jednotka z rozbalovacího seznamu (kapsle, tableta, ml, l, g, kg); při dvou časech se dělí 2 + 2. Deník → Množství dnes: jen pro vybraný den. Z chatu: newSup q a sq jako text „4 kapsle“.',
     vypl: 0, zdroj: 'podnět Pavla 1.11.2026 („chybí sloupeček kolik a ať jde upravovat“)', url: '', st: 'zavedeno', done: '2026-11-01',
-    why: 'cfg.sup[].q + den.sq (src/app.js supQ, Deník „Množství“), schránka newSup.q / sq (apps-script inboxApply_), testy t_dashboard + t_gas_sync. Množství je text, Vlivy ho zatím nepočítají', pavel: 'vložit nový Apps Script jen kvůli zápisu množství z chatu; stránka funguje hned' },
+    why: 'cfg.sup[].q (číslo + jednotka, qParse / qJoin) + den.sq (src/app.js supQ, supSplit, Deník „Množství“), přejmenování doplňku v řádku, schránka newSup.q / sq (apps-script inboxApply_), testy t_dashboard + t_gas_sync. Množství je text, Vlivy ho zatím nepočítají', pavel: 'vložit nový Apps Script jen kvůli zápisu množství z chatu; stránka funguje hned' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
