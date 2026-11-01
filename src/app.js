@@ -210,7 +210,9 @@ const TAGS = [
     { id: 'stres', l: 'Pracovní stres' }, { id: 'cesta', l: 'Cestování' }, { id: 'nemoc', l: 'Nemoc / nachlazení' }, { id: 'bolest', l: 'Bolest' },
     { id: 'nalada', l: 'Špatná nálada' }, { id: 'pozde_spat', l: 'Pozdě do postele' }, { id: 'obrazovka', l: 'Obrazovka před spaním' } ] },
 ];
-const QUICK = ['alk', 'kava_pozde', 'vecere_pozde', 'stres', 'otuz', 'med', 'pozde_spat', 'nemoc'];
+// Rychlé štítky na Dnes: VČERA (zpětně — večer a noc, co ovlivní dnešní ráno) a DNES (během dne)
+const QUICK_Y = ['alk', 'vecere_pozde', 'kava_pozde', 'stres', 'pozde_spat', 'obrazovka'];
+const QUICK = ['alk', 'kava_pozde', 'stres', 'otuz', 'med', 'nemoc'];
 const MEAL_S = [['sn', 'Snídaně'], ['ob', 'Oběd'], ['ve', 'Večeře'], ['sv', 'Svačina']];
 const tagById = id => { for (const g of TAGS) for (const t of g.items) if (t.id === id) return t; const c = (JR.cfg.tags || []).find(x => x.id === id); return c ? { id: c.id, l: c.l } : null; };
 const jDay = d => JR.days[d] || null;
@@ -556,6 +558,8 @@ function renderDnes() {
   const infAll = DAYS.length > 20 ? influence('hrv').ok : [], ids = new Set(infAll.map(r => r.f.id));
   const inf = { ok: infAll.filter(r => Math.abs(r.t) >= 1.5 && r.n1 >= 5 && !(r.f.id === 't:alk2' && ids.has('t:alk'))) };
   const jt = TODAY(), jd = jEdit(jt);
+  const jy = addD(jt, -1), jdy = jEdit(jy);
+  const quickY = QUICK_Y.map(id => chipHtml(tagById(id), jdy, jy)).join('');
   const quick = QUICK.map(id => chipHtml(tagById(id), jd, jt)).join('');
   const lastAct = a.activity_name ? `<div class="sm t2" style="margin-top:var(--sp-3)">Poslední aktivita: <b>${esc(a.activity_name)}</b> · ${esc(dShort(String(a.start_time_local || '').slice(0, 10)))}${a.duration_min ? ' · ' + fmt(a.duration_min) + ' min' : ''}${a.avg_hr ? ' · Ø TF ' + fmt(a.avg_hr) : ''}</div>` : '';
   $('p-dnes').innerHTML = `
@@ -581,7 +585,10 @@ function renderDnes() {
     ${tile('Fitness věk', fa == null ? '—' : fmt(fa, 1), 'let', faP, `chronologický ${fmt(f.chronological_age)}`, '')}
   </div>
   <div class="grid g-2">
-    <div class="card"><div class="card-h"><div class="card-t">Deník dnes</div><span class="save-st" id="jst"></span></div>
+    <div class="card"><div class="card-h"><div class="card-t">Rychlý deník</div><span class="save-st" id="jst"></span></div>
+      <div class="qday"><b>Včera</b><span class="muted xs">${esc(dShort(jy))} · večer a noc před dnešním ránem</span></div>
+      <div class="chips" id="quick-y">${quickY}</div>
+      <div class="qday"><b>Dnes</b><span class="muted xs">${esc(dShort(jt))} · během dne</span></div>
       ${pcHtml(jt, R)}
       <div class="chips" id="quick">${quick}</div>
       ${nutLine(jt) ? `<div class="sm" style="margin-top:var(--sp-3)">Jídlo: ${nutLine(jt)}</div>` : ''}
@@ -591,6 +598,7 @@ function renderDnes() {
   </div>
   <div class="card"><div class="card-h"><div class="card-t">Budíky</div><span class="card-s"><span class="g7">▍Ø 7 dní</span> <span class="g14">▍Ø 14 dní</span></span></div>
     <div class="gauges">${gaugesHtml({ hrv: num(hrv), hr: num(hr), bb: num(bb), sc: sc, ss: num(ss), fa: fa, ca: f.chronological_age })}</div></div>`;
+  bindChips($('quick-y'), jy);
   bindChips($('quick'), jt);
   bindPc($('p-dnes'), jt, renderDnes);
   document.querySelectorAll('#p-dnes [data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));

@@ -92,6 +92,13 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       let js = await calls(page, 'ghJournalSet');
       const today = await page.evaluate(() => TODAY());
       ok('Dnes: rychlý štítek uloží deník (ghJournalSet)', js.length === 1 && js[0][2] === today && JSON.parse(js[0][3]).t.kava_pozde === 1, JSON.stringify(js).slice(0, 200));
+      // VČERA: štítek ze sekce Včera se zapíše na včerejší datum
+      const yday = await page.evaluate(() => addD(TODAY(), -1));
+      ok('Dnes: sekce Včera a Dnes s datem', /Včera/.test(await txt(page, '#p-dnes .qday')) && (await page.$$('#p-dnes .qday')).length === 2 && await page.$('#quick-y [data-t="pozde_spat"]') !== null && await page.$('#quick [data-t="pozde_spat"]') === null);
+      await page.click('#quick-y [data-t="pozde_spat"]'); await page.waitForTimeout(900);
+      const jy2 = (await calls(page, 'ghJournalSet')).pop();
+      ok('Dnes: štítek ve Včera se uloží na včerejšek', jy2 && jy2[2] === yday && JSON.parse(jy2[3]).t.pozde_spat === 1, JSON.stringify(jy2).slice(0, 200));
+      await page.click('#quick-y [data-t="pozde_spat"]'); await page.waitForTimeout(900);
       // souběh: mezitím přišel záznam z chatu → stránka převezme stav serveru, nic nepřepíše
       await page.evaluate(() => { window.__CONFLICT__ = { t: { alk: 1, kava_pozde: 1 }, m: [{ s: 'ob', h: '12:30', w: 'z chatu' }], src: 'chat', at: '2026-10-30T15:00:00.000Z' }; });
       await page.click('#quick [data-t="stres"]'); await page.waitForTimeout(900);

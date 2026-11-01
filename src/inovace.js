@@ -52,6 +52,11 @@ const INOV = [
     co: 'Ráno upozornění, když se několik hodnot najednou odchýlí od tvého normálu — často den dva předtím, než nemoc ucítíš. Víš, že máš ubrat.',
     jak: 'Dýchání v noci, klidová TF a HRV proti tvému průměru 30 dní; jedna odchylka nic, dvě a víc současně = „drobné“ / „výrazné“ známky (princip Oura Symptom Radar, teplotu Garmin přes API nedává). Bez vyplňování, orientační — ne diagnóza.',
     vypl: 0, zdroj: 'Oura — Symptom Radar', url: 'https://ouraring.com/blog/symptom-radar/', st: 'navrh' },
+  { id: 'I-011', d: '2026-11-01', t: 'Rychlý deník: Včera a Dnes zvlášť',
+    co: 'Na Dnes je rychlé odklikání rozdělené na VČERA (alkohol, pozdní večeře, káva po 14 h, stres, pozdě do postele, obrazovka) a DNES (alkohol, káva, stres, otužování, meditace, nemoc). U každého je datum, takže je jasné, na který den štítek platí.',
+    jak: 'Dnes → Rychlý deník: Včera nahoře (zapisuje na včerejší datum), pod ním Dnes. Večerní věci vyplníš ráno zpětně jedním klepnutím.',
+    vypl: 0, zdroj: 'podnět Pavla 1.11.2026', url: '', st: 'zavedeno', done: '2026-11-01',
+    why: 'src/app.js QUICK_Y / QUICK, bindChips(#quick-y, včera), test t_dashboard „štítek ve Včera se uloží na včerejšek“', pavel: '' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
