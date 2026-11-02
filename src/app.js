@@ -226,8 +226,9 @@ function supOn(d, id) { const j = jDay(d) || {}, s = supCfg(id); if ((j.sup || [
 // pravidelné štítky (2.11.2026, podnět Pavla: „ráno pravidelně uzemnění a dýchání“): cfg.treg = { id štítku: { from, h } } → od data `from` je štítek
 // (ano / ne, ne počítadla) každý den zapnutý sám; vynechání = den.tx (seznam vypnutých). Platí pro vestavěné i vlastní štítky.
 const tagReg = id => { const r = (JR.cfg.treg || {})[id]; return r && /^\d{4}-\d{2}-\d{2}$/.test(r.from || '') ? r : null; };
-const tagRegDay = (id, d) => { const r = tagReg(id), t = tagById(id); return !!(r && t && !t.c && d >= r.from && d <= TODAY()); };
-function tagVal(d, id, j) { j = j || jDay(d) || {}; const v = (j.t || {})[id] || 0; if (v > 0) return v; return tagRegDay(id, d) && !(j.tx || []).includes(id) ? 1 : 0; }
+// počítadla (káva, alkohol, meditace) mají navíc výchozí počet r.n (káva 1×) a text množství r.q (např. „12 g mleté kávy“)
+const tagRegDay = (id, d) => { const r = tagReg(id), t = tagById(id); return !!(r && t && d >= r.from && d <= TODAY()); };
+function tagVal(d, id, j) { j = j || jDay(d) || {}; const v = (j.t || {})[id] || 0; if (v > 0) return v; if (!tagRegDay(id, d) || (j.tx || []).includes(id)) return 0; const t = tagById(id); return t && t.c ? (+tagReg(id).n > 0 ? +tagReg(id).n : t.c) : 1; }
 // množství doplňků (1.11.2026, podnět Pavla: „chybí sloupec kolik, omegu si dávám 2× denně“): cfg.sup[].q = výchozí množství na den (text ≤ 20 znaků),
 // den.sq { id: text } = množství jen pro ten den (přepíše výchozí)
 const Q_MAX = 20;
@@ -613,14 +614,14 @@ function renderDnes() {
 // ── čipy deníku ──
 function chipHtml(t, j, d) {
   if (!t) return '';
-  const v = tagVal(d, t.id, j), rg = tagReg(t.id) && !t.c ? ' <span class="reg" title="Pravidelný štítek — zapnutý sám, klepnutím označíš vynechání">⟳</span>' : '';
-  if (t.c) return `<span class="chip${v ? ' on' : ''}" data-t="${t.id}" data-c="${t.c}">${esc(t.l)}<span class="cnt"><button type="button" data-a="-" aria-label="méně">−</button><b>${v ? v : 0}</b><button type="button" data-a="+" aria-label="více">+</button></span>${t.u ? '<span class="xs muted">' + esc(t.u) + '</span>' : ''}</span>`;
+  const v = tagVal(d, t.id, j), rg = tagReg(t.id) ? ' <span class="reg" title="Pravidelný štítek — zapnutý sám' + (tagReg(t.id).q ? ' (' + esc(tagReg(t.id).q) + ')' : '') + (t.c ? '' : ', klepnutím označíš vynechání') + '">⟳</span>' : '';
+  if (t.c) return `<span class="chip${v ? ' on' : ''}" data-t="${t.id}" data-c="${t.c}">${esc(t.l)}<span class="cnt"><button type="button" data-a="-" aria-label="méně">−</button><b>${v ? v : 0}</b><button type="button" data-a="+" aria-label="více">+</button></span>${t.u ? '<span class="xs muted">' + esc(t.u) + '</span>' : ''}${rg}</span>`;
   return `<button type="button" class="chip${v ? ' on' : ''}" data-t="${t.id}" aria-pressed="${v ? 'true' : 'false'}">${esc(t.l)}${rg}</button>`;
 }
 function bindChips(root, d) {
   root.querySelectorAll('[data-t]').forEach(el => {
     const id = el.dataset.t, step = +el.dataset.c || 0;
-    const upd = delta => { const j = jEdit(d), v = Math.max(0, (j.t[id] || 0) + delta); j.t[id] = v; jPut(d, j); const nj = jEdit(d), nv = nj.t[id] || 0;
+    const upd = delta => { const j = jEdit(d), v = Math.max(0, tagVal(d, id, j) + delta); j.t[id] = v; if (tagRegDay(id, d)) { j.tx = (j.tx || []).filter(x => x !== id); if (!v) j.tx.push(id); } jPut(d, j); const nj = jEdit(d), nv = tagVal(d, id, nj);
       el.classList.toggle('on', nv > 0); if (step) el.querySelector('b').textContent = nv; else el.setAttribute('aria-pressed', nv ? 'true' : 'false'); };
     if (step) el.querySelectorAll('button[data-a]').forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); upd(b.dataset.a === '+' ? step : -step); }));
     else el.addEventListener('click', () => { const j = jEdit(d);
@@ -908,9 +909,9 @@ function renderNast() {
       <div class="row-add"><input id="ntag" placeholder="např. Masáž, Pozdní kofein z čaje" maxlength="40"><button class="btn" id="atag">Přidat</button></div></div>
   </div>
   <div class="card"><div class="card-h"><div class="card-t">Pravidelné štítky</div><span class="card-s">zapnuté každý den samy</span></div>
-    <div class="sm t2" style="margin-bottom:var(--sp-2)">Co děláš každý den (např. ranní dýchání, uzemnění). Od zvoleného dne je štítek v Deníku zapnutý sám a počítá se do Vlivů; vynechání označíš klepnutím na štítek. Počítadla (alkohol, káva, meditace) se tu nedají.</div>
-    <div class="sup-ed" id="ltreg">${Object.keys(JR.cfg.treg || {}).filter(id => tagReg(id) && tagById(id)).map(id => { const r = tagReg(id), t = tagById(id); return `<div class="sup-row"><span class="sup-n">${esc(t.l)}</span><span class="sm t2">od ${esc(dShort(r.from))}</span><input class="sup-h" data-th2="${esc(id)}" value="${esc(r.h || '')}" placeholder="čas (např. 6:15)" maxlength="40" aria-label="Čas — ${esc(t.l)}"><button class="x" data-trm="${esc(id)}" aria-label="Zrušit pravidelný štítek">✕</button></div>`; }).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
-    <div class="row-add"><select id="ntreg" aria-label="Štítek">${TAGS.flatMap(g => g.items).concat((JR.cfg.tags || []).map(c => ({ id: c.id, l: c.l }))).filter(t => !t.c && !tagReg(t.id)).map(t => `<option value="${esc(t.id)}">${esc(t.l)}</option>`).join('')}</select><button class="btn" id="atreg">Přidat</button></div></div>
+    <div class="sm t2" style="margin-bottom:var(--sp-2)">Co děláš každý den (např. ranní dýchání, uzemnění). Od zvoleného dne je štítek v Deníku zapnutý sám a počítá se do Vlivů; vynechání označíš klepnutím na štítek. U počítadel (káva, alkohol, meditace) nastavíš výchozí počet denně; množství je poznámka (např. 12 g mleté kávy).</div>
+    <div class="sup-ed" id="ltreg">${Object.keys(JR.cfg.treg || {}).filter(id => tagReg(id) && tagById(id)).map(id => { const r = tagReg(id), t = tagById(id); return `<div class="sup-row"><span class="sup-n">${esc(t.l)}</span><span class="sm t2">od ${esc(dShort(r.from))}</span>${t.c ? `<input class="sup-q" data-trn="${esc(id)}" value="${esc(r.n > 0 ? r.n : t.c)}" inputmode="numeric" maxlength="3" aria-label="Kolik ${esc(t.u || '')} denně — ${esc(t.l)}"><span class="sm t2">${esc(t.u || '')}</span>` : ''}<input class="sup-q" style="flex:0 0 96px" data-trq="${esc(id)}" value="${esc(r.q || '')}" placeholder="množství" maxlength="20" aria-label="Množství — ${esc(t.l)}"><input class="sup-h" data-th2="${esc(id)}" value="${esc(r.h || '')}" placeholder="čas (např. 6:15)" maxlength="40" aria-label="Čas — ${esc(t.l)}"><button class="x" data-trm="${esc(id)}" aria-label="Zrušit pravidelný štítek">✕</button></div>`; }).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
+    <div class="row-add"><select id="ntreg" aria-label="Štítek">${TAGS.flatMap(g => g.items).concat((JR.cfg.tags || []).map(c => ({ id: c.id, l: c.l }))).filter(t => !tagReg(t.id)).map(t => `<option value="${esc(t.id)}">${esc(t.l)}</option>`).join('')}</select><button class="btn" id="atreg">Přidat</button></div></div>
   <div class="card"><div class="card-h"><div class="card-t">Prahové hodnoty</div><button class="btn btn-ghost" id="treset">Obnovit výchozí</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Metrika</th><th>Práh</th><th>Stav</th><th>Akce</th></tr></thead><tbody>
     ${Object.entries(T).map(([k, r]) => `<tr><td>${esc(r.label)}</td><td><input type="number" step="any" data-th="${k}" value="${r.val}"> <span class="xs muted">${esc(r.unit)}</span></td>
@@ -934,6 +935,8 @@ function renderNast() {
   $('lsup').querySelectorAll('[data-regh]').forEach(i => i.onchange = () => { const s = supCfg(i.dataset.regh); if (s && s.reg) { s.reg.h = i.value.trim().slice(0, 40); jCfgSave(); } });
   $('atreg').onclick = () => { const id = $('ntreg').value; if (!id) return; JR.cfg.treg = JR.cfg.treg || {}; JR.cfg.treg[id] = { from: TODAY(), h: '' }; jCfgSave(); renderNast(); };
   $('ltreg').querySelectorAll('[data-th2]').forEach(i => i.onchange = () => { const r = tagReg(i.dataset.th2); if (r) { r.h = i.value.trim().slice(0, 40); jCfgSave(); } });
+  $('ltreg').querySelectorAll('[data-trn]').forEach(i => i.onchange = () => { const r = tagReg(i.dataset.trn), n = parseInt(i.value, 10); if (!r) return; if (n > 0 && n <= 999) r.n = n; else i.value = r.n || tagById(i.dataset.trn).c; jCfgSave(); });
+  $('ltreg').querySelectorAll('[data-trq]').forEach(i => i.onchange = () => { const r = tagReg(i.dataset.trq); if (!r) return; const v = i.value.trim().slice(0, 20); if (v) r.q = v; else delete r.q; jCfgSave(); });
   $('ltreg').querySelectorAll('[data-trm]').forEach(b => b.onclick = () => { delete JR.cfg.treg[b.dataset.trm]; if (!Object.keys(JR.cfg.treg).length) delete JR.cfg.treg; jCfgSave(); renderNast(); });
   [['lsup', 'sup'], ['ltag', 'tags']].forEach(([el, key]) => $(el).querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { JR.cfg[key] = (JR.cfg[key] || []).filter(x => x.id !== b.dataset.rm); jCfgSave(); renderNast(); }));
   $('p-nast').querySelectorAll('[data-th]').forEach(i => i.addEventListener('change', () => { const v = parseFloat(i.value); if (isNaN(v)) { i.value = T[i.dataset.th].val; return; } T[i.dataset.th].val = v; saveT(); toast('Práh uložen'); }));

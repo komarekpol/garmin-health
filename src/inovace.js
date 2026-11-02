@@ -59,7 +59,7 @@ const INOV = [
     why: 'src/app.js QUICK_Y / QUICK, bindChips(#quick-y, včera), test t_dashboard „štítek ve Včera se uloží na včerejšek“', pavel: '' },
   { id: 'I-012', d: '2026-11-02', t: 'Pravidelné štítky (ranní rutina)',
     co: 'Co děláš každý den (ranní dýchání, uzemnění), je v Deníku od zvoleného dne zapnuté samo a počítá se do Vlivů. Vynecháš jedním klepnutím.',
-    jak: 'Nastavení → Pravidelné štítky: vyber štítek, případně čas. V Deníku má štítek značku ⟳. Z chatu: newTags[].reg { from, h } (vyžaduje nový .gs).',
+    jak: 'Nastavení → Pravidelné štítky: vyber štítek, případně čas. V Deníku má štítek značku ⟳. U počítadel (káva) výchozí počet a množství (např. 12 g mleté kávy). Z chatu: newTags[].reg { from, h, n, q } (vyžaduje nový .gs).',
     vypl: 0, zdroj: 'podnět Pavla 2.11.2026', url: '', st: 'zavedeno', done: '2026-11-02',
     why: 'cfg.treg + den.tx (src/app.js tagReg, tagVal, bindChips, factors), schránka newTags reg (apps-script inboxApply_), testy t_dashboard + t_gas_sync', pavel: 'Pro zápis z chatu vložit nový .gs (jinak stačí klikat v Nastavení).' },
 ];
