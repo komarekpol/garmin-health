@@ -273,6 +273,22 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.click('#jsup [data-s="vitamin_d3"]'); await page.waitForTimeout(1000);
       dj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
       ok('Pravidelný doplněk: druhé klepnutí vrátí (sx pryč)', !dj.sx && await page.$eval('#jsup [data-s="vitamin_d3"]', e => e.classList.contains('on')), JSON.stringify(dj));
+      // pravidelný štítek (2.11.2026): Nastavení → Pravidelné štítky; v Deníku zapnutý sám (⟳), klepnutí = vynechání (tx), Vlivy ho berou jako 1
+      await go(page, 'nast');
+      await page.selectOption('#ntreg', 'dech'); await page.click('#atreg'); await page.waitForTimeout(250);
+      await page.fill('[data-th2="dech"]', '6:15'); await page.dispatchEvent('[data-th2="dech"]', 'change'); await page.waitForTimeout(250);
+      const cft = await calls(page, 'ghJournalCfg'), tr = JSON.parse(cft[cft.length - 1][2]).treg;
+      ok('Pravidelný štítek: Nastavení uloží cfg.treg s časem, počítadla se nenabízejí', tr && tr.dech && tr.dech.from === await page.evaluate(() => TODAY()) && tr.dech.h === '6:15' && !(await page.$eval('#ntreg', e => [...e.options].some(o => ['alk', 'kava', 'med'].includes(o.value)))), JSON.stringify(tr));
+      await go(page, 'denik'); await page.evaluate(() => { UI.jday = null; renderDenik(); });
+      ok('Pravidelný štítek: v Deníku dnes zapnutý sám (⟳)', await page.$eval('[data-t="dech"]', e => e.classList.contains('on') && /⟳/.test(e.textContent)));
+      ok('Pravidelný štítek: Vlivy ho berou jako 1 i bez zápisu dne', await page.evaluate(() => tagVal(TODAY(), 'dech') === 1 && factors().find(f => f.id === 't:dech').f(TODAY()) === 1));
+      await page.click('[data-t="dech"]'); await page.waitForTimeout(1000);
+      dj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Pravidelný štítek: klepnutí = vynechání (tx), ne v t', (dj.tx || []).includes('dech') && !(dj.t || {}).dech && await page.$eval('[data-t="dech"]', e => !e.classList.contains('on')), JSON.stringify(dj));
+      await page.click('[data-t="dech"]'); await page.waitForTimeout(1000);
+      dj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
+      ok('Pravidelný štítek: druhé klepnutí vrátí (tx pryč)', !dj.tx && await page.$eval('[data-t="dech"]', e => e.classList.contains('on')), JSON.stringify(dj));
+      await go(page, 'nast');
       // množství doplňků (1.11.2026): Nastavení „Kolik“ → chip v Deníku; Množství dnes přepíše jen ten den, shoda s výchozím = zpět
       await go(page, 'nast');
       await page.fill('[data-qn="vitamin_d3"]', '4'); await page.dispatchEvent('[data-qn="vitamin_d3"]', 'change'); await page.selectOption('[data-qu="vitamin_d3"]', 'kapsle'); await page.waitForTimeout(250);

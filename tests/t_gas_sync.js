@@ -278,6 +278,15 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
   G.folder.createFile('garmin-denik-vstup 2026-10-30 1804.json', JSON.stringify({ items: [{ d: Y, newSup: [{ id: 'd3', l: 'Vitamín D3', q: '2 kapsle' }], sq: { d3: '1' } }] }));
   g3 = JSON.parse(G.env.ghGet('k1'));
   ok('schránka: množství doplňku (q výchozí v nastavení, sq pro den, reg zůstane)', g3.journal.cfg.sup.find(x => x.id === 'd3').q === '2 kapsle' && g3.journal.cfg.sup.find(x => x.id === 'd3').reg && g3.journal.days[Y].sq && g3.journal.days[Y].sq.d3 === '1', JSON.stringify(g3.journal.days[Y]));
+  // pravidelný štítek (2.11.2026): newTags[].reg → cfg.treg, neplatné from odmítnuto, reg: null zruší
+  G.folder.createFile('garmin-denik-vstup 2026-11-02 0901.json', JSON.stringify({ items: [{ d: Y, newTags: [{ id: 'uzemneni', l: 'Uzemnění', reg: { from: Y, h: '6:15' } }] }] }));
+  g3 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: pravidelný štítek (reg) → cfg.treg', g3.journal.cfg.treg && g3.journal.cfg.treg.uzemneni && g3.journal.cfg.treg.uzemneni.from === Y && g3.journal.cfg.treg.uzemneni.h === '6:15', JSON.stringify(g3.journal.cfg));
+  G.folder.createFile('garmin-denik-vstup 2026-11-02 0902.json', JSON.stringify({ items: [{ d: Y, newTags: [{ id: 'uzemneni', l: 'Uzemnění', reg: { from: 'zítra' } }] }] }));
+  ok('schránka: neplatné reg.from u štítku odmítnuto', /reg\.from/.test(JSON.parse(G.env.ghGet('k1')).inboxErr || ''));
+  G.folder.createFile('garmin-denik-vstup 2026-11-02 0903.json', JSON.stringify({ items: [{ d: Y, newTags: [{ id: 'uzemneni', l: 'Uzemnění', reg: null }] }] }));
+  g3 = JSON.parse(G.env.ghGet('k1'));
+  ok('schránka: reg: null štítek zruší', !g3.journal.cfg.treg, JSON.stringify(g3.journal.cfg.treg));
   ok('schránka: výtah garmin-jidla.json jen s databází', JSON.parse(G.file('garmin-jidla.json').content).food.ovesna_kase.l === 'Ovesná kaše s mlékem' && !/days/.test(G.file('garmin-jidla.json').content));
   G.folder.createFile('garmin-denik-vstup 2026-10-30 1801.json', JSON.stringify({ items: [{ d: Y, food: [{ id: 'ovesna_kase', l: 'Jiná', k: 999 }] }] }));
   g3 = JSON.parse(G.env.ghGet('k1'));

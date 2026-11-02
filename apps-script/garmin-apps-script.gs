@@ -268,6 +268,8 @@ function inboxApply_(j, x) {
     if (!k || !l) return; const arr = j.cfg[b] = j.cfg[b] || []; let e = arr.find(z => z.id === k); if (!e) { e = { id: k, l: l }; arr.push(e); }
     // pravidelný doplněk (I-007): reg { from: RRRR-MM-DD, h: 'časy' } — doplněk je od data `from` každý den zaškrtnutý sám (výjimky den.sx); reg: null = zrušit
     if (a === 'newSup' && o && 'reg' in o) { if (o.reg === null) delete e.reg; else if (o.reg && isYmd_(String(o.reg.from || '')) && String(o.reg.from).length === 10) e.reg = { from: String(o.reg.from), h: String(o.reg.h || '').slice(0, 40) }; else throw new Error('newSup ' + k + ': neplatné reg.from'); }
+    // pravidelný štítek (2.11.2026): newTags[].reg { from, h } → cfg.treg[id]; reg: null = zrušit
+    if (a === 'newTags' && o && 'reg' in o) { j.cfg.treg = j.cfg.treg || {}; if (o.reg === null) delete j.cfg.treg[k]; else if (o.reg && isYmd_(String(o.reg.from || '')) && String(o.reg.from).length === 10) j.cfg.treg[k] = { from: String(o.reg.from), h: String(o.reg.h || '').slice(0, 40) }; else throw new Error('pravidelný štítek „' + k + '“: reg.from musí být RRRR-MM-DD'); if (!Object.keys(j.cfg.treg).length) delete j.cfg.treg; }
     if (a === 'newSup' && o && 'q' in o) { const q = String(o.q == null ? '' : o.q).trim().slice(0, 20); if (q) e.q = q; else delete e.q; } }));   // q = výchozí množství na den
 
   day.at = new Date().toISOString(); day.src = 'chat';
