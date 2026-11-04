@@ -117,7 +117,7 @@ async function fetchData() {
 function migrateLocal(st) { ST_KEYS.forEach(k => { if (!(k in st)) { let v = null; try { v = localStorage.getItem(k); } catch (e) {} if (v != null) stQueue(k, v); } }); }
 function take(r, src) {
   stApply(r.settings);
-  if (r.journal) JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {}, food: r.journal.food || {} };
+  if (r.journal) { JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {}, food: r.journal.food || {} }; try { mregApply(); } catch (e) {} }
   if (!r.ok || !r.data) throw new Error(r.error || 'Data se nepodařilo načíst');
   if (r.data.error) throw new Error(r.data.error);
   DATA = r.data;
@@ -229,6 +229,18 @@ const tagReg = id => { const r = (JR.cfg.treg || {})[id]; return r && /^\d{4}-\d
 // počítadla (káva, alkohol, meditace) mají navíc výchozí počet r.n (káva 1×) a text množství r.q (např. „12 g mleté kávy“)
 const tagRegDay = (id, d) => { const r = tagReg(id), t = tagById(id); return !!(r && t && d >= r.from && d <= TODAY()); };
 function tagVal(d, id, j) { j = j || jDay(d) || {}; const v = (j.t || {})[id] || 0; if (v > 0) return v; if (!tagRegDay(id, d) || (j.tx || []).includes(id)) return 0; const t = tagById(id); return t && t.c ? (+tagReg(id).n > 0 ? +tagReg(id).n : t.c) : 1; }
+// pravidelná jídla (4.11.2026): cfg.mreg [{ id, s druh, h čas, from, wd [dny 0–6, výchozí Po–Pá], it [{f,g}] }] → chybějící dny (max 14 zpět, dnes až po čase h) se doplní jako jídlo s r:id;
+// smazané jídlo si den pamatuje v den.mx (znovu se nedoplní); den, který už má jídlo stejného druhu, se nepřepisuje
+const mregList = () => (JR.cfg.mreg || []).filter(r => r && r.id && /^\d{4}-\d{2}-\d{2}$/.test(r.from || '') && (r.it || []).length);
+function mregApply() {
+  const T = TODAY(), now = nowHM(); let n = 0;
+  mregList().forEach(r => { const wd = r.wd || [1, 2, 3, 4, 5];
+    for (let k = 0; k < 14; k++) { const d = addD(T, -k); if (d < r.from) break;
+      if (!wd.includes(new Date(d + 'T12:00:00').getDay()) || (d === T && r.h && now < r.h)) continue;
+      const j = JR.days[d]; if (j && ((j.mx || []).includes(r.id) || (j.m || []).some(m => m.r === r.id || m.s === r.s))) continue;
+      const jj = jEdit(d); jj.m.push({ s: r.s, h: r.h || '', w: '', r: r.id, it: r.it.map(i => ({ f: i.f, g: i.g })) }); jPut(d, jj); n++; } });
+  return n;
+}
 // množství doplňků (1.11.2026, podnět Pavla: „chybí sloupec kolik, omegu si dávám 2× denně“): cfg.sup[].q = výchozí množství na den (text ≤ 20 znaků),
 // den.sq { id: text } = množství jen pro ten den (přepíše výchozí)
 const Q_MAX = 20;
@@ -243,13 +255,14 @@ function supSplit(q, h) { const n = parseFloat(qParse(q).n.replace(',', '.')), t
   if (!(n > 0) || t < 2 || (n / t * 2) % 1) return ''; return Array(t).fill(String(n / t).replace('.', ',')).join(' + '); }
 const supSplitTxt = (s, q) => { const x = supSplit(q, s && s.reg && s.reg.h); return x ? ' (' + x + ')' : ''; };
 const mealHas = m => m && (m.w || m.h || (m.it || []).length);
-function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !(j.tx || []).length && !Object.keys(j.sq || {}).length && !(j.n || '').trim() && j.kg == null && j.bf == null && j.pc == null; }
+function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !(j.tx || []).length && !(j.mx || []).length && !Object.keys(j.sq || {}).length && !(j.n || '').trim() && j.kg == null && j.bf == null && j.pc == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
   Object.keys(j.t).forEach(k => { if (!(j.t[k] > 0)) delete j.t[k]; });
   j.m = (j.m || []).filter(mealHas);
   if (j.tx && !j.tx.length) delete j.tx;
+  if (j.mx && !j.mx.length) delete j.mx;
   if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;
   jStatus('Ukládám…');
   clearTimeout(jSaveT[d] && jSaveT[d].t); jSaveT[d] = { _pending: true, t: setTimeout(() => { jSaveT[d]._pending = false; jFlush(d); }, 700) };
@@ -911,6 +924,7 @@ function renderNast() {
   <div class="card"><div class="card-h"><div class="card-t">Pravidelné štítky</div><span class="card-s">zapnuté každý den samy</span></div>
     <div class="sm t2" style="margin-bottom:var(--sp-2)">Co děláš každý den (např. ranní dýchání, uzemnění). Od zvoleného dne je štítek v Deníku zapnutý sám a počítá se do Vlivů; vynechání označíš klepnutím na štítek. U počítadel (káva, alkohol, meditace) nastavíš výchozí počet denně; množství je poznámka (např. 12 g mleté kávy).</div>
     <div class="sup-ed" id="ltreg">${Object.keys(JR.cfg.treg || {}).filter(id => tagReg(id) && tagById(id)).map(id => { const r = tagReg(id), t = tagById(id); return `<div class="sup-row"><span class="sup-n">${esc(t.l)}</span><span class="sm t2">od ${esc(dShort(r.from))}</span>${t.c ? `<input class="sup-q" data-trn="${esc(id)}" value="${esc(r.n > 0 ? r.n : t.c)}" inputmode="numeric" maxlength="3" aria-label="Kolik ${esc(t.u || '')} denně — ${esc(t.l)}"><span class="sm t2">${esc(t.u || '')}</span>` : ''}<input class="sup-q" style="flex:0 0 96px" data-trq="${esc(id)}" value="${esc(r.q || '')}" placeholder="množství" maxlength="20" aria-label="Množství — ${esc(t.l)}"><input class="sup-h" data-th2="${esc(id)}" value="${esc(r.h || '')}" placeholder="čas (např. 6:15)" maxlength="40" aria-label="Čas — ${esc(t.l)}"><button class="x" data-trm="${esc(id)}" aria-label="Zrušit pravidelný štítek">✕</button></div>`; }).join('') || '<span class="muted sm">Zatím žádné.</span>'}</div>
+    <h3 class="sub">Pravidelná jídla</h3><div class="sup-ed" id="lmreg">${mregList().map(r => `<div class="sup-row"><span class="sup-n">${esc((MEAL_S.find(x => x[0] === r.s) || [0, r.s])[1])}</span><span class="sm t2">od ${esc(dShort(r.from))} · ${(r.wd || [1, 2, 3, 4, 5]).length === 5 ? 'Po–Pá' : (r.wd || []).length + ' dní v týdnu'} · ${r.it.length} položek</span><input class="sup-h" data-mh="${esc(r.id)}" value="${esc(r.h || '')}" placeholder="čas (09:45)" maxlength="5" aria-label="Čas pravidelného jídla"><button class="x" data-mm="${esc(r.id)}" aria-label="Zrušit pravidelné jídlo">✕</button></div>`).join('') || '<span class="muted sm">Zatím žádná — v záložce Jídlo u jídla „Opakovat Po–Pá“.</span>'}</div>
     <div class="row-add"><select id="ntreg" aria-label="Štítek">${TAGS.flatMap(g => g.items).concat((JR.cfg.tags || []).map(c => ({ id: c.id, l: c.l }))).filter(t => !tagReg(t.id)).map(t => `<option value="${esc(t.id)}">${esc(t.l)}</option>`).join('')}</select><button class="btn" id="atreg">Přidat</button></div></div>
   <div class="card"><div class="card-h"><div class="card-t">Prahové hodnoty</div><button class="btn btn-ghost" id="treset">Obnovit výchozí</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Metrika</th><th>Práh</th><th>Stav</th><th>Akce</th></tr></thead><tbody>
@@ -938,6 +952,8 @@ function renderNast() {
   $('ltreg').querySelectorAll('[data-trn]').forEach(i => i.onchange = () => { const r = tagReg(i.dataset.trn), n = parseInt(i.value, 10); if (!r) return; if (n > 0 && n <= 999) r.n = n; else i.value = r.n || tagById(i.dataset.trn).c; jCfgSave(); });
   $('ltreg').querySelectorAll('[data-trq]').forEach(i => i.onchange = () => { const r = tagReg(i.dataset.trq); if (!r) return; const v = i.value.trim().slice(0, 20); if (v) r.q = v; else delete r.q; jCfgSave(); });
   $('ltreg').querySelectorAll('[data-trm]').forEach(b => b.onclick = () => { delete JR.cfg.treg[b.dataset.trm]; if (!Object.keys(JR.cfg.treg).length) delete JR.cfg.treg; jCfgSave(); renderNast(); });
+  $('lmreg').querySelectorAll('[data-mh]').forEach(i => i.onchange = () => { const r = (JR.cfg.mreg || []).find(x => x.id === i.dataset.mh); if (r && /^\d{2}:\d{2}$/.test(i.value.trim())) { r.h = i.value.trim(); jCfgSave(); } else i.value = r ? r.h || '' : ''; });
+  $('lmreg').querySelectorAll('[data-mm]').forEach(b => b.onclick = () => { JR.cfg.mreg = (JR.cfg.mreg || []).filter(x => x.id !== b.dataset.mm); if (!JR.cfg.mreg.length) delete JR.cfg.mreg; jCfgSave(); renderNast(); });
   [['lsup', 'sup'], ['ltag', 'tags']].forEach(([el, key]) => $(el).querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { JR.cfg[key] = (JR.cfg[key] || []).filter(x => x.id !== b.dataset.rm); jCfgSave(); renderNast(); }));
   $('p-nast').querySelectorAll('[data-th]').forEach(i => i.addEventListener('change', () => { const v = parseFloat(i.value); if (isNaN(v)) { i.value = T[i.dataset.th].val; return; } T[i.dataset.th].val = v; saveT(); toast('Práh uložen'); }));
   $('treset').onclick = () => { stDel('garmin_thresholds'); T = loadT(); renderNast(); toast('Výchozí prahy obnoveny'); };

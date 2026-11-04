@@ -62,6 +62,11 @@ const INOV = [
     jak: 'Nastavení → Pravidelné štítky: vyber štítek, případně čas. V Deníku má štítek značku ⟳. U počítadel (káva) výchozí počet a množství (např. 12 g mleté kávy). Z chatu: newTags[].reg { from, h, n, q } (vyžaduje nový .gs).',
     vypl: 0, zdroj: 'podnět Pavla 2.11.2026', url: '', st: 'zavedeno', done: '2026-11-02',
     why: 'cfg.treg + den.tx (src/app.js tagReg, tagVal, bindChips, factors), schránka newTags reg (apps-script inboxApply_), testy t_dashboard + t_gas_sync', pavel: 'Pro zápis z chatu vložit nový .gs (jinak stačí klikat v Nastavení).' },
+  { id: 'I-013', d: '2026-11-04', t: 'Pravidelná jídla (snídaně Po–Pá)',
+    co: 'Jídlo, které jíš pořád stejně (např. snídaně), se každý pracovní den doplní samo, i s gramy a kcal. Smazáním jednoho dne se tam už nevrací.',
+    jak: 'Jídlo → u jídla „Opakovat Po–Pá“. Čas a zrušení v Nastavení → Pravidelná jídla. Den, který už má jídlo stejného druhu, se nepřepisuje.',
+    vypl: 0, zdroj: 'podnět Pavla 4.11.2026', url: '', st: 'zavedeno', done: '2026-11-04',
+    why: 'cfg.mreg + den.m[].r + den.mx (src/app.js mregApply, src/jidlo.js), test t_dashboard' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};

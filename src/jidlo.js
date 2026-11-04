@@ -98,7 +98,7 @@ function mealBlock(m, i) {
   const mk = (m.it || []).reduce((a, it) => { const v = itemNut(it); return a + (v ? v.k : 0); }, 0);
   return `<div class="fmeal" data-i="${i}"><div class="fmeal-h"><select aria-label="Jídlo">${MEAL_S.map(([k, l]) => `<option value="${k}"${m.s === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
     <input type="time" value="${esc(m.h || '')}" aria-label="Čas"><input class="fmeal-w" type="text" value="${esc(m.w || '')}" placeholder="poznámka (volitelně)" aria-label="Poznámka k jídlu">
-    <span class="fit-k">${mk ? kc(mk) + ' kcal' : ''}</span><button class="btn btn-ghost" data-rmm="${i}" aria-label="Odebrat jídlo">✕</button></div>${items}</div>`;
+    <span class="fit-k">${mk ? kc(mk) + ' kcal' : ''}</span>${(m.it || []).length ? (m.r ? '<span class="xs muted" title="Doplněno z pravidelného jídla">⟳</span>' : `<button class="btn btn-ghost" data-rep="${i}" title="Každý pracovní den doplnit samo">Opakovat Po–Pá</button>`) : ''}<button class="btn btn-ghost" data-rmm="${i}" aria-label="Odebrat jídlo">✕</button></div>${items}</div>`;
 }
 function foodDbHtml(use) {
   const q = (UI.fq || '').toLowerCase(), ids = Object.keys(JR.food || {}).filter(id => !q || JR.food[id].l.toLowerCase().includes(q))
@@ -141,8 +141,10 @@ function bindJidlo(d) {
     if (fi) { const g = Math.round(+e.target.value); if (g > 0 && g <= 3000) m.it[+fi.dataset.k].g = g; else { e.target.value = m.it[+fi.dataset.k].g; return; } }
     else { m.s = mb.querySelector('select').value; m.h = mb.querySelector('input[type=time]').value; m.w = mb.querySelector('.fmeal-w').value.slice(0, 200); }
     jPut(d, jj); if (fi) renderJidlo(); });
-  M.addEventListener('click', e => { const b = e.target.closest('[data-rmi],[data-rmm]'); if (!b) return; const mb = b.closest('.fmeal'), i = +mb.dataset.i, jj = jEdit(d);
-    if (b.dataset.rmm != null) jj.m.splice(i, 1); else jj.m[i].it.splice(+b.dataset.rmi, 1);
+  M.addEventListener('click', e => { const b = e.target.closest('[data-rmi],[data-rmm],[data-rep]'); if (!b) return; const mb = b.closest('.fmeal'), i = +mb.dataset.i, jj = jEdit(d);
+    if (b.dataset.rep != null) { const m = jj.m[i]; if (!m || !(m.it || []).length) return; const id = 'm' + Date.now().toString(36);
+      (JR.cfg.mreg = JR.cfg.mreg || []).push({ id: id, s: m.s, h: m.h || '', from: d, wd: [1, 2, 3, 4, 5], it: m.it.map(x => ({ f: x.f, g: x.g })) }); m.r = id; jPut(d, jj); jCfgSave(); mregApply(); renderJidlo(); toast('Každý pracovní den se doplní samo (Nastavení → Pravidelná jídla)'); return; }
+    if (b.dataset.rmm != null) { const m = jj.m[i]; if (m && m.r) (jj.mx = jj.mx || []).push(m.r); jj.m.splice(i, 1); } else jj.m[i].it.splice(+b.dataset.rmi, 1);
     jPut(d, jj); renderJidlo(); });
   // váha
   $('fkg').addEventListener('change', e => { const v = parseFloat(String(e.target.value).replace(',', '.')), jj = jEdit(d);

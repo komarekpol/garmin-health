@@ -288,6 +288,16 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.click('[data-t="dech"]'); await page.waitForTimeout(1000);
       dj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
       ok('Pravidelný štítek: druhé klepnutí vrátí (tx pryč)', !dj.tx && await page.$eval('[data-t="dech"]', e => e.classList.contains('on')), JSON.stringify(dj));
+      // pravidelná jídla (4.11.2026): mregApply doplní chybějící dny jídlem r:id, den s jídlem stejného druhu nechá, smazané (mx) se nevrací
+      const mr = await page.evaluate(() => { const T = TODAY(), d3 = addD(T, -3), d1 = addD(T, -1), bak = JSON.stringify(JR.days); [d3, addD(T, -2), T].forEach(d => { delete JR.days[d]; });
+        JR.days[d1] = { m: [{ s: 'sn', h: '08:00', w: 'vlastní' }] };
+        JR.cfg.mreg = [{ id: 'mt1', s: 'sn', h: '', from: d3, wd: [0, 1, 2, 3, 4, 5, 6], it: [{ f: 'ovesna_kase', g: 100 }] }];
+        const n1 = mregApply(), a = [d3, addD(T, -2), d1, T].map(d => ((JR.days[d] || {}).m || []).filter(m => m.r === 'mt1').length);
+        const j = jEdit(addD(T, -2)); j.mx = ['mt1']; j.m = []; jPut(addD(T, -2), j); const n2 = mregApply();
+        const r = { n1, a, n2, mx: (JR.days[addD(T, -2)] || {}).mx, d1m: JR.days[d1].m.length };
+        delete JR.cfg.mreg; JR.days = JSON.parse(bak); return r; });
+      ok('Pravidelná jídla: doplní chybějící dny, den s jídlem stejného druhu nechá', mr.n1 === 3 && mr.a.join() === '1,1,0,1' && mr.d1m === 1, JSON.stringify(mr));
+      ok('Pravidelná jídla: smazané jídlo (mx) se znovu nedoplní', mr.n2 === 0 && (mr.mx || []).includes('mt1'), JSON.stringify(mr));
       await go(page, 'nast');
       // pravidelné počítadlo (káva): výchozí počet + množství; v Deníku 1×, klepnutí na − = vynechání, + přičte
       await page.selectOption('#ntreg', 'kava'); await page.click('#atreg'); await page.waitForTimeout(250);
