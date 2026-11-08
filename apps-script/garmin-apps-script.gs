@@ -545,7 +545,11 @@ function sleepOf_(o) {
     body_battery_change: top(['bodyBatteryChange']), avg_overnight_hrv: top(['avgOvernightHrv']),
     sleep_score_overall: num_(ov && typeof ov === 'object' ? ov.value : ov) ?? v(['overallSleepScore', 'sleepScore']),
     sleep_score_feedback: pick_(dto, ['sleepScoreFeedback']), sleep_score_insight: pick_(dto, ['sleepScoreInsight']),
-    sleep_end_gmt: num_(pick_(dto, ['sleepEndTimestampGMT'])) };
+    sleep_end_gmt: num_(pick_(dto, ['sleepEndTimestampGMT'])),
+    // I-003: místní čas usnutí a probuzení (Garmin posílá ms „místního času jako UTC“) → minuty od půlnoci
+    sleep_start_min: locMin_(pick_(dto, ['sleepStartTimestampLocal'])), sleep_end_min: locMin_(pick_(dto, ['sleepEndTimestampLocal'])) };
+}
+function locMin_(ms) { ms = num_(ms); if (ms == null) return null; const d = new Date(ms); return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 function hrvOf_(o) {
   const s = o.hrvSummary || o, b = s.baseline || {};
@@ -714,7 +718,8 @@ function buildData_(H) {
     return { calendar_date: d, date: d, label: lbl(d), hours: s.sleep_time_seconds != null ? Math.round(s.sleep_time_seconds / 36) / 100 : null, score: s.sleep_score_overall ?? null,
       hr: s.resting_heart_rate ?? dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, bb_change: s.body_battery_change ?? dd.sleep_bb_change ?? null, stress: s.avg_sleep_stress ?? null,
       resp: s.average_respiration ?? null, hrv: h.last_night_avg ?? s.avg_overnight_hrv ?? null, deep_min: m(s.deep_sleep_seconds), rem_min: m(s.rem_sleep_seconds),
-      light_min: m(s.light_sleep_seconds), awake_min: m(s.awake_sleep_seconds) }; });
+      light_min: m(s.light_sleep_seconds), awake_min: m(s.awake_sleep_seconds),
+      bt: s.sleep_start_min ?? null, wt: s.sleep_end_min ?? null }; });   // I-003: usnutí / probuzení v minutách od půlnoci (místní čas)
   const hrv_history = ds.filter(d => H.days[d].h && H.days[d].h.last_night_avg != null).map(d => { const h = H.days[d].h;
     return { date: d, label: lbl(d), hrv: h.last_night_avg, avg7: h.weekly_avg ?? null, status: h.status ?? null, baseline_low: h.baseline_low ?? null, baseline_upper: h.baseline_upper ?? null }; });
   return { v: 1, source: 'garmin-personal-api', exported_at: new Date().toISOString(), updated_at: Utilities.formatDate(new Date(), 'Europe/Prague', 'HH:mm:ss'),

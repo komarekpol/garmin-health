@@ -111,6 +111,16 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       // I-002 Regenerace za týden: karta se stavem a čísly bez NaN
       const rc = await page.evaluate(() => recovOf());
       ok('Dnes: I-002 Regenerace za týden (stav + normál HRV)', rc && ['good', 'ok', 'amber', 'crit'].includes(rc.k) && rc.lo < rc.hi && /Regenerace za týden/.test(await txt(page, '#p-dnes')) && !/NaN/.test(await txt(page, '#p-dnes .recov')), JSON.stringify(rc));
+      // I-009 spánkový dluh, I-010 signál nemoci, I-003 okno usínání
+      const db = await page.evaluate(() => debtOf());
+      ok('Dnes: I-009 Spánkový dluh (číslo, potřeba 7–9 h, karta bez NaN)', db && db.d >= 0 && db.need.h >= 7 && db.need.h <= 9 && /Spánkový dluh/.test(await txt(page, '#p-dnes')) && !/NaN/.test(await txt(page, '#p-dnes .debt')), JSON.stringify(db));
+      ok('I-009: noci po 5 h → dluh roste a je vysoký; potřeba z Nastavení', await page.evaluate(() => { const ref = DATA.date, keep = {}; for (let i = 0; i < 14; i++) { const x = BYD[addD(ref, -i)]; if (x) { keep[x.d] = x.sh; x.sh = 5; } } const r = debtOf(), v0 = T.sleep_need.val; T.sleep_need.val = 9; const r9 = debtOf(); T.sleep_need.val = v0; Object.keys(keep).forEach(d => { BYD[d].sh = keep[d]; }); return r && r.d > 10 && r.k === 'crit' && r9.need.h === 9 && !r9.need.auto && r9.d > r.d; }));
+      ok('I-010: běžná data → žádný signál nemoci', await page.evaluate(() => illOf() === null && !/známky zátěže/.test(document.querySelector('#p-dnes').textContent)));
+      ok('I-010: TF +6, HRV −30 %, dýchání +2 → výrazné známky v Dnes hlídat', await page.evaluate(() => { const x = BYD[DATA.date], k = { rhr: x.rhr, hrv: x.hrv, rsN: x.rsN, rs: x.rs }; const b = k => { const v = []; for (let i = 1; i <= 30; i++) { const y = BYD[addD(DATA.date, -i)]; if (y && num(y[k]) != null) v.push(num(y[k])); } return avg(v); };
+        x.rhr = b('rhr') + 6; x.hrv = b('hrv') * 0.6; if (x.rsN != null) x.rsN = b('rsN') + 2; else x.rs = b('rs') + 2; const r = illOf(), al = alertsOf(); Object.assign(x, k); return r && r.lvl === 'crit' && r.devs.length === 3 && al[0].t === 'crit' && /známky zátěže/.test(al[0].h); }));
+      const bd = await page.evaluate(() => bedOf());
+      ok('Dnes: I-003 Ideální čas usínání (okno 22:30–23:30 z nocí s bt)', bd && bd.n >= 14 && bd.lo >= 1350 && bd.hi <= 1410 && bd.lo < bd.hi && /Ideální čas usínání/.test(await txt(page, '#p-dnes')) && !/NaN/.test(await txt(page, '#p-dnes .bed')), JSON.stringify(bd));
+      ok('I-003: bez časů usnutí (starý Apps Script) → karta se neukáže', await page.evaluate(() => { const keep = DAYS.map(x => x.bt); DAYS.forEach(x => { x.bt = null; }); const h = bedHtml(); DAYS.forEach((x, i) => { x.bt = keep[i]; }); return h === ''; }));
       ok('I-002: nízké HRV celý týden → riziko / únava', await page.evaluate(() => { const ref = DATA.date, keep = {}; for (let i = 0; i < 7; i++) { const x = BYD[addD(ref, -i)]; if (x) { keep[x.d] = x.hrv; x.hrv = 5; } } const r = recovOf(); Object.keys(keep).forEach(d => { BYD[d].hrv = keep[d]; }); return r && (r.k === 'amber' || r.k === 'crit'); }));
       // I-001 ranní pocit: klepnutí → den.pc, druhé klepnutí smaže
       await page.click('#pcrow [data-pc="4"]'); await page.waitForTimeout(900);

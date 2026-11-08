@@ -81,9 +81,9 @@ function api(url, opt) {
 API.lastSynced = null;
 function has(d) { return !API.lastSynced || d <= API.lastSynced; }
 function sleepObj(d) {
-  const end = Date.parse(d + 'T05:30:00Z');
+  const end = Date.parse(d + 'T05:30:00Z'), bed = Date.parse(d + 'T00:00:00Z') - (90 - idx(d) % 5 * 15) * 60000;   // usnutí 22:30–23:30 místního času
   return { id: 1, userProfilePK: 1, calendarDate: d, sleepTimeSeconds: 7 * 3600 + idx(d) % 5 * 600, deepSleepSeconds: 4800, lightSleepSeconds: 13200, remSleepSeconds: 5400, awakeSleepSeconds: 1200,
-    averageRespirationValue: 14.1, avgSleepStress: 19, avgHeartRate: 53, sleepEndTimestampGMT: end, sleepScoreFeedback: 'POSITIVE',
+    averageRespirationValue: 14.1, avgSleepStress: 19, avgHeartRate: 53, sleepEndTimestampGMT: end, sleepStartTimestampLocal: bed, sleepEndTimestampLocal: end + 3600000, sleepScoreFeedback: 'POSITIVE',
     sleepScores: { totalDuration: { qualifierKey: 'GOOD' }, overall: { value: 70 + idx(d) % 15, qualifierKey: 'GOOD' } } };
 }
 
@@ -144,6 +144,7 @@ const sample = fs.existsSync(path.join(OUT, 'sample.json')) ? JSON.parse(fs.read
 if (sample) ok('stejné klíče jako local/garmin_data.py', ['daily', 'hrv', 'sleep_latest', 'readiness', 'training_status', 'fitness', 'nights', 'hrv_history', 'last_activity', 'date'].every(k => k in data));
 ok('noci za 200 dní', data.nights.length >= 195 && data.nights.length <= 201, data.nights.length);
 ok('HRV historie ~2 roky', data.hrv_history.length >= 700, data.hrv_history.length);
+ok('I-003: noc nese čas usnutí a probuzení (minuty místního času)', data.nights.at(-1).bt >= 1350 && data.nights.at(-1).bt <= 1410 && data.nights.at(-1).wt === 390, JSON.stringify({ bt: data.nights.at(-1).bt, wt: data.nights.at(-1).wt }));
 ok('poslední noc: skóre, fáze, HRV', data.nights.at(-1).score >= 70 && data.nights.at(-1).deep_min === 80 && data.nights.at(-1).hrv > 0, JSON.stringify(data.nights.at(-1)));
 ok('Body Battery při probuzení dopočtena z řady', data.daily.body_battery_at_wake === 78 && data.nights.at(-1).bb === 78, data.daily.body_battery_at_wake);
 ok('denní souhrn v2: klidová TF, stres, dýchání, BB, kroky', data.daily.resting_heart_rate > 0 && data.daily.average_stress_level === 31 && data.daily.max_stress_level === 88

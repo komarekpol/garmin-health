@@ -77,6 +77,7 @@ const THRESH_DEF = {
   sleep_warn: { val: 50, label: 'Skóre spánku pozor <', unit: '',    stav: 'warn',   badge: 'pozor',  akce: 'snížit intenzitu tréninku' },
   ready_ok:   { val: 80, label: 'Připravenost normál ≥', unit: '%',  stav: 'ok',     badge: 'normál', akce: 'trénink OK' },
   ready_warn: { val: 60, label: 'Připravenost pozor ≥', unit: '%',   stav: 'warn',   badge: 'pozor',  akce: 'lehčí pohyb' },
+  sleep_need: { val: 0,  label: 'Potřeba spánku (0 = odhad)', unit: 'h', stav: 'ok', badge: 'info', akce: 'základ spánkového dluhu' },
 };
 function loadT() {
   try { const s = stGet('garmin_thresholds'); if (s) { const p = JSON.parse(s), m = {}; for (const k in THRESH_DEF) m[k] = { ...THRESH_DEF[k], ...(p[k] || {}) }; return m; } } catch (e) {}
@@ -137,7 +138,7 @@ function buildDays() {
   }
   const nm = {}; (DATA.nights || []).forEach(n => { nm[n.date || n.calendar_date] = n; });
   const hm_ = {}; (DATA.hrv_history || []).forEach(h => { hm_[h.date] = h; });
-  rows.forEach(x => { const n = nm[x.d]; if (n) { x.deep = num(n.deep_min); x.rem = num(n.rem_min); x.light = num(n.light_min); x.awake = num(n.awake_min); if (x.rs == null) x.rsN = num(n.resp); else x.rsN = num(n.resp); }
+  rows.forEach(x => { const n = nm[x.d]; if (n) { x.deep = num(n.deep_min); x.rem = num(n.rem_min); x.light = num(n.light_min); x.awake = num(n.awake_min); x.bt = num(n.bt); x.wt = num(n.wt); if (x.rs == null) x.rsN = num(n.resp); else x.rsN = num(n.resp); }
     const h = hm_[x.d]; if (h) { x.bl = num(h.baseline_low); x.bu = num(h.baseline_upper); } });
   DAYS = rows.sort((a, b) => a.d < b.d ? -1 : 1); BYD = {}; DAYS.forEach(x => { BYD[x.d] = x; });
 }
@@ -193,6 +194,8 @@ function alertsOf() {
   if (hr > T.hr_danger.val) al.push({ t: 'crit', h: `Klidová TF kritická: ${hr} bpm`, b: 'Lékař nebo hematolog.' });
   else if (hr > T.hr_warn.val) al.push({ t: 'warn', h: `Klidová TF zvýšená: ${hr} bpm`, b: 'Sledovat 2–3 dny.' });
   if (bb > 0 && bb < T.bb_warn.val) al.push({ t: 'warn', h: `Body Battery nízká: ${bb}`, b: 'Náročný trénink dnes nevhodný.' });
+  const ill = DATA && BYD ? illOf() : null;
+  if (ill) al.unshift({ t: ill.lvl, h: (ill.lvl === 'crit' ? 'Výrazné' : 'Drobné') + ' známky zátěže těla — možná nemoc', b: ill.devs.map(x => x.l + ' ' + (x.d > 0 ? '+' : '−') + fmt(Math.abs(x.d), x.dec) + ' ' + x.u + ' proti Ø 30 dní').join(' · ') + (ill.two ? ' · už druhé ráno' : '') + '. Uber, dospi, pij. Orientační, ne diagnóza.' });
   if (sc > 0 && sc < T.sleep_warn.val) al.push({ t: 'warn', h: `Skóre spánku nízké: ${sc}`, b: 'Snížit intenzitu tréninku. Priorita: spánek a regenerace.' });
   return al;
 }
@@ -553,6 +556,76 @@ function recovHtml() {
     <div class="xs muted" style="margin-top:var(--sp-2)">Normál = Ø HRV ${r.n} dní před tímto týdnem ± 0,5 SD. Princip podle HRV4Training, orientační.</div></div>`;
 }
 
+// ── Spánkový dluh za 14 nocí (I-009, princip RISE): potřeba = nastavení, jinak Ø délky nocí se skóre ≥ 80 za 90 dní (7–9 h, bez dat 8 h);
+// dluh = Σ váha × (potřeba − spánek) za 14 nocí, poslední noc váží nejvíc (14/7,5 … 1/7,5, Σ vah = 14), dluh nejméně 0. Cíl pod 5 h. ──
+function sleepNeed() {
+  const set = num(T.sleep_need && T.sleep_need.val); if (set && set >= 4 && set <= 12) return { h: set, auto: false };
+  const ref = (DATA && DATA.date) || TODAY(), g = [];
+  for (let i = 0; i < 90; i++) { const x = BYD[addD(ref, -i)]; if (x && num(x.sh) != null && num(x.sc) >= 80) g.push(num(x.sh)); }
+  return { h: g.length >= 10 ? Math.max(7, Math.min(9, avg(g))) : 8, auto: true, n: g.length };
+}
+function debtAt(ref, need) {
+  let dv = 0, w = 0, n = 0;
+  for (let i = 0; i < 14; i++) { const x = BYD[addD(ref, -i)], h = x ? num(x.sh) : null; if (h == null) continue; const wi = (14 - i) / 7.5; dv += wi * (need - h); w += wi; n++; }
+  return n >= 10 ? Math.max(0, dv * 14 / w) : null;   // chybějící noci: dluh se dopočte poměrem vah
+}
+function debtOf() {
+  const ref = (DATA && DATA.date) || TODAY(), N = sleepNeed(), d = debtAt(ref, N.h); if (d == null) return null;
+  const w = debtAt(addD(ref, -7), N.h), dd = w == null ? null : d - w;
+  const k = d < 5 ? 'good' : d < 10 ? 'amber' : 'crit', l = d < 5 ? 'v cíli' : d < 10 ? 'vyšší' : 'vysoký';
+  return { d, w, dd, k, l, need: N };
+}
+function debtHtml() {
+  const r = debtOf(); if (!r) return '';
+  const tr = r.dd == null ? '' : Math.abs(r.dd) < 0.5 ? 'Za týden beze změny.' : r.dd > 0 ? 'Za týden narostl o ' + hm(r.dd) + ' — dopřej si dřívější večery.' : 'Za týden ho splácíš (−' + hm(-r.dd) + ').';
+  return `<div class="card debt"><div class="card-h"><div class="card-t">Spánkový dluh</div>${pill(r.l, r.k)}</div>
+    <div class="kpi-v">${hm(r.d)}</div><div class="sm t2" style="margin:var(--sp-2) 0">${esc(tr)} Cíl je pod 5 h.</div>
+    <div class="xs muted">Za 14 nocí proti potřebě ${hm(r.need.h)}${r.need.auto ? ' (odhad z tvých nocí se skóre ≥ 80, v Nastavení jde přepsat)' : ' (z Nastavení)'}; novější noci váží víc. Princip RISE, orientační.</div></div>`;
+}
+
+// ── Ranní signál nemoci (I-010, princip Oura Symptom Radar): poslední ráno proti Ø 30 předchozích dní (≥ 14 hodnot).
+// Odchylka: dýchání v noci z ≥ 1,5 SD a ≥ +0,7 dechu/min, klidová TF z ≥ 1,5 a ≥ +3 bpm, HRV z ≤ −1,5 a ≥ 10 % pod Ø.
+// 2 odchylky = drobné známky, 3 (nebo 2 dvě rána po sobě) = výrazné. Orientační, ne diagnóza. ──
+function illDevs(ref) {
+  const x = BYD[ref]; if (!x) return null;
+  const M = [['rs', 'Dýchání v noci', 'dechu/min', 1, 0.7, 1], ['rhr', 'Klidová TF', 'bpm', 1, 3, 0], ['hrv', 'HRV', 'ms', -1, 0.1, 0]];
+  const val = (y, k) => y ? (k === 'rs' ? num(y.rsN ?? y.rs) : num(y[k])) : null, out = [];
+  let have = 0;
+  M.forEach(([k, l, u, dir, minD, dec]) => { const v = val(x, k); if (v == null) return; const b = []; for (let i = 1; i <= 30; i++) { const y = val(BYD[addD(ref, -i)], k); if (y != null) b.push(y); }
+    if (b.length < 14) return; have++; const m = avg(b), sd = Math.sqrt(vr(b)) || 1e-9, z = (v - m) / sd, d = v - m;
+    const hit = dir > 0 ? z >= 1.5 && d >= minD : z <= -1.5 && -d >= minD * m;
+    if (hit) out.push({ k, l, u, v, m, d, dec }); });
+  return have >= 2 ? out : null;
+}
+function illOf() {
+  const ref = (DATA && DATA.date) || TODAY(), a = illDevs(ref); if (!a || a.length < 2) return null;
+  const p = illDevs(addD(ref, -1)), strong = a.length >= 3 || (p && p.length >= 2);
+  return { lvl: strong ? 'crit' : 'warn', devs: a, two: !!(p && p.length >= 2) };
+}
+
+// ── Ideální čas usínání (I-003, princip Oura Bedtime Guidance): noci za 60 dní s časem usnutí (bt, z Apps Scriptu), ≥ 14 nocí;
+// nejlepší třetina podle skóre spánku (při shodě nižší klidová TF) → okno = 25.–75. percentil jejich usnutí, nejméně 30 min kolem mediánu. ──
+const btNorm = m => m == null ? null : (m < 12 * 60 ? m + 1440 : m);   // po půlnoci = pokračování večera
+const clk = m => { m = Math.round(((m % 1440) + 1440) % 1440); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
+function bedOf() {
+  const ref = (DATA && DATA.date) || TODAY(), all = [];
+  for (let i = 0; i < 60; i++) { const x = BYD[addD(ref, -i)]; if (x && num(x.bt) != null && num(x.sc) != null) all.push({ d: x.d, b: btNorm(num(x.bt)), sc: num(x.sc), rhr: num(x.rhr) }); }
+  if (all.length < 14) return { n: all.length };
+  const best = all.slice().sort((p, q) => q.sc - p.sc || ((p.rhr ?? 99) - (q.rhr ?? 99))).slice(0, Math.max(5, Math.round(all.length / 3)));
+  const bs = best.map(x => x.b).sort((p, q) => p - q), pc = f => bs[Math.min(bs.length - 1, Math.max(0, Math.round(f * (bs.length - 1))))];
+  const med = pc(0.5); let lo = pc(0.25), hi = pc(0.75); if (hi - lo < 30) { lo = med - 15; hi = med + 15; }
+  const inW = all.filter(x => x.b >= lo && x.b <= hi), outW = all.filter(x => x.b < lo || x.b > hi), last7 = all.filter(x => x.d > addD(ref, -7));
+  return { n: all.length, lo, hi, scIn: inW.length >= 3 ? avg(inW.map(x => x.sc)) : null, scOut: outW.length >= 3 ? avg(outW.map(x => x.sc)) : null, b7: last7.length ? avg(last7.map(x => x.b)) : null };
+}
+function bedHtml() {
+  const r = bedOf(); if (!r.n) return '';
+  if (r.lo == null) return `<div class="card bed"><div class="card-h"><div class="card-t">Ideální čas usínání</div>${pill('sbírám data', 'ok')}</div><div class="sm t2">Okno se ukáže po 14 nocích s časem usnutí (zatím ${r.n}).</div></div>`;
+  const vs = r.b7 == null ? '' : r.b7 > r.hi ? 'Posledních 7 nocí usínáš později (Ø ' + clk(r.b7) + ').' : r.b7 < r.lo ? 'Posledních 7 nocí usínáš dřív (Ø ' + clk(r.b7) + ').' : 'Posledních 7 nocí jsi v okně (Ø ' + clk(r.b7) + ').';
+  return `<div class="card bed"><div class="card-h"><div class="card-t">Ideální čas usínání</div>${pill(r.b7 != null && r.b7 >= r.lo && r.b7 <= r.hi ? 'v okně' : 'mimo okno', r.b7 != null && r.b7 >= r.lo && r.b7 <= r.hi ? 'good' : 'amber')}</div>
+    <div class="kpi-v">${clk(r.lo)}–${clk(r.hi)}</div><div class="sm t2" style="margin:var(--sp-2) 0">${esc(vs)}${r.scIn != null && r.scOut != null ? ' Skóre spánku v okně Ø ' + fmt(r.scIn) + ', mimo Ø ' + fmt(r.scOut) + '.' : ''}</div>
+    <div class="xs muted">Z tvých nejlepších nocí za 60 dní (${r.n} nocí s časem usnutí). Princip Oura Bedtime Guidance, orientační.</div></div>`;
+}
+
 // ── Dnes ──
 function renderDnes() {
   const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
@@ -586,6 +659,7 @@ function renderDnes() {
   <div class="page-head"><div><div class="page-t">${esc(cap(dLong(TODAY())))}</div><div class="page-s">Data za ${esc(dShort(DATA.date))} · ${esc(ageText())}</div></div></div>
   ${briefHtml()}
   ${recovHtml()}
+  ${debtHtml() || bedHtml() ? `<div class="grid g-2">${debtHtml()}${bedHtml()}</div>` : ''}
   <div class="grid g-hero">
     <div class="card"><div class="hero">${ring(sc, rcol)}<div style="min-width:0;flex:1">
       <div class="lbl">${R.est ? 'Připravenost (odhad)' : 'Training Readiness'}</div>
