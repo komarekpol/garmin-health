@@ -270,6 +270,10 @@ ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.
     m: [{ s: 'sn', h: '07:10', w: '', it: [{ f: 'ovesna_kase', g: 300 }] }] }] }));
   let g3 = JSON.parse(G.env.ghGet('k1'));
   ok('schránka: nové jídlo do databáze, položka v jídle, váha', g3.journal.food.ovesna_kase && g3.journal.food.ovesna_kase.k === 110 && g3.journal.days[Y].m.some(m => m.it && m.it[0].f === 'ovesna_kase' && m.it[0].g === 300) && g3.journal.days[Y].kg === 82.4, JSON.stringify(g3.journal.days[Y]));
+  // snídaně / oběd / večeře jsou za den jen jednou: druhý zápis stejného druhu se sloučí do prvního (nejdřívější čas, položky za sebou, svačina zůstává zvlášť)
+  G.folder.createFile('garmin-denik-vstup 2026-10-30 1801.json', JSON.stringify({ v: 1, items: [{ d: Y, m: [{ s: 'sn', h: '06:30', w: 'doplněk', it: [{ f: 'ovesna_kase', g: 100 }] }, { s: 'sv', h: '10:00', w: '', it: [{ f: 'ovesna_kase', g: 50 }] }, { s: 'sv', h: '11:00', w: '', it: [{ f: 'ovesna_kase', g: 40 }] }] }] }));
+  const g3b = JSON.parse(G.env.ghGet('k1')), mm = g3b.journal.days[Y].m, sn = mm.filter(x => x.s === 'sn');
+  ok('schránka: snídaně jen jednou — druhý zápis se sloučil (čas 06:30, 2 položky, poznámka)', sn.length === 1 && sn[0].h === '06:30' && sn[0].it.length === 2 && sn[0].w === 'doplněk' && mm.filter(x => x.s === 'sv').length === 2, JSON.stringify(mm));
   // pravidelný doplněk (I-007): reg se uloží do cfg, nevalidní od data schránku shodí do CHYBA
   G.folder.createFile('garmin-denik-vstup 2026-10-30 1802.json', JSON.stringify({ items: [{ d: Y, newSup: [{ id: 'd3', l: 'Vitamín D3', reg: { from: Y, h: '10:00, 14:00' } }] }] }));
   g3 = JSON.parse(G.env.ghGet('k1'));

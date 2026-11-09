@@ -258,12 +258,20 @@ function supSplit(q, h) { const n = parseFloat(qParse(q).n.replace(',', '.')), t
   if (!(n > 0) || t < 2 || (n / t * 2) % 1) return ''; return Array(t).fill(String(n / t).replace('.', ',')).join(' + '); }
 const supSplitTxt = (s, q) => { const x = supSplit(q, s && s.reg && s.reg.h); return x ? ' (' + x + ')' : ''; };
 const mealHas = m => m && (m.w || m.h || (m.it || []).length);
+// snídaně / oběd / večeře jsou za den jen jednou (Pavel 9.11.2026) → bloky stejného druhu se sloučí: nejdřívější čas, poznámky spojené, položky za sebou; svačina zůstává libovolně
+const MEAL_ONCE = ['sn', 'ob', 've'];
+function mealsCollapse(j) { const out = [];
+  (j.m || []).forEach(m => { const t = MEAL_ONCE.includes(m.s) ? out.find(x => x.s === m.s) : null; if (!t) { out.push(m); return; }
+    if (m.h && (!t.h || m.h < t.h)) t.h = m.h;
+    if (m.w && !(t.w || '').includes(m.w)) t.w = ((t.w ? t.w + ' · ' : '') + m.w).slice(0, 200);
+    if ((m.it || []).length) t.it = (t.it || []).concat(m.it); });
+  j.m = out; return j; }
 function jEmpty(j) { return !Object.keys(j.t || {}).some(k => j.t[k] > 0) && !(j.m || []).some(mealHas) && !(j.sup || []).length && !(j.sx || []).length && !(j.tx || []).length && !(j.mx || []).length && !Object.keys(j.sq || {}).length && !(j.n || '').trim() && j.kg == null && j.bf == null && j.pc == null; }
 const jSaveT = {};
 function jPut(d, j) {
   // úklid: nulové štítky a prázdná jídla pryč
   Object.keys(j.t).forEach(k => { if (!(j.t[k] > 0)) delete j.t[k]; });
-  j.m = (j.m || []).filter(mealHas);
+  mealsCollapse(j); j.m = (j.m || []).filter(mealHas);
   if (j.tx && !j.tx.length) delete j.tx;
   if (j.mx && !j.mx.length) delete j.mx;
   if (jEmpty(j)) delete JR.days[d]; else JR.days[d] = j;

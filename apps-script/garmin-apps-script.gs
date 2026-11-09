@@ -257,6 +257,10 @@ function inboxApply_(j, x) {
       return { f: f, g: Math.round(g) }; }).slice(0, 30);
     const o = { s: s, h: h, w: w }; if (it.length) o.it = it;
     if ((w || h || it.length) && !day.m.some(z => JSON.stringify(z) === JSON.stringify(o))) day.m.push(o); });
+  // snídaně / oběd / večeře jsou za den jen jednou (Pavel 9.11.2026): bloky stejného druhu se sloučí (nejdřívější čas, poznámky spojené, položky za sebou)
+  (function () { const out = []; day.m.forEach(m => { const t = ['sn', 'ob', 've'].indexOf(m.s) >= 0 ? out.find(z => z.s === m.s) : null; if (!t) { out.push(m); return; }
+    if (m.h && (!t.h || m.h < t.h)) t.h = m.h; if (m.w && String(t.w || '').indexOf(m.w) < 0) t.w = ((t.w ? t.w + ' · ' : '') + m.w).slice(0, 200);
+    if (m.it && m.it.length) t.it = (t.it || []).concat(m.it); }); day.m = out; })();
   if (x.kg != null) { const kg = Number(x.kg); if (!isFinite(kg) || kg < 30 || kg > 250) throw new Error('nesmyslná váha ' + x.kg); day.kg = Math.round(kg * 10) / 10; }
   if (x.bf != null) { const bf = Number(x.bf); if (!isFinite(bf) || bf < 3 || bf > 60) throw new Error('nesmyslný tělesný tuk ' + x.bf); day.bf = Math.round(bf * 10) / 10; }
   (x.sup || []).forEach(v => { const k = id(v); if (k && day.sup.indexOf(k) < 0) day.sup.push(k); });

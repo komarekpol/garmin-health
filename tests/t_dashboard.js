@@ -308,6 +308,9 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.click('[data-t="dech"]'); await page.waitForTimeout(1000);
       dj = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
       ok('Pravidelný štítek: druhé klepnutí vrátí (tx pryč)', !dj.tx && await page.$eval('[data-t="dech"]', e => e.classList.contains('on')), JSON.stringify(dj));
+      // snídaně / oběd / večeře jen jednou za den: mealsCollapse sloučí bloky, svačina zůstává zvlášť
+      const mc = await page.evaluate(() => mealsCollapse({ m: [{ s: 've', h: '18:26', w: '', it: [{ f: 'a', g: 1 }] }, { s: 'sv', h: '', w: '', it: [{ f: 'a', g: 1 }] }, { s: 've', h: '', w: 'x', it: [{ f: 'b', g: 2 }] }, { s: 'sv', h: '', w: '', it: [{ f: 'c', g: 3 }] }] }).m);
+      ok('Jídlo: večeře jen jednou (bloky se sloučí, čas 18:26), svačiny zůstanou 2', mc.filter(x => x.s === 've').length === 1 && mc.find(x => x.s === 've').h === '18:26' && mc.find(x => x.s === 've').it.length === 2 && mc.filter(x => x.s === 'sv').length === 2, JSON.stringify(mc));
       // pravidelná jídla (4.11.2026): mregApply doplní chybějící dny jídlem r:id, den s jídlem stejného druhu nechá, smazané (mx) se nevrací
       const mr = await page.evaluate(() => { const T = TODAY(), d3 = addD(T, -3), d1 = addD(T, -1), bak = JSON.stringify(JR.days); [d3, addD(T, -2), T].forEach(d => { delete JR.days[d]; });
         JR.days[d1] = { m: [{ s: 'sn', h: '08:00', w: 'vlastní' }] };

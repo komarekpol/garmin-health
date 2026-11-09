@@ -143,14 +143,14 @@ function bindJidlo(d) {
     if (id) addFood(id); else { UI.fed = '+'; UI.fnew = v; renderJidlo(); const el = $('fdb'); if (el) el.scrollIntoView({ block: 'start' }); toast('„' + v + '“ v databázi není — doplň hodnoty'); } };
   $('fadd').onclick = search; $('fsearch').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
   $('fsearch').addEventListener('change', () => { const v = $('fsearch').value.trim(); if (Object.keys(JR.food || {}).some(k => JR.food[k].l.toLowerCase() === v.toLowerCase())) search(); });
-  $('faddm').onclick = () => { const jj = jEdit(d); jj.m.push({ s: UI.fmeal || MEAL_BY_H(new Date().getHours()), h: d === TODAY() ? nowHM() : '', w: '' }); jPut(d, jj); renderJidlo(); };
+  $('faddm').onclick = () => { const jj = jEdit(d), kk = UI.fmeal || MEAL_BY_H(new Date().getHours()); if (MEAL_ONCE.includes(kk) && jj.m.some(x => x.s === kk && mealHas(x))) { toast('Toto jídlo už je zadané — přidávej do něj'); const el = $('fsearch'); if (el) el.focus(); return; } jj.m.push({ s: UI.fmeal || MEAL_BY_H(new Date().getHours()), h: d === TODAY() ? nowHM() : '', w: '' }); jPut(d, jj); renderJidlo(); };
   // úpravy jídel dne
   const M = $('fmeals');
   M.addEventListener('change', e => { const mb = e.target.closest('.fmeal'); if (!mb) return; const i = +mb.dataset.i, jj = jEdit(d), m = jj.m[i]; if (!m) return;
     const fi = e.target.closest('.fit');
     if (fi) { const g = Math.round(+e.target.value); if (g > 0 && g <= 3000) m.it[+fi.dataset.k].g = g; else { e.target.value = m.it[+fi.dataset.k].g; return; } }
     else { m.s = mb.querySelector('select').value; m.h = mb.querySelector('input[type=time]').value; m.w = mb.querySelector('.fmeal-w').value.slice(0, 200); }
-    jPut(d, jj); if (fi) renderJidlo(); });
+    jPut(d, jj); renderJidlo(); });
   M.addEventListener('click', e => { const b = e.target.closest('[data-rmi],[data-rmm],[data-rep]'); if (!b) return; const mb = b.closest('.fmeal'), i = +mb.dataset.i, jj = jEdit(d);
     if (b.dataset.rep != null) { const m = jj.m[i]; if (!m || !(m.it || []).length) return; const id = 'm' + Date.now().toString(36);
       (JR.cfg.mreg = JR.cfg.mreg || []).push({ id: id, s: m.s, h: m.h || '', from: d, wd: [1, 2, 3, 4, 5], it: m.it.map(x => ({ f: x.f, g: x.g })) }); m.r = id; jPut(d, jj); jCfgSave(); mregApply(); renderJidlo(); toast('Každý pracovní den se doplní samo (Nastavení → Pravidelná jídla)'); return; }
