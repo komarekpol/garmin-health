@@ -436,6 +436,10 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
         const sf = path.join(exp, 'garmin-settings.json'), st0 = fs.existsSync(sf) ? JSON.parse(fs.readFileSync(sf, 'utf8')) : {};
         ok('lokálně: migrace zón z prohlížeče na Disk', st0.garmin_vst_zones && JSON.parse(st0.garmin_vst_zones).z1 === 25, JSON.stringify(st0).slice(0, 150));
         ok('lokálně: Dnes vykreslen', (await page.$$('#p-dnes .kpi')).length === 6 && /ze 100/.test(await txt(page, '#p-dnes')));
+        // po obnovení stránky zůstane poslední záložka (i bez #hash v adrese)
+        await go(page, 'jidlo'); await page.goto('file://' + fileHtml, { waitUntil: 'load' }); await page.waitForTimeout(1200);
+        ok('Po obnovení zůstane poslední záložka (Jídlo)', await page.$eval('.page.active', e => e.id) === 'p-jidlo');
+        await go(page, 'dnes');
         await page.click('#quick [data-t="stres"]'); await page.waitForTimeout(1100);
         const jf = path.join(exp, 'garmin-journal.json'), jj = fs.existsSync(jf) ? JSON.parse(fs.readFileSync(jf, 'utf8')) : {};
         ok('lokálně: deník se uloží do garmin-journal.json', Object.values(jj.days || {}).some(d => d.t && d.t.stres === 1), JSON.stringify(jj).slice(0, 150));

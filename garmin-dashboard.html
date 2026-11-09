@@ -1249,7 +1249,7 @@ function navInit() {
   document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => go(b.dataset.p)));
 }
 function go(p) {
-  PAGE = p; try { history.replaceState(null, '', '#' + p); } catch (e) {}
+  PAGE = p; try { history.replaceState(null, '', '#' + p); } catch (e) {} try { localStorage.setItem('gh_page', p); } catch (e) {}   // poslední záložka přežije obnovení stránky (v Apps Scriptu hash nestačí)
   document.querySelectorAll('.page').forEach(s => s.classList.toggle('active', s.id === 'p-' + p));
   document.querySelectorAll('[data-p]').forEach(b => { const on = b.dataset.p === p; b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
   renderPage(); window.scrollTo(0, 0);
@@ -1889,7 +1889,8 @@ function renderNast() {
 (async function init() {
   navInit();
   $('syncBtn').addEventListener('click', doSync);
-  const h = (location.hash || '').slice(1); go(NAV.some(n => n[0] === h) ? h : 'dnes');
+  const h = (location.hash || '').slice(1); let last = ''; try { last = localStorage.getItem('gh_page') || ''; } catch (e) {}
+  go(NAV.some(n => n[0] === h) ? h : NAV.some(n => n[0] === last) ? last : 'dnes');
   try { await fetchData(); dataNote(); renderAll(); }
   catch (e) {
     note(CLOUD ? esc(e.message || e) : '<b>Lokální server neběží.</b> Hlavní dashboard běží v cloudu (adresa z Apps Scriptu). Offline: dvojklik na <b>Start Garmin Dashboard</b> na ploše.', 'err');
