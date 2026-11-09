@@ -487,6 +487,12 @@ function renderJidlo() {
   const burn = num(x.kc), bal = N && burn != null ? N.k - burn : null;
   const en = N ? [['B', N.p * 4, '--blue'], ['T', N.f * 9, '--purple'], ['S', N.c * 4, '--teal']] : [], enT = en.reduce((a, e) => a + e[1], 0) || 1;
   const meals = j.m.map((m, i) => mealBlock(m, i)).join('') || '<div class="muted sm">Zatím nic. Klepni na jídlo nahoře nebo „+ Jídlo“.</div>';
+  // přehled dne: snídaně / oběd / večeře vždy, svačina jen když je zadaná
+  const dayRows = MEAL_S.filter(([k]) => k !== 'sv' || j.m.some(m => m.s === 'sv' && mealHas(m))).map(([k, l]) => {
+    const ms = j.m.filter(m => m.s === k && mealHas(m)), kcal = ms.reduce((a, m) => a + (m.it || []).reduce((b, it) => { const v = itemNut(it); return b + (v ? v.k : 0); }, 0), 0);
+    const hs = ms.map(m => m.h).filter(Boolean).sort().join(', ');
+    return `<tr><td>${l}</td><td>${ms.length ? 'zadáno' + (ms.some(m => m.r) ? ' ⟳' : '') : pill('nezadáno', 'amber')}</td><td>${hs ? esc(hs) : '—'}</td><td class="num">${ms.length && kcal ? kc(kcal) : '—'}</td>
+      <td>${ms.length ? '' : `<button class="btn" data-enter="${k}">Zadat</button>`}</td></tr>`; }).join('');
   const lk = lastKg(), ks = kgSeries(90), k7 = (() => { const v = kgSeries(7).filter(v => v != null); return v.length ? avg(v) : null; })();
   const k30 = (() => { const a = kgSeries(37).slice(0, 7).filter(v => v != null); return a.length && k7 != null ? k7 - avg(a) : null; })();
   $('p-jidlo').innerHTML = `
@@ -506,6 +512,8 @@ function renderJidlo() {
       <div class="kgrow"><label class="lbl" for="fkg">Váha ${esc(dShort(d))}</label><input type="number" id="fkg" step="0.1" min="30" max="250" inputmode="decimal" value="${j.kg != null ? j.kg : ''}" placeholder="kg"></div>
       <div class="sm t2" style="margin-top:var(--sp-2)">Ø 7 dní ${k7 == null ? '—' : fmt(k7, 1) + ' kg'}${k30 != null ? ' · za měsíc ' + sgn(k30, 1) + ' kg' : ''}${(() => { const b = Object.keys(JR.days).filter(x => JR.days[x].bf != null).sort().pop(); return b ? ' · tuk ' + fmt(JR.days[b].bf, 1) + ' % (' + esc(dShort(b)) + ')' : ''; })()}</div>${spark(ks, tok('--blue'))}</div>
   </div>
+  <div class="card"><div class="card-h"><div class="card-t">Přehled dne</div><span class="card-s">co je zadané a co chybí</span></div>
+    <div class="tbl-wrap"><table data-nogrid id="fday"><thead><tr><th>Jídlo</th><th>Stav</th><th>Čas</th><th>Kalorie</th><th>Akce</th></tr></thead><tbody>${dayRows}</tbody></table></div></div>
   <div class="card"><div class="card-h"><div class="card-t">Jídla dne</div><button class="btn" id="faddm">+ Jídlo</button></div>
     <div class="lbl">Přidat do</div><div class="seg" id="ftgt">${MEAL_S.map(([k, l]) => `<button data-v="${k}" class="${k === tgt ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="chips" id="fquick" style="margin-top:var(--sp-3)">${top.length ? top.map(id => `<button type="button" class="chip" data-qf="${esc(id)}">${esc(JR.food[id].l)}<small class="muted">${esc(JR.food[id].porL || fmt(JR.food[id].por) + ' g')}</small></button>`).join('') : '<span class="muted sm">Databáze je prázdná — přidej jídla dole nebo je nadiktuj Claudovi.</span>'}</div>
@@ -517,6 +525,8 @@ function renderJidlo() {
     <div class="goals">${NUT.map(([k, l, u]) => `<label><span class="lbl">${l}</span><input type="number" min="0" step="1" data-goal="${k}" value="${G[k] || ''}" placeholder="${u}"></label>`).join('')}</div>
     <div class="xs muted" style="margin-top:var(--sp-2)">Orientační — cíle nastavuješ ty${lk ? `; při ${fmt(lk.kg, 1)} kg je 1,6 g bílkovin / kg ≈ ${fmt(Math.round(lk.kg * 1.6))} g` : ''}.</div></div>`;
   bindJidlo(d);
+  $('p-jidlo').querySelectorAll('[data-enter]').forEach(b => b.onclick = () => { UI.fmeal = b.dataset.enter; $('ftgt').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === UI.fmeal));
+    const el = $('fsearch'); if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); } });
 }
 function mealBlock(m, i) {
   const items = (m.it || []).map((it, k) => { const f = foodOf(it.f), v = itemNut(it);

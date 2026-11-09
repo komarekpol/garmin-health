@@ -180,6 +180,16 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.click('#fprev'); await page.click('#fprev'); await page.waitForTimeout(150);
       ok('Jídlo: bilance s Garminem (spálené kcal) u dne s daty', /Spáleno \(Garmin\)/i.test(await txt(page, '#p-jidlo')) && /Deficit|Přebytek/i.test(await txt(page, '#p-jidlo')), (await txt(page, '#p-jidlo')).slice(0, 400));
       await page.click('#ftoday'); await page.waitForTimeout(150);
+      // přehled dne: snídaně / oběd / večeře vždy, svačina jen když je zadaná, u chybějícího tlačítko Zadat
+      await page.evaluate(() => { UI.jday = addD(TODAY(), -300); renderJidlo(); });
+      const fr = await page.$$eval('#fday tbody tr', r => r.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+      ok('Přehled dne: prázdný den = snídaně, oběd, večeře (nezadáno + Zadat), bez svačiny', fr.length === 3 && fr.every(x => /nezadáno/.test(x) && /Zadat/.test(x)) && !fr.some(x => /Svačina/.test(x)), JSON.stringify(fr));
+      await page.click('#fday [data-enter="ob"]');
+      ok('Přehled dne: Zadat nastaví cíl přidání na daný druh', await page.evaluate(() => UI.fmeal === 'ob') && await page.$eval('#ftgt [data-v="ob"]', e => e.classList.contains('on')));
+      await page.evaluate(() => { const d = UI.jday, j = jEdit(d); j.m.push({ s: 'sv', h: '15:00', w: '', it: [{ f: Object.keys(JR.food)[0], g: 100 }] }); jPut(d, j); renderJidlo(); });
+      const fr2 = await page.$$eval('#fday tbody tr', r => r.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+      ok('Přehled dne: zadaná svačina se ukáže s časem a bez tlačítka', fr2.length === 4 && /^Svačinazadáno15:00/.test(fr2[3]) && !/Zadat/.test(fr2[3]), JSON.stringify(fr2));
+      await page.evaluate(() => { const d = UI.jday; delete JR.days[d]; UI.jday = null; UI.fmeal = null; renderJidlo(); });
       await page.click('#ftgt [data-v="ob"]'); await page.click('#fquick [data-qf="kure_ryze"]'); await page.waitForTimeout(900);
       let jl2 = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]);
       ok('Jídlo: klepnutí na časté jídlo přidá porci do Oběda', jl2.m.some(m => m.s === 'ob' && m.it && m.it.some(i => i.f === 'kure_ryze' && i.g === 400)), JSON.stringify(jl2.m));
