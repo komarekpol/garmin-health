@@ -58,7 +58,11 @@ function renderJidlo() {
       <div class="nbar"><i style="width:${pct == null ? 0 : pct}%"></i></div></div>`; }).join('');
   const burn = num(x.kc), bal = N && burn != null ? N.k - burn : null;
   const en = N ? [['B', N.p * 4, '--blue'], ['T', N.f * 9, '--purple'], ['S', N.c * 4, '--teal']] : [], enT = en.reduce((a, e) => a + e[1], 0) || 1;
-  const meals = j.m.map((m, i) => mealBlock(m, i)).join('') || '<div class="muted sm">Zatím nic. Klepni na jídlo nahoře nebo „+ Jídlo“.</div>';
+  // Jídla dne: snídaně, oběd, večeře vždy a v tomto pořadí (chybějící = „nezadáno“ + Zadat), pak svačiny; index bloku zůstává z dat dne
+  const ents = j.m.map((m, i) => ({ m: m, i: i })), kindL = k => (MEAL_S.find(x => x[0] === k) || [0, k])[1];
+  const meals = ['sn', 'ob', 've'].map(k => { const e = ents.filter(x => x.m.s === k);
+      return e.length ? e.map(x => mealBlock(x.m, x.i)).join('') : `<div class="fmeal fmeal-ph"><div class="fmeal-h"><b>${kindL(k)}</b>${pill('nezadáno', 'amber')}<button class="btn" data-enter="${k}">Zadat</button></div></div>`; }).join('')
+    + ents.filter(x => !MEAL_ONCE.includes(x.m.s)).map(x => mealBlock(x.m, x.i)).join('');
   // přehled dne: snídaně / oběd / večeře vždy, svačina jen když je zadaná
   const dayRows = MEAL_S.filter(([k]) => k !== 'sv' || j.m.some(m => m.s === 'sv' && mealHas(m))).map(([k, l]) => {
     const ms = j.m.filter(m => m.s === k && mealHas(m)), kcal = ms.reduce((a, m) => a + (m.it || []).reduce((b, it) => { const v = itemNut(it); return b + (v ? v.k : 0); }, 0), 0);

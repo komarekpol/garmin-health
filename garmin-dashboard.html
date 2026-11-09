@@ -179,6 +179,7 @@ details.more{margin-top:var(--sp-3);}details.more>summary{cursor:pointer;color:v
 .fmeals{margin-top:var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-3);}
 .fmeal{border:1px solid var(--grid);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);}
 .fmeal-h{display:grid;grid-template-columns:110px 92px minmax(0,1fr) auto auto;gap:var(--sp-2);align-items:center;}.fmeal-h select,.fmeal-h input{width:100%;}
+.fmeal-ph .fmeal-h{display:flex;flex-wrap:wrap;}.fmeal-ph .fmeal-h .btn{margin-left:auto;}
 .fit{display:grid;grid-template-columns:minmax(0,1fr) 72px auto 80px auto;gap:var(--sp-2);align-items:center;padding:4px 0;border-top:1px solid var(--grid);margin-top:4px;}.fit input{width:100%;text-align:right;}
 .fit-k{font-size:var(--fs-sm);color:var(--text2);text-align:right;white-space:nowrap;}
 #fquick .chip small{margin-left:4px;}
@@ -486,7 +487,11 @@ function renderJidlo() {
       <div class="nbar"><i style="width:${pct == null ? 0 : pct}%"></i></div></div>`; }).join('');
   const burn = num(x.kc), bal = N && burn != null ? N.k - burn : null;
   const en = N ? [['B', N.p * 4, '--blue'], ['T', N.f * 9, '--purple'], ['S', N.c * 4, '--teal']] : [], enT = en.reduce((a, e) => a + e[1], 0) || 1;
-  const meals = j.m.map((m, i) => mealBlock(m, i)).join('') || '<div class="muted sm">Zatím nic. Klepni na jídlo nahoře nebo „+ Jídlo“.</div>';
+  // Jídla dne: snídaně, oběd, večeře vždy a v tomto pořadí (chybějící = „nezadáno“ + Zadat), pak svačiny; index bloku zůstává z dat dne
+  const ents = j.m.map((m, i) => ({ m: m, i: i })), kindL = k => (MEAL_S.find(x => x[0] === k) || [0, k])[1];
+  const meals = ['sn', 'ob', 've'].map(k => { const e = ents.filter(x => x.m.s === k);
+      return e.length ? e.map(x => mealBlock(x.m, x.i)).join('') : `<div class="fmeal fmeal-ph"><div class="fmeal-h"><b>${kindL(k)}</b>${pill('nezadáno', 'amber')}<button class="btn" data-enter="${k}">Zadat</button></div></div>`; }).join('')
+    + ents.filter(x => !MEAL_ONCE.includes(x.m.s)).map(x => mealBlock(x.m, x.i)).join('');
   // přehled dne: snídaně / oběd / večeře vždy, svačina jen když je zadaná
   const dayRows = MEAL_S.filter(([k]) => k !== 'sv' || j.m.some(m => m.s === 'sv' && mealHas(m))).map(([k, l]) => {
     const ms = j.m.filter(m => m.s === k && mealHas(m)), kcal = ms.reduce((a, m) => a + (m.it || []).reduce((b, it) => { const v = itemNut(it); return b + (v ? v.k : 0); }, 0), 0);
