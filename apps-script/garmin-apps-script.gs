@@ -30,6 +30,9 @@ const JOURNAL_MAX_ = 2000000;
 const FOOD_FILE_ = 'garmin-jidla.json';   // výtah databáze jídel pro Clauda (chat dohledá id) — jen jídla, bez zdravotních dat
 const FOOD_ITEM_MAX_ = 600, FOOD_N_MAX_ = 800;   // jedno jídlo v databázi / počet jídel (~0,2 kB / jídlo ≈ 160 kB)
 const INBOX_PREFIX_ = 'garmin-denik-vstup';   // schránka deníku: soubory, které zapíše Claude z chatu (konektor Disku umí soubory jen zakládat)
+const ZDRAVI_FILE_ = 'garmin-zdravi.json';             // Zdraví (9.11.2026): osobní údaje CLL + imunita — zakládá Claude z chatu / týdenní úlohy (konektor umí jen zakládat → bere se nejnovější)
+const ZDRAVI_NOV_PREFIX_ = 'garmin-zdravi-novinky';    // týdenní novinky výzkumu CLL: jeden soubor za týden { nov: [...] }, stránka je sloučí
+const ZDRAVI_MAX_ = 300000, ZDRAVI_NOV_N_ = 26;        // znaků na soubor / kolik posledních souborů novinek (≈ půl roku)
 const INBOX_MAX_ = 20000;           // jeden soubor schránky       // celý soubor (~0,3 kB / den ≈ 0,1 MB / rok) — nad limit se nezapíše a stránka to řekne
 
 function props_() { return PropertiesService.getScriptProperties(); }
@@ -112,6 +115,7 @@ function apiData_() {
   d.settings = settingsRead_();
   try { const ib = inboxMerge_(); if (ib.errs && ib.errs.length) d.inboxErr = ib.errs.join(' | '); } catch (e) { d.inboxErr = String(e.message || e); }
   try { d.journal = journalRead_(); } catch (e) { d.journalErr = String(e.message || e); }
+  try { d.zdravi = zdraviRead_(); } catch (e) { d.zdravi = { error: String(e.message || e) }; }
   if (d.ok) d.stale = d.ageH > STALE_H_;
   return d;
 }
@@ -128,6 +132,21 @@ function ghSet(key, json) {
     out = { ok: true, at: cur._at };
   } catch (err) { out = { ok: false, error: String(err && err.message || err) }; }
   return JSON.stringify(out);
+}
+
+// ── 🩺 Zdraví: garmin-zdravi.json (nejnovější soubor toho jména) + novinky garmin-zdravi-novinky *.json (podle názvu, nejnovějších ZDRAVI_NOV_N_) ──
+// Jen čtení; nečitelný nebo příliš velký soubor se přeskočí s chybou pro stránku, nic se nemaže ani nepřepisuje.
+function zdraviRead_() {
+  const out = { nov: [] }, errs = [], rd = f => { const t = f.getBlob().getDataAsString('UTF-8'); if (t.length > ZDRAVI_MAX_) throw new Error(f.getName() + ' má ' + t.length + ' znaků (limit ' + ZDRAVI_MAX_ + ')'); return JSON.parse(t); };
+  const base = fileIn_(ZDRAVI_FILE_);
+  if (base) { try { const b = rd(base); ['cll', 'imun', 'at', 'src'].forEach(k => { if (b[k] != null) out[k] = b[k]; }); (b.nov || []).forEach(n => out.nov.push(n)); } catch (e) { errs.push(String(e.message || e)); } }
+  const it = dataFolder_().getFiles(), nf = [];
+  while (it.hasNext()) { const f = it.next(); if (!f.isTrashed() && f.getName().indexOf(ZDRAVI_NOV_PREFIX_) === 0) nf.push(f); }
+  nf.sort((a, b) => a.getName() < b.getName() ? 1 : -1).slice(0, ZDRAVI_NOV_N_).forEach(f => { try { const x = rd(f); (Array.isArray(x) ? x : x.nov || []).forEach(n => out.nov.push(n)); } catch (e) { errs.push(f.getName() + ': ' + (e.message || e)); } });
+  const seen = {}; out.nov = out.nov.filter(n => n && n.t && n.d && !seen[n.d + n.t] && (seen[n.d + n.t] = 1));
+  if (!base && !nf.length) return null;
+  if (errs.length) out.error = errs.join(' | ');
+  return out;
 }
 
 // ── 📓 Deník ──

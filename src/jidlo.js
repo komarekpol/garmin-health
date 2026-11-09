@@ -47,6 +47,15 @@ function nutLine(d) {
 }
 
 // ── záložka Jídlo ──
+// I-017 Zopakovat celé jídlo (MyFitnessPal „Remember meal“, Cronometer kopírování dne): posledních 14 dní před zobrazeným dnem,
+// každé složení jen jednou, bez pravidelných jídel (r) — jedno klepnutí přidá všechny položky do zvoleného jídla dne
+function recentMeals(d, n) {
+  const out = [], seen = new Set();
+  for (let i = 1; i <= 14 && out.length < n; i++) { const dd = addD(d, -i), j = jDay(dd); if (!j) continue;
+    (j.m || []).forEach(m => { if (m.r || !(m.it || []).length || out.length >= n) return; const key = m.it.map(x => x.f + ':' + x.g).sort().join('|'); if (seen.has(key)) return; seen.add(key);
+      out.push({ d: dd, m: m, k: m.it.reduce((a, it) => { const v = itemNut(it); return a + (v ? v.k : 0); }, 0) }); }); }
+  return out;
+}
 function renderJidlo() {
   const d = UI.jday || TODAY(), j = jEdit(d), N = nutDay(d), G = goals(), x = BYD[d] || {}, use = foodUse(120);
   const tgt = UI.fmeal || MEAL_BY_H(new Date().getHours());
@@ -69,6 +78,7 @@ function renderJidlo() {
     const hs = ms.map(m => m.h).filter(Boolean).sort().join(', ');
     return `<tr><td>${l}</td><td>${ms.length ? 'zadáno' + (ms.some(m => m.r) ? ' ⟳' : '') : pill('nezadáno', 'amber')}</td><td>${hs ? esc(hs) : '—'}</td><td class="num">${ms.length && kcal ? kc(kcal) : '—'}</td>
       <td>${ms.length ? '' : `<button class="btn" data-enter="${k}">Zadat</button>`}</td></tr>`; }).join('');
+  const rep = recentMeals(d, 6);
   const lk = lastKg(), ks = kgSeries(90), k7 = (() => { const v = kgSeries(7).filter(v => v != null); return v.length ? avg(v) : null; })();
   const k30 = (() => { const a = kgSeries(37).slice(0, 7).filter(v => v != null); return a.length && k7 != null ? k7 - avg(a) : null; })();
   $('p-jidlo').innerHTML = `
@@ -93,6 +103,7 @@ function renderJidlo() {
   <div class="card"><div class="card-h"><div class="card-t">Jídla dne</div><button class="btn" id="faddm">+ Jídlo</button></div>
     <div class="lbl">Přidat do</div><div class="seg" id="ftgt">${MEAL_S.map(([k, l]) => `<button data-v="${k}" class="${k === tgt ? 'on' : ''}">${l}</button>`).join('')}</div>
     <div class="chips" id="fquick" style="margin-top:var(--sp-3)">${top.length ? top.map(id => `<button type="button" class="chip" data-qf="${esc(id)}">${esc(JR.food[id].l)}<small class="muted">${esc(JR.food[id].porL || fmt(JR.food[id].por) + ' g')}</small></button>`).join('') : '<span class="muted sm">Databáze je prázdná — přidej jídla dole nebo je nadiktuj Claudovi.</span>'}</div>
+    ${rep.length ? `<div class="lbl" style="margin-top:var(--sp-3)">Zopakovat celé jídlo</div><div class="chips" id="frep">${rep.map((r, i) => `<button type="button" class="chip" data-rep2="${i}" title="${esc(r.m.it.map(x => (foodOf(x.f) || { l: '?' }).l + ' ' + x.g + ' g').join(', '))}">${esc(kindL(r.m.s))} ${esc(dShort(r.d))}<small class="muted">${esc(r.m.it.map(x => (foodOf(x.f) || { l: '?' }).l).slice(0, 2).join(', ') + (r.m.it.length > 2 ? ' +' + (r.m.it.length - 2) : ''))} · ${kc(r.k)} kcal</small></button>`).join('')}</div>` : ''}
     <div class="row-add" style="margin-top:var(--sp-3)"><input id="fsearch" list="fdl" placeholder="Hledat v databázi…" autocomplete="off"><button class="btn" id="fadd">Přidat</button></div>
     <datalist id="fdl">${Object.keys(JR.food || {}).map(id => `<option value="${esc(JR.food[id].l)}">`).join('')}</datalist>
     <div class="fmeals" id="fmeals">${meals}</div></div>
@@ -143,6 +154,10 @@ function bindJidlo(d) {
     if (!m) { m = { s: s, h: d === TODAY() ? nowHM() : '', w: '' }; jj.m.push(m); }
     (m.it = m.it || []).push({ f: id, g: Math.round(f.por || 100) }); jPut(d, jj); renderJidlo(); };
   P.querySelectorAll('[data-qf]').forEach(b => b.onclick = () => addFood(b.dataset.qf));
+  const rep = recentMeals(d, 6);
+  P.querySelectorAll('[data-rep2]').forEach(b => b.onclick = () => { const r = rep[+b.dataset.rep2]; if (!r) return; const jj = jEdit(d), s = UI.fmeal || MEAL_BY_H(new Date().getHours());
+    let m = jj.m.filter(x => x.s === s).pop(); if (!m) { m = { s: s, h: d === TODAY() ? nowHM() : '', w: '' }; jj.m.push(m); }
+    m.it = (m.it || []).concat(r.m.it.map(x => ({ f: x.f, g: x.g }))); jPut(d, jj); renderJidlo(); toast('Přidáno: ' + r.m.it.length + ' položek'); });
   const search = () => { const v = $('fsearch').value.trim(); if (!v) return; const id = Object.keys(JR.food || {}).find(k => JR.food[k].l.toLowerCase() === v.toLowerCase());
     if (id) addFood(id); else { UI.fed = '+'; UI.fnew = v; renderJidlo(); const el = $('fdb'); if (el) el.scrollIntoView({ block: 'start' }); toast('„' + v + '“ v databázi není — doplň hodnoty'); } };
   $('fadd').onclick = search; $('fsearch').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });

@@ -305,6 +305,17 @@ td input{width:76px;text-align:center;}
 #note{display:none;margin-bottom:var(--sp-4);}
 #note.on{display:flex;}
 .empty{padding:var(--sp-5) var(--sp-3);text-align:center;color:var(--text2);}
+/* Zdraví */
+.zd-ev{display:flex;flex-direction:column;gap:var(--sp-3);}
+.zd-e{padding:var(--sp-3);border:1px solid var(--border);border-radius:var(--r-md);background:var(--bg2);}
+.zd-et{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);flex-wrap:wrap;margin-bottom:4px;}
+.zd-e .xs{margin-top:4px;}
+.zd-rut{display:flex;flex-direction:column;gap:var(--sp-2);}
+.zd-r{display:grid;grid-template-columns:96px 1fr;gap:var(--sp-3);align-items:start;padding:var(--sp-2) 0;border-bottom:1px solid var(--border);}
+.zd-r:last-child{border-bottom:0;}
+.zd-h{color:var(--teal);font-size:var(--fs-sm);}
+.zd-q{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;}
+@media(max-width:760px){.zd-r{grid-template-columns:1fr;gap:2px;}}
 .toast{position:fixed;left:50%;bottom:var(--sp-5);transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-4);font-size:var(--fs-sm);z-index:400;opacity:0;pointer-events:none;transition:opacity .2s;}
 .toast.on{opacity:1;}
 @media(max-width:760px){.toast{bottom:calc(var(--bnav-h) + env(safe-area-inset-bottom,0px) + var(--sp-3));}}
@@ -330,6 +341,7 @@ td input{width:76px;text-align:center;}
   <section class="page" id="p-denik"></section>
   <section class="page" id="p-jidlo"></section>
   <section class="page" id="p-beh"></section>
+  <section class="page" id="p-zdravi"></section>
   <section class="page" id="p-vlivy"></section>
   <section class="page" id="p-inov"></section>
   <section class="page" id="p-nast"></section>

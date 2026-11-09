@@ -43,11 +43,17 @@ async function routes(ctx) {
 let fails = 0;
 const ok = (name, cond, info) => { console.log((cond ? 'OK   ' : 'FAIL ') + name + (cond || info == null ? '' : ' — ' + info)); if (!cond) fails++; };
 const watch = page => { const errs = []; page.on('pageerror', e => errs.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/ERR_FAILED|net::/.test(m.text())) errs.push(m.text()); }); return errs; };
-const PAGES = ['dnes', 'trendy', 'denik', 'jidlo', 'beh', 'vlivy', 'inov', 'nast'];
+const PAGES = ['dnes', 'trendy', 'denik', 'jidlo', 'beh', 'zdravi', 'vlivy', 'inov', 'nast'];
+// Zdraví: vymyšlená data (žádné osobní údaje v repu) — tvar jako garmin-zdravi.json + novinky z Apps Scriptu
+const ZDRAVI_T = { at: '2026-11-09', cll: { dg: '2025-01-10', stadium: 'Binet A', zaver: 'Test – sledování.', kontrola: { d: '2030-01-01', co: 'KO' },
+  prog: [{ l: 'Uzliny / slezina', v: 'drobné', k: 'ok' }, { l: 'TP53', v: 'bez mutace', k: 'good' }], otazky: ['Otázka A', 'Otázka B'],
+  labs: [{ d: '2025-01-10', src: 'T', wbc: 15, alc: 10, hb: 140, plt: 200 }, { d: '2025-07-10', wbc: 16, alc: 11, neu: 3, hb: 141, plt: 210 }, { d: '2026-01-10', wbc: 18, alc: 12.5, hb: 142, plt: 220 }, { d: '2026-07-10', wbc: 20, alc: 15, hb: 145, plt: 230, crea: 100, alt: 0.4 }] },
+  nov: [{ d: '2026-08-01', t: 'Novinka A', co: 'obsah', proMe: 'pro tebe', lvl: 'silne', url: 'https://example.org' }, { d: '2026-09-01', t: 'Novinka B', co: 'obsah', lvl: 'info' }],
+  imun: { rutina: [{ h: '6:00', co: 'Voda', proc: 'hydratace', lvl: 'doporuc' }, { h: 'večer', co: 'Spánek ≥ 7 h', proc: 'studie', lvl: 'stredni' }] } };
 
 async function cloud(browser, opt) {
   const settings = { garmin_thresholds: JSON.stringify({ hrv_ok: { val: 31 } }) };
-  const reply = Object.assign({ ok: true, data: sample, settings, journal, at: sample.exported_at, ageH: 2.5, stale: false }, opt.reply || {});
+  const reply = Object.assign({ ok: true, data: sample, settings, journal, zdravi: ZDRAVI_T, at: sample.exported_at, ageH: 2.5, stale: false }, opt.reply || {});
   const inj = '<script>window.__GH_CLOUD__=' + JSON.stringify({ key: 'testkey', build: { sha: 'abc1234', src: 'github' } }) + ';</script>'
     + '<script>window.__CALLS__=[];window.__REPLY__=' + JSON.stringify(reply).replace(/</g, '\\u003c') + ';'
     + 'window.google={script:{run:(function mk(ok,fail){return new Proxy({},{get:(t,k)=>k==="withSuccessHandler"?(f=>mk(f,fail)):k==="withFailureHandler"?(f=>mk(ok,f)):'
@@ -213,6 +219,12 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       await page.fill('[data-ff="por"]', '250'); await page.fill('[data-ff="k"]', '72'); await page.fill('[data-ff="p"]', '12'); await page.click('#fsave'); await page.waitForTimeout(300);
       const fs1 = (await calls(page, 'ghFoodSet')).pop();
       ok('Jídlo: nové jídlo → ghFoodSet (id bez diakritiky)', fs1 && fs1[2] === 'tvaroh' && JSON.parse(fs1[3]).k === 72 && await page.evaluate(() => !!JR.food.tvaroh));
+      // I-017 Zopakovat celé jídlo: nabídka posledních jídel, klepnutí přidá všechny položky do zvoleného jídla
+      const nRep = (await page.$$('#frep [data-rep2]')).length, rep0 = await page.evaluate(() => recentMeals(UI.jday || TODAY(), 6)[0]);
+      await page.click('#ftgt [data-v="sv"]'); await page.click('#frep [data-rep2="0"]'); await page.waitForTimeout(900);
+      const jr = JSON.parse((await calls(page, 'ghJournalSet')).pop()[3]), sv = jr.m.filter(m => m.s === 'sv').pop();
+      ok('Jídlo: I-017 Zopakovat celé jídlo (nabídka ≤ 6, různé složení) → položky do Svačiny', nRep >= 2 && nRep <= 6 && sv && rep0 && rep0.m.it.every(x => sv.it.some(y => y.f === x.f && y.g === x.g)), nRep + ' ' + JSON.stringify(sv));
+      ok('Jídlo: I-017 nenabízí pravidelná jídla ani dnešek', await page.evaluate(() => recentMeals(TODAY(), 6).every(r => !r.m.r && r.d < TODAY())));
       await page.screenshot({ path: path.join(OUT, 'd-jidlo.png'), fullPage: true });
       // Trendy jídla
       await go(page, 'trendy');
@@ -278,6 +290,24 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       const ui2 = (await calls(page, 'ghSet')).map(c => JSON.parse(c[2])).filter(o => o.garmin_ui).pop();
       ok('Inovace: podnět se uloží a hlas zůstane', ui2 && JSON.parse(ui2.garmin_ui).pod[0].t === 'Chci vidět vliv tréninku na spánek' && JSON.parse(ui2.garmin_ui).inov[id1].v === 'ano');
       await page.screenshot({ path: path.join(OUT, 'd-inov.png'), fullPage: true });
+      // Zdraví: Imunita (z hodinek a deníku), CLL (laboratoř, LDT, iwCLL, otázky, novinky), Zdroje
+      await go(page, 'zdravi');
+      const zw = await page.$$eval('#zdweek tbody tr', r => r.map(x => x.textContent));
+      ok('Zdraví: Imunita tento týden — spánek, pohyb, otužování, signál nemoci, příznaky; bez NaN', zw.length >= 5 && /Spánek/.test(zw.join()) && /Aerobní pohyb/.test(zw.join()) && /signál nemoci/.test(zw.join()) && !/NaN|undefined/.test(zw.join()), zw.join(' | '));
+      ok('Zdraví: rutina z Disku + karty důkazů se zdroji', (await page.$$('#p-zdravi .zd-r')).length === 2 && (await page.$$('#p-zdravi .zd-e')).length >= 8 && (await page.$$('#p-zdravi .zd-e a.lnk')).length >= 8);
+      await page.click('#zdseg [data-k="cll"]'); await page.waitForTimeout(300);
+      const zc = await txt(page, '#p-zdravi');
+      ok('Zdraví CLL: laboratoř (4 odběry), graf, 6 kritérií iwCLL, otázky, 2 novinky', (await page.$$('#zdlabs tbody tr')).length === 4 && await page.$('#zdch') !== null && (await page.$$('#zdcrit tbody tr')).length === 6 && (await page.$$('#p-zdravi .zd-q li')).length === 2 && /Novinka B[\s\S]*Novinka A/.test(zc) && !/NaN|undefined/.test(zc), zc.slice(0, 300));
+      const ldt = await page.evaluate(() => ldtOf(zLabs()));
+      ok('Zdraví CLL: zdvojení lymfocytů regresí (10 → 15 za 18 měs. ≈ 30 měs.)', ldt && ldt.n === 4 && ldt.m > 24 && ldt.m < 40, JSON.stringify(ldt));
+      ok('Zdraví CLL: rychlý růst → kritérium LDT červeně', await page.evaluate(() => { const r = ldtOf([{ d: '2026-01-01', alc: 10 }, { d: '2026-02-01', alc: 14 }, { d: '2026-03-01', alc: 20 }]); return r && r.m < 6; }));
+      await page.screenshot({ path: path.join(OUT, 'd-zdravi-cll.png'), fullPage: true });
+      await page.click('#zdseg [data-k="zdroje"]'); await page.waitForTimeout(200);
+      ok('Zdraví Zdroje: videa a kanály s hodnocením', (await page.$$('#p-zdravi .zd-e')).length === await page.evaluate(() => ZD_SRC.length) && /Berg/.test(await txt(page, '#p-zdravi')));
+      await page.click('#zdseg [data-k="imun"]'); await page.waitForTimeout(200);
+      await page.screenshot({ path: path.join(OUT, 'd-zdravi.png'), fullPage: true });
+      // Deník: nová skupina Příznaky (štítky, které Zdraví počítá)
+      ok('Deník: štítky Příznaky existují (rýma, teplota, noční pocení)', await page.evaluate(() => ['ryma', 'teplota', 'poceni'].every(id => !!tagById(id))));
       // Nastavení
       await go(page, 'nast');
       await page.fill('[data-th="hr_warn"]', '58'); await page.dispatchEvent('[data-th="hr_warn"]', 'change'); await page.waitForTimeout(700);
@@ -416,6 +446,11 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
       ok('nečitelný deník: upozornění, zbytek běží', /Deník se nepodařilo načíst/.test(await txt(e3.page, '#note')) && (await e3.page.$$('#p-dnes .kpi')).length === 6);
       ok('nečitelný deník: bez chyb', e3.errs.length === 0, e3.errs.join(' | '));
       await e3.ctx.close();
+      const e4 = await cloud(browser, { reply: { zdravi: undefined } });
+      await e4.page.evaluate(() => { UI.zd = 'cll'; go('zdravi'); }); await e4.page.waitForTimeout(250);
+      ok('bez garmin-zdravi.json: CLL řekne odkud data, Imunita z hodinek běží', /garmin-zdravi\.json/.test(await txt(e4.page, '#p-zdravi')) && await e4.page.evaluate(() => { UI.zd = 'imun'; renderZdravi(); return document.querySelectorAll('#zdweek tbody tr').length >= 5; }));
+      ok('bez garmin-zdravi.json: bez chyb', e4.errs.length === 0, e4.errs.join(' | '));
+      await e4.ctx.close();
     }
     // ── B) lokálně: file:// + garmin_server.py ──
     {

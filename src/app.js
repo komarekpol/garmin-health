@@ -119,6 +119,7 @@ function migrateLocal(st) { ST_KEYS.forEach(k => { if (!(k in st)) { let v = nul
 function take(r, src) {
   stApply(r.settings);
   if (r.journal) { JR = { days: r.journal.days || {}, cfg: r.journal.cfg || {}, food: r.journal.food || {} }; try { mregApply(); } catch (e) {} }
+  zdInit(r);   // Zdraví: osobní data z Disku (garmin-zdravi.json), offline chybí
   if (!r.ok || !r.data) throw new Error(r.error || 'Data se nepodařilo načíst');
   if (r.data.error) throw new Error(r.data.error);
   DATA = r.data;
@@ -212,6 +213,10 @@ const TAGS = [
   { g: 'Stres a zdraví', items: [
     { id: 'stres', l: 'Pracovní stres' }, { id: 'cesta', l: 'Cestování' }, { id: 'nemoc', l: 'Nemoc / nachlazení' }, { id: 'bolest', l: 'Bolest' },
     { id: 'nalada', l: 'Špatná nálada' }, { id: 'pozde_spat', l: 'Pozdě do postele' }, { id: 'obrazovka', l: 'Obrazovka před spaním' } ] },
+  // Příznaky (9.11.2026, záložka Zdraví): klikají se jen dny, kdy něco je; Zdraví → Imunita a CLL je počítají (infekce, kritéria iwCLL)
+  { g: 'Příznaky', items: [
+    { id: 'ryma', l: 'Rýma' }, { id: 'krk', l: 'Bolest v krku' }, { id: 'kasel', l: 'Kašel' }, { id: 'teplota', l: 'Teplota ≥ 37,5 °C' },
+    { id: 'poceni', l: 'Noční pocení' }, { id: 'unava', l: 'Výrazná únava' } ] },
 ];
 // Rychlé štítky na Dnes: VČERA (zpětně — večer a noc, co ovlivní dnešní ráno) a DNES (během dne)
 const QUICK_Y = ['alk', 'vecere_pozde', 'kava_pozde', 'stres', 'pozde_spat', 'obrazovka'];
@@ -395,11 +400,12 @@ const IC = {
   jidlo: '<path d="M7 3v8a2 2 0 0 0 2 2v8M5 3v5a2 2 0 0 0 2 2M11 3v5a2 2 0 0 1-2 2"/><path d="M17 21V3c-2 1-3 3.5-3 7 0 1.6 1.3 3 3 3"/>',
   beh: '<circle cx="14.5" cy="4" r="2"/><path d="M7 21l3.5-6 3 2.5V22M6 11.5l3.5-3.5 4 1 2.5 3.5 3 1"/><path d="M10.5 15l1.5-5"/>',
   inov: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
+  zdravi: '<path d="M12 21s-7-4.4-9.2-9A5 5 0 0 1 12 6.5 5 5 0 0 1 21.2 12C19 16.6 12 21 12 21z"/><path d="M8 12h2.5l1.2-2.5 2 5 1.3-2.5H16"/>',
   nast: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
-const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['beh', 'Trénink'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
-// telefon: spodní lišta max 6 položek (dotyk ≥ 44 px na 390 px) — Vlivy a Inovace jsou ve Víc (= Nastavení), odznak Inovací se ukáže na Víc
-const BNAV_SKIP = ['vlivy', 'inov'];
+const NAV = [['dnes', 'Dnes'], ['trendy', 'Trendy'], ['denik', 'Deník'], ['jidlo', 'Jídlo'], ['beh', 'Trénink'], ['zdravi', 'Zdraví'], ['vlivy', 'Vlivy'], ['inov', 'Inovace'], ['nast', 'Nastavení']];
+// telefon: spodní lišta max 6 položek (dotyk ≥ 44 px na 390 px) — Zdraví, Vlivy a Inovace jsou ve Víc (= Nastavení), odznak Inovací se ukáže na Víc
+const BNAV_SKIP = ['zdravi', 'vlivy', 'inov'];
 const svgI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[k]}</svg>`;
 function navInit() {
   $('tabs').innerHTML = NAV.map(([k, l]) => `<button class="tab" data-p="${k}">${svgI(k)}${l}<span class="nb" data-nb="${k}"></span></button>`).join('');
@@ -422,7 +428,7 @@ function renderAll() {
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {
   if (!DATA) return;
-  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, beh: renderBeh, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
+  try { ({ dnes: renderDnes, trendy: renderTrendy, denik: renderDenik, jidlo: renderJidlo, beh: renderBeh, zdravi: renderZdravi, vlivy: renderVlivy, inov: renderInov, nast: renderNast })[PAGE](); }
   catch (e) { console.error(e); $('p-' + PAGE).innerHTML = '<div class="card empty">Chyba vykreslení: ' + esc(e.message || e) + '</div>'; }
 }
 
@@ -990,6 +996,8 @@ function renderNast() {
   $('p-nast').innerHTML = `
   <div class="page-head"><div><div class="page-t">Nastavení</div><div class="page-s">Ukládá se na Google Disk — platí na PC, iPadu i iPhonu.</div></div></div>
   <div class="grid g-2 inov-link">
+    <div class="card"><div class="card-h"><div class="card-t">Zdraví</div><button class="lnk" data-go="zdravi">Otevřít →</button></div>
+      <div class="sm t2">Imunita z hodinek, sledování CLL, otázky pro lékaře a co z videí obstojí.</div></div>
     <div class="card"><div class="card-h"><div class="card-t">Vlivy</div><button class="lnk" data-go="vlivy">Otevřít →</button></div>
       <div class="sm t2">Co nejvíc mění tvé HRV, spánek, klidovou TF a Body Battery.</div></div>
     <div class="card"><div class="card-h"><div class="card-t">Inovace</div><button class="lnk" data-go="inov">Otevřít →</button></div>

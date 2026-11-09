@@ -168,6 +168,16 @@ ok('běžný sync: málo volání', r.ok && !r.backfill && API.calls.length <= 1
 const g = JSON.parse(G.env.ghGet('k1'));
 ok('ghGet vrací data a stáří', g.ok && g.data.nights.length > 0 && g.ageH < 1);
 ok('ghGet se špatným klíčem odmítne', !JSON.parse(G.env.ghGet('x')).ok);
+// Zdraví (9.11.2026): garmin-zdravi.json + týdenní novinky; bez souborů null, nečitelná novinka neshodí zbytek
+ok('zdraví: bez souborů → null', g.zdravi === null, JSON.stringify(g.zdravi));
+G.folder.createFile('garmin-zdravi.json', JSON.stringify({ v: 1, cll: { dg: '2025-01-01', labs: [{ d: '2025-01-01', alc: 10 }] }, imun: { rutina: [] }, nov: [{ d: '2026-01-01', t: 'Základ' }] }));
+G.folder.createFile('garmin-zdravi-novinky 2026-11-16.json', JSON.stringify({ nov: [{ d: '2026-11-16', t: 'Týden 1' }, { d: '2026-01-01', t: 'Základ' }] }));
+G.folder.createFile('garmin-zdravi-novinky 2026-11-23.json', '{nečitelné');
+let gz = JSON.parse(G.env.ghGet('k1')).zdravi;
+ok('zdraví: základ + novinky sloučené bez duplicit, chybný soubor jen hláškou', gz && gz.cll.labs.length === 1 && gz.nov.length === 2 && gz.nov.some(n => n.t === 'Týden 1') && /2026-11-23/.test(gz.error || ''), JSON.stringify(gz));
+G.folder.createFile('garmin-zdravi.json', JSON.stringify({ v: 1, cll: { dg: '2025-01-01', labs: [{ d: '2025-01-01', alc: 10 }, { d: '2025-07-01', alc: 12 }] } }));
+gz = JSON.parse(G.env.ghGet('k1')).zdravi;
+ok('zdraví: novější garmin-zdravi.json má přednost (konektor umí jen zakládat)', gz.cll.labs.length === 2, JSON.stringify(gz.cll));
 const s2 = JSON.parse(G.env.ghSync('k1'));
 ok('ghSync (tlačítko) stáhne a vrátí data', s2.ok && s2.sync && s2.sync.ok, JSON.stringify(s2.sync));
 // 429 → pauza, další sync nic nevolá

@@ -83,6 +83,21 @@ const INOV = [
     co: 'Číslo 0–100 %, jak stejně chodíš spát a vstáváš. Pravidelnost spánku souvisí s regenerací víc, než se čeká, a víkendy to rády rozhodí.',
     jak: 'Z časů usnutí a probuzení za 14 nocí (stejný Apps Script jako I-003): rozptyl časů, zvlášť všední dny a víkend. V Trendech graf. Bez vyplňování.',
     vypl: 0, zdroj: 'WHOOP — Sleep Consistency (whoop.com/thelocker „new feature sleep consistency why we track it“; z rešerše, stránku se nepodařilo otevřít)', url: '', st: 'navrh', pavel: 'stejný nový Apps Script jako I-003 (pošlu)' },
+  { id: 'I-017', d: '2026-11-09', t: 'Zopakovat celé jídlo jedním klepnutím',
+    co: 'V Jídle nabídka posledních 6 různých jídel ze 14 dní (např. „Večeře 8. 11. · chléb, avokádo +2 · 520 kcal“). Klepnutím se celé jídlo i s gramy přidá do zvoleného jídla dne.',
+    jak: 'Jídlo → Jídla dne → „Zopakovat celé jídlo“. Pravidelná jídla (⟳) se nenabízejí, ta se doplňují sama.',
+    vypl: 0, zdroj: 'rešerše konkurence: MyFitnessPal „Remember meal“, Cronometer kopírování; podnět Pavla 9.11.2026 („jednoduché pro zadávání“)', url: 'https://cronometer.com/blog/?p=49661', st: 'zavedeno', done: '2026-11-09',
+    why: 'src/jidlo.js recentMeals + #frep, test t_dashboard I-017', pavel: '' },
+  { id: 'I-018', d: '2026-11-09', t: 'Záložka Zdraví: Imunita · CLL · Zdroje',
+    co: 'Zdravotní agent: Imunita tento týden z hodinek (spánek ≥ 7 h, aerobní pohyb, otužování, dech v noci, stres, ranní signál nemoci, příznaky), denní rutina a co pomáhá podle síly důkazů; CLL — laboratoř s grafem, zdvojení lymfocytů, kritéria iwCLL hlídaná z dat, otázky pro hematologa, novinky výzkumu; Zdroje — co z videí obstojí.',
+    jak: 'Osobní údaje jen na Disku (Garmin Data/garmin-zdravi.json); novinky každé pondělí od týdenní úlohy (garmin-zdravi-novinky *.json). Telefon: Víc → Zdraví.',
+    vypl: 0, zdroj: 'podnět Pavla 9.11.2026', url: '', st: 'zavedeno', done: '2026-11-09',
+    why: 'src/zdravi.js, apps-script zdraviRead_, testy t_dashboard + t_gas_sync', pavel: 'Nový .gs se nasadí sám do hodiny (samoaktualizace).' },
+  { id: 'I-019', d: '2026-11-09', t: 'Štítky Příznaky (rýma, krk, kašel, teplota, noční pocení, únava)',
+    co: 'Klikají se jen dny, kdy něco je. Zdraví z nich počítá infekce za 90 dní a kritéria iwCLL (teplota, pocení, únava); jdou i do Vlivů.',
+    jak: 'Deník → Příznaky (dokud je nepoužiješ, jsou pod „Další štítky“). Z chatu: t { ryma: 1 } atd.',
+    vypl: 1, zdroj: 'Bearable / WHOOP Journal — sledovat málo věcí, jen ano/ne', url: 'https://www.whoop.com/thelocker/the-whoop-journal/', st: 'zavedeno', done: '2026-11-09',
+    why: 'src/app.js TAGS skupina Příznaky, test t_dashboard', pavel: '' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
