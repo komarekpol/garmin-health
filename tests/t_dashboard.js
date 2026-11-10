@@ -357,6 +357,15 @@ const txt = (page, sel) => page.$eval(sel, e => e.innerText);
         delete JR.cfg.mreg; JR.days = JSON.parse(bak); return r; });
       ok('Pravidelná jídla: doplní chybějící dny, den s jídlem stejného druhu nechá', mr.n1 === 3 && mr.a.join() === '1,1,0,1' && mr.d1m === 1, JSON.stringify(mr));
       ok('Pravidelná jídla: smazané jídlo (mx) se znovu nedoplní', mr.n2 === 0 && (mr.mx || []).includes('mt1'), JSON.stringify(mr));
+      // úprava položek pravidelného jídla v Nastavení (10.11.2026): gramy, odebrání, přidání
+      await page.evaluate(() => { const id = Object.keys(JR.food || {})[0]; JR.food = JR.food || {}; JR.food.t_a = { l: 'Testa', por: 100, k: 100, p: 1, f: 1, c: 1 }; JR.food.t_b = { l: 'Testb', por: 100, k: 200, p: 1, f: 1, c: 1 }; JR.cfg.mreg = [{ id: 'mte', s: 'sn', h: '10:00', from: '2026-11-04', wd: [1, 2, 3, 4, 5], it: [{ f: 't_a', g: 50 }, { f: 't_b', g: 20 }] }]; });
+      await go(page, 'nast');
+      const mi0 = await page.$$eval('#lmreg .mreg-row [data-mig]', e => e.length);
+      await page.fill('[data-mig="mte:0"]', '80'); await page.dispatchEvent('[data-mig="mte:0"]', 'change'); await page.waitForTimeout(200);
+      await page.click('[data-mid="mte:1"]'); await page.waitForTimeout(200);
+      await page.fill('[data-mia="mte"]', 'Testb'); await page.fill('[data-mig2="mte"]', '30'); await page.click('[data-miadd="mte"]'); await page.waitForTimeout(200);
+      const mit = await page.evaluate(() => { const r = JR.cfg.mreg[0].it; delete JR.cfg.mreg; delete JR.food.t_a; delete JR.food.t_b; return r; });
+      ok('Pravidelná jídla: položky se zobrazí, jdou změnit, odebrat i přidat', mi0 === 2 && JSON.stringify(mit) === JSON.stringify([{ f: 't_a', g: 80 }, { f: 't_b', g: 30 }]), mi0 + ' ' + JSON.stringify(mit));
       await go(page, 'nast');
       // pravidelné počítadlo (káva): výchozí počet + množství; v Deníku 1×, klepnutí na − = vynechání, + přičte
       await page.selectOption('#ntreg', 'kava'); await page.click('#atreg'); await page.waitForTimeout(250);
