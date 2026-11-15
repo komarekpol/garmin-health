@@ -640,6 +640,92 @@ function bedHtml() {
     <div class="xs muted">Z tvých nejlepších nocí za 60 dní (${r.n} nocí s časem usnutí). Princip Oura Bedtime Guidance, orientační.</div></div>`;
 }
 
+// ── Nahromaděný stres za týdny (I-014, princip Oura Cumulative Stress): Ø denního stresu 14 dní proti tvému Ø 90 dní před tím (≥ 30 dní)
+// a kolik ze 14 dní bylo nad tvým obvyklým (medián 90 dní); Body Battery ráno 14 dní proti Ø 90 dní jako druhý pohled.
+// Stres ve spánku a minuty klidu / stresu přes API zatím nemáme. Bez vyplňování, orientační. ──
+function stressCumOf() {
+  const ref = (DATA && DATA.date) || TODAY(), vals = (k, from, n) => { const v = []; for (let i = from; i < from + n; i++) { const x = BYD[addD(ref, -i)]; if (x && num(x[k]) != null) v.push(num(x[k])); } return v; };
+  const s14 = vals('st', 0, 14), sb = vals('st', 14, 90);
+  if (s14.length < 10 || sb.length < 30) return null;
+  const m = avg(sb), sd = Math.sqrt(vr(sb)) || 1, a14 = avg(s14), dd = a14 - m, sbS = sb.slice().sort((p, q) => p - q), med = sbS[Math.floor(sbS.length / 2)];
+  const hi = s14.filter(v => v > med).length, b14 = vals('bb', 0, 14), bb = vals('bb', 14, 90), dB = b14.length >= 7 && bb.length >= 20 ? avg(b14) - avg(bb) : null;
+  let k, l, t;
+  if ((dd >= 0.4 * sd && dd >= 3) || hi >= 11) { k = 'amber'; l = 'Sčítá se'; t = 'Posledních 14 dní máš víc stresu než obvykle (' + hi + ' ze ' + s14.length + ' dní nad tvým běžným). Zařaď klidnější večery a odpočinek.'; }
+  else if (dd <= -0.4 * sd && dd <= -3) { k = 'good'; l = 'Odpočatý'; t = 'Stres je za dva týdny pod tvým obvyklým — tělo stíhá vybíjet.'; }
+  else { k = 'ok'; l = 'V rovnováze'; t = 'Stres za 14 dní odpovídá tvému obvyklému.'; }
+  if (dB != null && dB <= -8 && k !== 'good') t += ' Body Battery ráno je níž než obvykle (' + sgn(dB, 0) + ').';
+  return { k, l, t, a14, m, dd, hi, n14: s14.length, dB, n: sb.length };
+}
+function stressCumHtml() {
+  const r = stressCumOf(); if (!r) return '';
+  return `<div class="card scum"><div class="card-h"><div class="card-t">Stres za 2 týdny</div>${pill(r.l, r.k)}</div>
+    <div class="sm" style="margin-bottom:var(--sp-3)">${esc(r.t)}</div>
+    <div class="stats">${stat('Stres Ø 14 dní', fmt(r.a14))}${stat('Tvůj obvyklý', fmt(r.m) + ' (' + sgn(r.dd, 0) + ')')}${stat('Dny nad obvyklým', r.hi + ' / ' + r.n14)}${r.dB != null ? stat('BB ráno vs obvykle', sgn(r.dB, 0)) : ''}</div>
+    <div class="xs muted" style="margin-top:var(--sp-2)">Obvyklý = Ø denního stresu ${r.n} dní před těmito dvěma týdny. Princip Oura Cumulative Stress, orientační.</div></div>`;
+}
+
+// ── Pravidelnost spánku (I-016, princip WHOOP Sleep Consistency): 14 nocí s časem usnutí i probuzení (≥ 7);
+// skóre = 100 − Ø (SD usnutí, SD probuzení) v minutách × 100 / 90 (SD 0 = 100 %, 45 min = 50 %, 90 min = 0 %);
+// všední dny vs víkend = rozdíl středu spánku (noc na So a Ne = víkend). ──
+const sdM = a => a.length > 1 ? Math.sqrt(vr(a)) : null;
+function regAt(ref) {
+  const b = [], w = [], mWd = [], mWe = [];
+  for (let i = 0; i < 14; i++) { const d = addD(ref, -i), x = BYD[d]; if (!x || num(x.bt) == null || num(x.wt) == null) continue;
+    const bn = btNorm(num(x.bt)), wn = num(x.wt) + 1440, mid = (bn + (wn < bn ? wn + 1440 : wn)) / 2, wd = new Date(d + 'T12:00:00').getDay();
+    b.push(bn); w.push(wn); ((wd === 0 || wd === 6) ? mWe : mWd).push(mid); }
+  if (b.length < 7) return { n: b.length };
+  const sdB = sdM(b), sdW = sdM(w), sc = Math.max(0, Math.min(100, Math.round(100 - (sdB + sdW) / 2 * 100 / 90)));
+  return { n: b.length, sc, sdB, sdW, jet: mWd.length >= 3 && mWe.length >= 1 ? avg(mWe) - avg(mWd) : null };
+}
+function regOf() {
+  const ref = (DATA && DATA.date) || TODAY(), r = regAt(ref); if (r.sc == null) return r;
+  const hist = []; for (let i = 20; i >= 0; i--) { const y = regAt(addD(ref, -i)); hist.push(y.sc ?? null); }
+  r.k = r.sc >= 80 ? 'good' : r.sc >= 60 ? 'ok' : 'amber'; r.l = r.sc >= 80 ? 'pravidelný' : r.sc >= 60 ? 'kolísá' : 'nepravidelný'; r.hist = hist;
+  return r;
+}
+function regHtml() {
+  const r = regOf(); if (!r.n) return '';
+  if (r.sc == null) return `<div class="card sreg"><div class="card-h"><div class="card-t">Pravidelnost spánku</div>${pill('sbírám data', 'ok')}</div><div class="sm t2">Ukáže se po 7 nocích s časem usnutí a probuzení (zatím ${r.n}).</div></div>`;
+  const jt = r.jet == null ? '' : Math.abs(r.jet) < 30 ? ' Víkend se od všedních dnů skoro neliší.' : ' O víkendu máš střed spánku ' + (r.jet > 0 ? 'později' : 'dřív') + ' o ' + hm(Math.abs(r.jet) / 60) + '.';
+  return `<div class="card sreg"><div class="card-h"><div class="card-t">Pravidelnost spánku</div>${pill(r.l, r.k)}</div>
+    <div class="kpi-v">${r.sc}<small>%</small></div><div class="sm t2" style="margin:var(--sp-2) 0">Usínáš ± ${fmt(r.sdB)} min, vstáváš ± ${fmt(r.sdW)} min.${esc(jt)}</div>
+    ${spark(r.hist, tok('--blue'))}
+    <div class="xs muted">Za ${r.n} nocí ze 14; křivka = posledních 21 dní. Princip WHOOP Sleep Consistency, orientační.</div></div>`;
+}
+
+// ── Křivka energie na dnešek (I-015, princip RISE Energy Schedule): z dnešního času probuzení (wt) — rozjezd ~90 min (RISE),
+// další fáze jsou náš orientační odhad podle cirkadiánního rytmu: dopolední vrchol +2,5–5 h, odpolední útlum +7–9 h, večerní vrchol +10–12 h,
+// zklidnění 1 h před oknem usínání (I-003, jinak probuzení + 15,5 h). Spánkový dluh ≥ 5 h = útlum hlubší a vrcholy nižší. ──
+function energyOf() {
+  const ref = (DATA && DATA.date) || TODAY(), x = BYD[ref], w = x ? num(x.wt) : null; if (w == null) return null;
+  const bd = bedOf(), db = debtOf(), deep = db ? db.d >= 5 : false;
+  const sl = bd && bd.lo != null ? bd.lo : w + 15.5 * 60, sh = bd && bd.hi != null ? bd.hi : sl + 30;
+  const ph = [
+    { k: 'roz', l: 'Rozjezd', a: w, b: w + 90, t: 'světlo a pohyb pomůžou' },
+    { k: 'top', l: 'Dopolední vrchol', a: w + 150, b: w + 300, t: 'náročná práce, kvalitní běh' },
+    { k: 'dip', l: 'Odpolední útlum', a: w + 420, b: w + 540, t: deep ? 'po krátkém spánku výraznější — lehké věci, krátká procházka' : 'lehčí úkoly; kávu nejpozději na jeho začátku' },
+    { k: 'top', l: 'Večerní vrchol', a: w + 600, b: w + 720, t: 'vhodné i pro trénink' },
+    { k: 'calm', l: 'Zklidnění', a: sl - 60, b: sl, t: 'tlumené světlo, bez obrazovky' },
+    { k: 'mel', l: 'Okno usínání', a: sl, b: sh, t: 'nejsnáz usneš' } ];
+  return { w, ph, deep, debt: db ? db.d : null, bedOk: !!(bd && bd.lo != null) };
+}
+function energySvg(e) {
+  const W = 600, H = 90, t0 = e.w, t1 = e.ph[5].b + 30, X = t => ((t - t0) / (t1 - t0) * W).toFixed(1);
+  const lvl = t => { const r = t - e.w, g = h => Math.exp(-((r - h * 60) ** 2) / (2 * 70 * 70));
+    return 0.25 + 0.55 * Math.min(1, r / 120) + 0.25 * g(3.75) - (e.deep ? 0.42 : 0.3) * g(8) + 0.2 * g(11) - 0.55 * Math.max(0, (t - (e.ph[4].a)) / (t1 - e.ph[4].a)); };
+  const pts = []; for (let t = t0; t <= t1; t += 10) pts.push(X(t) + ',' + (H - 8 - Math.max(0.05, Math.min(1.1, lvl(t) * (e.deep ? 0.9 : 1))) * (H - 16)).toFixed(1));
+  const now = new Date(), nm = now.getHours() * 60 + now.getMinutes(), nowN = nm < t0 - 120 ? nm + 1440 : nm;
+  const band = p => `<rect x="${X(p.a)}" y="0" width="${(X(p.b) - X(p.a)).toFixed(1)}" height="${H}" fill="${tok(p.k === 'dip' ? '--amber' : p.k === 'mel' ? '--blue' : p.k === 'top' ? '--green' : '--bg4')}" opacity="0.13"/>`;
+  return `<svg class="ecurve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${e.ph.map(band).join('')}<polyline fill="none" stroke="${tok('--blue')}" stroke-width="2" vector-effect="non-scaling-stroke" points="${pts.join(' ')}"/>${nowN >= t0 && nowN <= t1 ? `<line x1="${X(nowN)}" x2="${X(nowN)}" y1="0" y2="${H}" stroke="${tok('--text3')}" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : ''}</svg>`;
+}
+function energyHtml() {
+  const e = energyOf(); if (!e) return '';
+  return `<div class="card energy"><div class="card-h"><div class="card-t">Energie dnes</div>${pill('vstal(a) ' + clk(e.w), e.deep ? 'amber' : 'ok')}</div>
+    ${energySvg(e)}
+    <div class="eph">${e.ph.map(p => `<div><b>${clk(p.a)}–${clk(p.b)}</b><span>${esc(p.l)}</span><span class="muted xs">${esc(p.t)}</span></div>`).join('')}</div>
+    <div class="xs muted" style="margin-top:var(--sp-2)">Z dnešního probuzení${e.debt != null ? ', spánkového dluhu ' + hm(e.debt) : ''}${e.bedOk ? ' a tvého okna usínání' : ''}. Rozjezd ~90 min podle RISE, ostatní časy jsou orientační odhad podle cirkadiánního rytmu.</div></div>`;
+}
+
 // ── Dnes ──
 function renderDnes() {
   const h = DATA.hrv || {}, d = DATA.daily || {}, sl = DATA.sleep_latest || {}, f = DATA.fitness || {}, a = DATA.last_activity || {};
@@ -674,6 +760,8 @@ function renderDnes() {
   ${briefHtml()}
   ${recovHtml()}
   ${debtHtml() || bedHtml() ? `<div class="grid g-2">${debtHtml()}${bedHtml()}</div>` : ''}
+  ${energyHtml()}
+  ${regHtml() || stressCumHtml() ? `<div class="grid g-2">${regHtml()}${stressCumHtml()}</div>` : ''}
   <div class="grid g-hero">
     <div class="card"><div class="hero">${ring(sc, rcol)}<div style="min-width:0;flex:1">
       <div class="lbl">${R.est ? 'Připravenost (odhad)' : 'Training Readiness'}</div>
