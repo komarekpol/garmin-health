@@ -423,7 +423,17 @@ function go(p) {
 function renderAll() {
   $('age').textContent = ageText(); $('age').classList.toggle('stale', !!(META && META.stale));
   const f = $('snfoot'); if (f) f.innerHTML = DATA ? 'Data za ' + esc(dShort(DATA.date)) + '<br>' + esc(ageText()) : '';
-  navBadges(); renderPage();
+  navBadges(); renderPage(); vlSnap();
+}
+// I-005: průkazné Vlivy na HRV pro nedělní e-mail (Apps Script je nepočítá) → garmin_ui.vl, nejvýš 1× denně, ~0,3 kB
+function vlSnap() {
+  try {
+    if (!DATA || DAYS.length < 21) return;
+    const u = uiGet(); if (u.vl && u.vl.at === TODAY()) return;
+    const r = influence('hrv').ok.filter(x => Math.abs(x.t) >= 2 && x.n1 >= 8).slice(0, 3)
+      .map(x => ({ l: String(x.f.l).slice(0, 60), e: Math.round(x.e * 10) / 10, n: x.n1, g: x.good ? 1 : 0 }));
+    u.vl = { at: TODAY(), r: r }; uiSet(u);
+  } catch (e) { console.warn('vlSnap', e); }
 }
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {

@@ -33,6 +33,7 @@ Pavlův zdravotní dashboard z hodinek Garmin (HRV, klidová TF, Body Battery, d
 - **Štítky Příznaky** (I-019): `ryma`, `krk`, `kasel`, `teplota`, `poceni`, `unava` (skupina v `TAGS`); `ZD_SYM` = známky infekce.
 - **Zopakovat celé jídlo** (I-017): `recentMeals(d, 6)` v Jídle — 14 dní zpět, unikátní složení, bez `r` jídel; klepnutí přidá položky do zvoleného druhu.
 - **Prahy a zóny**: `ST_KEYS` v HTML = `KEEP_KEYS_` v .gs = `SETTINGS_KEYS` v serveru (nový klíč do všech tří).
+- **Nedělní souhrn e-mailem** (22.11.2026, I-005): `weekMailWatch_` z `selfUpdateTick` — neděle 18–22 h Praha, 1× týdně (`WEEK_MAIL_DAY`), vypnutí Vlastností `WEEK_MAIL` = off, náhled `weekMailTest`; HTML (`weekMailBuild_`: Týden v číslech Ø 7 dní vs předchozích 7 s prahy jako `BRIEF_M`, noci, trénink, Vlivy). Vlivy počítá jen stránka → `vlSnap` 1× denně do `garmin_ui.vl` (≤ 3 průkazné na HRV, ~0,3 kB). Hlídá t_gas_sync + t_dashboard.
 - **Hlídání**: data > 30 h → žlutá hláška + e-mail 1× denně s poslední chybou syncu (`staleWatch_`); klíč vyprší do 30 dní → e-mail 1× týdně (`keyExpWatch_`).
 
 ## Pravidla

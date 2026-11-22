@@ -389,7 +389,9 @@ const INOV = [
   { id: 'I-005', d: '2026-10-30', t: 'Nedělní souhrn týdne e-mailem',
     co: 'Jednou týdně krátce do mailu: co se zlepšilo a zhoršilo, nejlepší a nejhorší noc, co ukázaly Vlivy. Nemusíš nic otevírat.',
     jak: 'Apps Script v neděli večer pošle e-mail se stejnými čísly jako karta Krátce + Vlivy. Bez vyplňování.',
-    vypl: 0, zdroj: 'vlastní nápad', url: '', st: 'navrh', pavel: 'vložit nový Apps Script (pošlu)' },
+    vypl: 0, zdroj: 'vlastní nápad', url: '', st: 'zavedeno', done: '2026-11-22',
+    why: 'Apps Script: weekMailBuild_ / weekMailWatch_ (z selfUpdateTick, neděle 18–22 h Praha, 1× týdně WEEK_MAIL_DAY, vypnutí Vlastností WEEK_MAIL = off, náhled weekMailTest). HTML e-mail podle poznámky Pavla — struktura a ikonky: hlavička s týdnem, Týden v číslech (HRV, klidová TF, skóre a délka spánku, BB, stres, kroky; Ø 7 dní a ▲▼ proti předchozímu týdnu, stejné prahy jako Krátce), Noci (nejlepší / nejhorší), Trénink (aktivity, hodiny, zátěž, km běhu vs minulý týden), Vlivy na HRV. Stránka: vlSnap v src/app.js 1× denně uloží průkazné Vlivy do garmin_ui.vl (Apps Script je nepočítá). Testy t_gas_sync (7×) + t_dashboard',
+    pavel: 'vložit nový Apps Script (pošlu); náhled hned: v editoru spustit weekMailTest' },
   { id: 'I-006', d: '2026-10-30', t: 'Běh: doporučení na dnešek',
     co: 'Ráno jedna věta: volno / lehký běh / normální / můžeš přitlačit — podle regenerace i toho, kolik jsi naběhal.',
     jak: 'Spojí odhad připravenosti s tréninkovou zátěží posledních 7 dní proti průměru 4 týdnů (z aktivit Garminu). Krok k osobnímu trenérovi běhu.',
@@ -472,6 +474,18 @@ const INOV = [
     co: 'Místo jediné věty na dnešek uvidíš návrh na 7 dní: kdy volno, kdy lehký běh a kdy kvalitní trénink — a plán se sám posune, když regenerace nebo zátěž ujedou.',
     jak: 'Ze dnů, kdy obvykle běháš, zátěže 7 / 28 dní (I-006) a trendu regenerace (I-002) rozvrhne týden. Runna plány upravuje hlavně podle tempa, ne podle HRV — tady rozhoduje tvoje regenerace. Bez vyplňování.',
     vypl: 0, zdroj: 'the5krunner — Is Runna AI? (Runna adaptuje podle tempa a „Not Feeling 100%“, data o regeneraci z hodinek nepoužívá)', url: 'https://the5krunner.com/2026/09/28/is-runna-ai/', st: 'navrh' },
+  { id: 'I-023', d: '2026-11-22', t: 'Běh: VO2max a odhad časů na 5 / 10 km a půlmaraton',
+    co: 'Uvidíš, jak se ti vyvíjí kondice a na jaký čas bys teď zhruba zaběhl 5 km, 10 km a půlmaraton — jako cíl i jako kontrola, že trénink funguje.',
+    jak: 'Garmin už u každého běhu posílá odhad VO2max (máme ho v aktivitách). Trénink → Běh ukáže trend za 6 měsíců (průměr posledních 30 dní jako Runalyze) a z něj orientační časy závodů podle Danielsových tabulek. Bez vyplňování, bez nového Apps Scriptu.',
+    vypl: 0, zdroj: 'Runalyze — VO2max (tvar = průměr odhadů za 30 dní, odhad času závodu); Oura VO2 max z GPS tréninků (TechCrunch 20.10.2026)', url: 'https://runalyze.com/help/article/vo2max', st: 'navrh' },
+  { id: 'I-024', d: '2026-11-22', t: 'Kardio úsilí za týden',
+    co: 'Jedno číslo za týden pro všechny sporty (běh, kolo, veslo, SkiErg): jak moc jsi zatížil srdce — a jestli tím kondici udržuješ, buduješ, nebo jsi na hraně.',
+    jak: 'Z každé aktivity: minuty × o kolik byl průměrný tep nad tvou klidovou TF. Týdenní součet proti tvým posledním 4–6 týdnům → Lehký / Udržuje / Buduje / Na hraně (podobně jako Oura Cardio Effort). Karta v Tréninku, bez vyplňování.',
+    vypl: 0, zdroj: 'Oura Cardio Effort — tep proti dlouhodobé klidové TF, týdenní součet s osobními pásmy (TechCrunch 20.10.2026)', url: 'https://techcrunch.com/2026/10/20/oura-is-launching-two-new-ways-to-track-and-understand-activity/', st: 'navrh' },
+  { id: 'I-025', d: '2026-11-22', t: 'Potřeba spánku podle tréninku a dluhu',
+    co: 'Večer uvidíš, kolik spánku dnes potřebuješ — víc po tvrdém tréninku nebo když máš spánkový dluh, míň po klidném dni. Spánkový dluh (I-009) pak počítá se skutečnou potřebou, ne s pevným číslem.',
+    jak: 'K tvé základní potřebě spánku přičte pár desítek minut po dni s vysokou zátěží (Garmin) a část dluhu za 14 nocí. Ukáže se v kartě Ideální čas usínání. Bez vyplňování, bez nového Apps Scriptu.',
+    vypl: 0, zdroj: 'Wahoo My Readiness s daty Oura — potřeba spánku z intenzity tréninku a nahromaděného dluhu (tisková zpráva 17.11.2026, bez vzorců)', url: 'https://bicycleretailer.com/announcements/2026/11/17/wahoo-launches-my-readiness-readiness-state-understands-your-training', st: 'navrh' },
 ];
 // Vyřešené podněty Pavla: { id podnětu: { done: 'RRRR-MM-DD', why: 'co bylo uděláno' } }
 const INOV_POD_DONE = {};
@@ -1539,7 +1553,17 @@ function go(p) {
 function renderAll() {
   $('age').textContent = ageText(); $('age').classList.toggle('stale', !!(META && META.stale));
   const f = $('snfoot'); if (f) f.innerHTML = DATA ? 'Data za ' + esc(dShort(DATA.date)) + '<br>' + esc(ageText()) : '';
-  navBadges(); renderPage();
+  navBadges(); renderPage(); vlSnap();
+}
+// I-005: průkazné Vlivy na HRV pro nedělní e-mail (Apps Script je nepočítá) → garmin_ui.vl, nejvýš 1× denně, ~0,3 kB
+function vlSnap() {
+  try {
+    if (!DATA || DAYS.length < 21) return;
+    const u = uiGet(); if (u.vl && u.vl.at === TODAY()) return;
+    const r = influence('hrv').ok.filter(x => Math.abs(x.t) >= 2 && x.n1 >= 8).slice(0, 3)
+      .map(x => ({ l: String(x.f.l).slice(0, 60), e: Math.round(x.e * 10) / 10, n: x.n1, g: x.good ? 1 : 0 }));
+    u.vl = { at: TODAY(), r: r }; uiSet(u);
+  } catch (e) { console.warn('vlSnap', e); }
 }
 function navBadges() { const n = inovOpen().length; document.querySelectorAll('[data-nb="inov"]').forEach(b => { b.textContent = n || ''; b.title = n ? n + ' k hlasování' : ''; }); }
 function renderPage() {

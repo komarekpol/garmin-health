@@ -355,7 +355,7 @@ function healthOut_() {
   const d = dataRead_(), p = props_();
   return { at: new Date().toISOString(), data: d.ok ? { at: d.at, ageH: d.ageH, bytes: d.bytes, date: d.data.date, warn: d.data.warn || null, stale: d.ageH > STALE_H_ } : { error: d.error },
     sync: { at: p.getProperty('SYNC_AT'), err: p.getProperty('SYNC_ERR'), backfill: p.getProperty('BF_STATE'), keyExp: p.getProperty('GARMIN_KEY_EXP') || null, cooldown: p.getProperty('GARMIN_COOLDOWN') },
-    selfSha: p.getProperty('SELF_SHA'), selfAt: p.getProperty('SELF_AT'), selfErr: p.getProperty('SELF_ERR'), inbox: p.getProperty('INBOX_LAST'), staleMail: p.getProperty('STALE_MAIL_DAY'),
+    selfSha: p.getProperty('SELF_SHA'), selfAt: p.getProperty('SELF_AT'), selfErr: p.getProperty('SELF_ERR'), inbox: p.getProperty('INBOX_LAST'), staleMail: p.getProperty('STALE_MAIL_DAY'), weekMail: p.getProperty('WEEK_MAIL_DAY'), weekMailErr: p.getProperty('WEEK_MAIL_ERR'),
     triggers: (() => { try { return ScriptApp.getProjectTriggers().map(x => x.getHandlerFunction()); } catch (e) { return null; } })() };
 }
 function staleWatch_() {
@@ -410,6 +410,7 @@ function selfUpdateTick() {
   try { inboxMerge_(); } catch (e) { console.warn('inboxMerge_: ' + e); }
   try { staleWatch_(); } catch (e) { console.warn('staleWatch_: ' + e); }
   try { keyExpWatch_(); } catch (e) { console.warn('keyExpWatch_: ' + e); }
+  try { weekMailWatch_(); } catch (e) { console.warn('weekMailWatch_: ' + e); p.setProperty('WEEK_MAIL_ERR', new Date().toISOString() + ' ' + String(e).slice(0, 300)); }
   let r; try { r = selfUpdate(false); p.deleteProperty('SELF_ERR'); } catch (err) { console.warn('selfUpdate: ' + err); r = { ok: false, error: String(err) }; p.setProperty('SELF_ERR', new Date().toISOString() + ' ' + String(err).slice(0, 400)); }
   try { writeFile_(HEALTH_FILE, JSON.stringify(healthOut_(), null, 1), MimeType.PLAIN_TEXT); } catch (e) {}
   return r;
@@ -756,6 +757,81 @@ function buildData_(H) {
         rhr: dd.resting_heart_rate ?? null, bb: dd.body_battery_at_wake ?? null, st: dd.average_stress_level ?? null, stp: dd.total_steps ?? null,
         rs: dd.avg_waking_respiration ?? null, kc: dd.total_kilocalories ?? null, ka: dd.active_kilocalories ?? null, a: x.a || [] }; }) };
 }
+
+// ══ ✉ Nedělní souhrn týdne e-mailem (I-005, 22.11.2026; Pavel: „ať ten e-mail má strukturu a design, ikonky“) ══
+// Neděle 18–22 h Praha, 1× týdně (WEEK_MAIL_DAY). Vypnout: Vlastnost WEEK_MAIL = off. Náhled kdykoli: weekMailTest v editoru.
+// Čísla jen z garmin-data.json (stejná okna jako karta Krátce: 7 dní do posledního dne dat vs předchozích 7) + Vlivy, které stránka
+// při otevření uloží do garmin_ui.vl (Apps Script je nepočítá — jedna logika jen na stránce). Orientační, žádná doporučení léčby.
+const WEEK_M_ = [
+  { k: 'hrv', l: 'HRV', ic: '💓', u: 'ms', b: 1, thr: 2, d: 0 }, { k: 'rhr', l: 'Klidová TF', ic: '❤️', u: 'bpm', b: -1, thr: 1.5, d: 1 },
+  { k: 'sc', l: 'Skóre spánku', ic: '🌙', u: '', b: 1, thr: 3, d: 0 }, { k: 'sh', l: 'Délka spánku', ic: '🛏️', u: 'h', b: 1, thr: 0.33, d: 1 },
+  { k: 'bb', l: 'Body Battery ráno', ic: '🔋', u: '', b: 1, thr: 5, d: 0 }, { k: 'st', l: 'Stres', ic: '🌀', u: '', b: -1, thr: 3, d: 0 },
+  { k: 'stp', l: 'Kroky / den', ic: '👣', u: '', b: 1, thr: 800, d: 0 },
+];
+function wmEsc_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function wmD_(s) { return +s.slice(8, 10) + '. ' + +s.slice(5, 7) + '.'; }
+function wmNum_(v, d) { if (v == null || !isFinite(v)) return '–'; const t = (+v).toFixed(d || 0).split('.'); return t[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (t[1] && +t[1] ? ',' + t[1] : ''); }
+function wmHm_(h) { if (h == null) return '–'; const m = Math.round(h * 60); return Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; }
+function weekMailBuild_(data, ui) {
+  const ref = data.date, by = {}; (data.days || []).forEach(x => { by[x.d] = x; });
+  const win = (k, from) => { const v = []; for (let i = from; i < from + 7; i++) { const x = by[addDays_(ref, -i)]; if (x && x[k] != null && isFinite(x[k])) v.push(+x[k]); } return v; };
+  const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  const C = { g: '#1f9d55', r: '#d64545', n: '#8a8f98', t: '#1c1f24', t2: '#5b616b', bd: '#e6e8eb', bg: '#f6f7f9', ac: '#2f6fed' };
+  const rows = [], up = [], down = [];
+  WEEK_M_.forEach(m => {
+    const a = win(m.k, 0), p = win(m.k, 7), now = a.length >= 4 ? avg(a) : null, prev = p.length >= 4 ? avg(p) : null;
+    if (now == null) return;
+    const diff = prev != null ? now - prev : null, big = diff != null && Math.abs(diff) >= m.thr, good = big && diff * m.b > 0;
+    if (big) (good ? up : down).push(m.l);
+    const fv = m.k === 'sh' ? wmHm_(now) : wmNum_(now, m.d) + (m.u ? ' ' + m.u : '');
+    const fd = diff == null ? 'bez srovnání' : m.k === 'sh' ? (diff >= 0 ? '+' : '−') + Math.round(Math.abs(diff) * 60) + ' min' : (wmNum_(Math.abs(diff), m.d) === '0' ? '±' : diff >= 0 ? '+' : '−') + wmNum_(Math.abs(diff), m.d) + (m.u ? ' ' + m.u : '');
+    const arrow = !big ? '■' : diff > 0 ? '▲' : '▼', col = !big ? C.n : good ? C.g : C.r;
+    rows.push(`<tr><td style="padding:8px 6px;border-bottom:1px solid ${C.bd}">${m.ic}&nbsp; ${wmEsc_(m.l)}</td><td style="padding:8px 6px;border-bottom:1px solid ${C.bd};text-align:right;font-weight:600;white-space:nowrap">${wmEsc_(fv)}</td>`
+      + `<td style="padding:8px 6px;border-bottom:1px solid ${C.bd};text-align:right;color:${col};white-space:nowrap">${arrow} ${wmEsc_(fd)}</td></tr>`);
+  });
+  // noci za týden: nejlepší / nejhorší podle skóre
+  const from = addDays_(ref, -6), nights = (data.nights || []).filter(n => n.date >= from && n.date <= ref && n.score != null).sort((a, b) => b.score - a.score);
+  const nl = n => `<b>${wmD_(n.date)}</b> — skóre ${n.score}${n.hours != null ? ', ' + wmEsc_(wmHm_(n.hours)) : ''}${n.hrv != null ? ', HRV ' + n.hrv + ' ms' : ''}`;
+  // trénink: aktivity týdne vs minulého (minuty, zátěž Garmin)
+  const actW = from0 => { let n = 0, min = 0, load = 0, days = 0; for (let i = from0; i < from0 + 7; i++) { const x = by[addDays_(ref, -i)]; const a = (x && x.a) || []; if (a.length) days++; a.forEach(z => { n++; min += z.m || 0; load += z.l || 0; }); } return { n, min, load: Math.round(load), days }; };
+  const aw = actW(0), ap = actW(7), runKm = (() => { let km = 0; for (let i = 0; i < 7; i++) { const x = by[addDays_(ref, -i)]; ((x && x.a) || []).forEach(z => { if (/run/i.test(z.k || '')) km += z.km || 0; }); } return km; })();
+  // Vlivy ze stránky (garmin_ui.vl): jen průkazné, uložené při posledním otevření
+  const vl = ui && ui.vl && Array.isArray(ui.vl.r) ? ui.vl : null;
+  const sec = (ic, t, body) => `<tr><td style="padding:18px 20px 4px"><div style="font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:${C.t2};font-weight:600">${ic}&nbsp; ${wmEsc_(t)}</div>${body}</td></tr>`;
+  const p_ = t => `<p style="margin:8px 0;font-size:15px;line-height:1.5;color:${C.t}">${t}</p>`;
+  const range = wmD_(addDays_(ref, -6)) + ' – ' + wmD_(ref) + ' ' + ref.slice(0, 4);
+  const sum = up.length || down.length ? (up.length ? '▲ ' + up.join(', ') : '') + (up.length && down.length ? ' · ' : '') + (down.length ? '▼ ' + down.join(', ') : '') : 'Stabilní týden';
+  const html = `<div style="background:${C.bg};padding:16px 8px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">`
+    + `<table role="presentation" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;margin:0 auto;background:#fff;border:1px solid ${C.bd};border-radius:12px;border-collapse:separate">`
+    + `<tr><td style="padding:20px 20px 8px;border-bottom:3px solid ${C.ac}"><div style="font-size:12px;color:${C.t2};text-transform:uppercase;letter-spacing:.08em">Garmin Health · týden</div>`
+    + `<div style="font-size:22px;font-weight:700;color:${C.t};margin-top:2px">📅 ${wmEsc_(range)}</div><div style="font-size:14px;color:${C.t2};margin-top:6px">${wmEsc_(sum)} (proti předchozímu týdnu)</div></td></tr>`
+    + sec('📊', 'Týden v číslech', rows.length ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;font-size:15px;color:${C.t};margin-top:6px">${rows.join('')}</table>`
+      + `<div style="font-size:12px;color:${C.n};margin-top:6px">Ø 7 dní · ▲▼ změna proti předchozím 7 dnům (zelená lepší, červená horší, ■ beze změny)</div>` : p_('Za tento týden je málo dat.'))
+    + sec('🌙', 'Noci', nights.length ? p_('⭐ Nejlepší: ' + nl(nights[0])) + (nights.length > 1 ? p_('⚠️ Nejhorší: ' + nl(nights[nights.length - 1])) : '') : p_('Žádná noc se skóre.'))
+    + sec('🏃', 'Trénink', p_(`<b>${aw.n}</b> aktivit · <b>${wmNum_(aw.min / 60, 1)} h</b> · zátěž <b>${aw.load}</b>${runKm ? ' · běh <b>' + wmNum_(runKm, 1) + ' km</b>' : ''}`)
+      + p_(`<span style="color:${C.t2}">Minulý týden ${ap.n} aktivit, ${wmNum_(ap.min / 60, 1)} h, zátěž ${ap.load}. Dny bez aktivity: ${7 - aw.days}.</span>`))
+    + sec('🔍', 'Vlivy na HRV', vl && vl.r.length ? vl.r.slice(0, 3).map(r => p_(`<span style="color:${r.g ? C.g : C.r}">${r.g ? '▲' : '▼'}</span> <b>${wmEsc_(r.l)}</b> — další ráno v průměru ${(r.e >= 0 ? '+' : '−') + wmNum_(Math.abs(r.e), 1)} ms (${r.n}× s faktorem)`)).join('')
+      + `<div style="font-size:12px;color:${C.n}">Průkazné souvislosti ze stránky (spočítané ${wmEsc_(wmD_(vl.at))}) — souvislost, ne důkaz příčiny.</div>`
+      : p_(vl ? 'Zatím žádný průkazný vliv — potřebuje to víc dní deníku.' : 'Vlivy se doplní, až otevřeš stránku Garmin Health.'))
+    + `<tr><td style="padding:16px 20px 20px;font-size:12px;color:${C.n}">Orientační přehled z hodinek Garmin, ne lékařské doporučení. Vypnout: Vlastnost skriptu WEEK_MAIL = off.</td></tr></table></div>`;
+  const text = 'Garmin Health · týden ' + range + '\n' + sum + '\n\nPodrobnosti v HTML verzi e-mailu nebo na stránce Garmin Health.';
+  return { subject: 'Garmin Health · týden ' + range + ' — ' + sum, html, text, rows: rows.length, nights: nights.length, act: aw, vl: !!(vl && vl.r.length) };
+}
+function weekMailWatch_(now, force) {
+  now = now || new Date();
+  const p = props_(); if ((p.getProperty('WEEK_MAIL') || '').toLowerCase() === 'off' && !force) return null;
+  const day = ymd_(now), h = +Utilities.formatDate(now, 'Europe/Prague', 'H');
+  if (!force && (new Date(day + 'T12:00:00Z').getUTCDay() !== 0 || h < 18 || h > 22 || p.getProperty('WEEK_MAIL_DAY') === day)) return null;
+  const d = dataRead_(); if (!d.ok) throw new Error('weekMail: ' + d.error);
+  let ui = {}; try { ui = JSON.parse(settingsRead_().garmin_ui || '{}') || {}; } catch (e) {}
+  const m = weekMailBuild_(d.data, ui);
+  MailApp.sendEmail({ to: p.getProperty('ALERT_EMAIL') || Session.getEffectiveUser().getEmail(), subject: m.subject, body: m.text, htmlBody: m.html, name: 'Garmin Health' });
+  if (!force) p.setProperty('WEEK_MAIL_DAY', day);
+  p.deleteProperty('WEEK_MAIL_ERR');
+  return m;
+}
+// Náhled v editoru: pošle souhrn hned (bez ohledu na den a WEEK_MAIL)
+function weekMailTest() { const m = weekMailWatch_(new Date(), true); Logger.log(m ? m.subject : 'neodesláno'); }
 
 // Připomínka vypršení klíče: od 30 dní předem 1× týdně e-mail (datum vypršení zadává Pavel do GARMIN_KEY_EXP)
 function keyExpWatch_() {

@@ -115,7 +115,7 @@ function gasEnv() {
       base64DecodeWebSafe: s => [...Buffer.from(s.replace(/=+$/, ''), 'base64url')],
       newBlob: b => ({ getDataAsString: () => Buffer.from(b).toString('utf8') }), getUuid: () => crypto.randomUUID(),
     },
-    MailApp: { sendEmail: (to, sub, body) => mails.push({ to, sub, body }) },
+    MailApp: { sendEmail: (to, sub, body) => mails.push(typeof to === 'object' ? { to: to.to, sub: to.subject, body: to.body, html: to.htmlBody } : { to, sub, body }) },
     Session: { getEffectiveUser: () => ({ getEmail: () => 'me@example.com' }) },
     Logger: { log: () => {} },
     ScriptApp: { getProjectTriggers: () => [] },
@@ -196,6 +196,22 @@ ok('neplatný klíč = jasná chyba', !r.ok && /neplatný nebo vypršel/.test(r.
 // připomínka vypršení klíče
 G.props.GARMIN_KEY_EXP = add(TODAY, 20); G.env.keyExpWatch_(); G.env.keyExpWatch_();
 ok('e-mail o vypršení klíče 1× týdně', G.mails.filter(m => /vyprší za/.test(m.sub)).length === 1, JSON.stringify(G.mails.map(m => m.sub)));
+// I-005: nedělní souhrn týdne e-mailem — jen v neděli 18–22 h, 1× týdně, WEEK_MAIL=off vypne, Vlivy z garmin_ui.vl
+{ const ds = JSON.parse(G.file('garmin-data.json').content), sun = (() => { const d = new Date(); d.setUTCDate(d.getUTCDate() + (7 - d.getUTCDay()) % 7); d.setUTCHours(18, 30, 0, 0); return d; })();
+  const n0 = G.mails.length, mon = new Date(sun.getTime() + 864e5);
+  ok('I-005: v pondělí se souhrn neposílá', G.env.weekMailWatch_(mon) === null && G.mails.length === n0);
+  ok('I-005: v neděli dopoledne ne', G.env.weekMailWatch_(new Date(sun.getTime() - 9 * 36e5)) === null && G.mails.length === n0);
+  G.folder.createFile('garmin-settings.json', JSON.stringify({ garmin_ui: JSON.stringify({ vl: { at: ds.date, r: [{ l: 'Alkohol <2>', e: -4.2, n: 11, g: 0 }] } }) }));
+  const m = G.env.weekMailWatch_(sun);
+  ok('I-005: neděle večer → HTML e-mail s tabulkou, nocemi, tréninkem a Vlivy', m && G.mails.length === n0 + 1 && m.rows >= 6 && m.nights >= 5 && m.act.n > 0 && m.vl
+    && /<table/.test(G.mails.at(-1).html) && /💓/.test(G.mails.at(-1).html) && /Nejlepší/.test(G.mails.at(-1).html) && /Alkohol &lt;2&gt;/.test(G.mails.at(-1).html) && /Garmin Health · týden/.test(G.mails.at(-1).sub), m && JSON.stringify({ rows: m.rows, nights: m.nights, act: m.act, vl: m.vl }));
+  ok('I-005: druhý běh téže neděle nic nepošle', G.env.weekMailWatch_(new Date(sun.getTime() + 36e5)) === null && G.mails.length === n0 + 1);
+  G.props.WEEK_MAIL = 'off'; delete G.props.WEEK_MAIL_DAY;
+  ok('I-005: WEEK_MAIL=off vypne', G.env.weekMailWatch_(sun) === null && G.mails.length === n0 + 1);
+  delete G.props.WEEK_MAIL; G.env.weekMailTest();
+  ok('I-005: weekMailTest pošle náhled hned a nezapíše týden', G.mails.length === n0 + 2 && !G.props.WEEK_MAIL_DAY);
+  const e = G.env.weekMailBuild_({ date: ds.date, days: [], nights: [] }, {});
+  ok('I-005: bez dat srozumitelný text, bez pádu', /málo dat/.test(e.html) && /otevřeš stránku/.test(e.html)); }
 
 // hodinky 6 dní nesynchronizované: Garmin zná jen dny do -6 → po syncu hodinek se dotáhnou všechny chybějící dny
 {
